@@ -1,26 +1,50 @@
+using LiteDB;
 using Newtonsoft.Json;
 using TurtleTools;
 
 namespace AndoW_Manager
 {
-    public class ServerSettingsManager : RethinkDbManagerBase<ServerSettings>
+    public class ServerSettingsManager
     {
         public ServerSettings sData { get; private set; }
+        private const string CollectionName = "ServerSettings";
 
         public ServerSettingsManager()
-            : base(RethinkDbConfigurator.GetSettingsDatabaseName(), nameof(ServerSettingsManager), "id")
         {
             LoadData();
         }
 
         public ServerSettings LoadData()
         {
-            sData = FindOne(_ => true);
-
-            if (sData == null)
+            using (var db = LocalDbContext.OpenDatabase())
             {
-                sData = new ServerSettings();
-                Upsert(sData);
+                var collection = db.GetCollection<ServerSettings>(CollectionName);
+                sData = collection.FindById(0);
+
+                if (sData == null)
+                {
+                    sData = collection.FindOne(Query.All());
+                    if (sData != null)
+                    {
+                        sData.Id = 0;
+                    }
+                    else
+                    {
+                        sData = new ServerSettings();
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(sData.DataServerIp))
+                {
+                    sData.DataServerIp = "127.0.0.1";
+                }
+
+                if (string.IsNullOrWhiteSpace(sData.MessageServerIp))
+                {
+                    sData.MessageServerIp = "127.0.0.1";
+                }
+
+                collection.Upsert(sData);
             }
 
             return sData;
@@ -28,27 +52,32 @@ namespace AndoW_Manager
 
         public void SaveData(ServerSettings settings)
         {
-            sData = settings;
-            Save();
-        }
-
-        private void Save()
-        {
-            if (sData == null)
+            if (settings == null)
+            {
                 return;
+            }
 
-            Upsert(sData);
+            using (var db = LocalDbContext.OpenDatabase())
+            {
+                var collection = db.GetCollection<ServerSettings>(CollectionName);
+                collection.Upsert(settings);
+            }
+
+            sData = settings;
         }
     }
 
     public class ServerSettings
     {
         [JsonProperty("id")]
-        public int Id { get; set; } = 0; // 한개의 데이터만 저장하기 위한 필드
+        [BsonId(false)]
+        public int Id { get; set; } = 0; // ?쒓컻???곗씠?곕쭔 ??ν븯湲??꾪븳 ?꾨뱶
         public int FTP_Port { get; set; } = NetworkTools.FTP_PORT;
         public int FTP_PasvMinPort { get; set; } = NetworkTools.FTP_PASV_MIN_PORT;
         public int FTP_PasvMaxPort { get; set; } = NetworkTools.FTP_PASV_MAX_PORT;
         public bool PreserveAspectRatio { get; set; } = false;
+        public string DataServerIp { get; set; } = "127.0.0.1";
+        public string MessageServerIp { get; set; } = "127.0.0.1";
         public string DefaultWelcomeFontFamily { get; set; } = "Malgun Gothic";
         public double DefaultWelcomeFontSize { get; set; } = 76;
         public string DefaultWelcomeFontColor { get; set; } = "#FFCBCBCB";

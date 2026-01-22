@@ -205,7 +205,7 @@ namespace AndoW_Manager
             if(checkTimer != null)
                 checkTimer.Stop();
 
-            SignalRServerTools.StopSignalRServer();
+            SignalRClientTools.StopSignalRClient();
 
             Process.GetCurrentProcess().Kill();
         }
@@ -233,7 +233,7 @@ namespace AndoW_Manager
                 {
                     dbLoadingWindow?.Close();
                     dbLoadingWindow = null;
-                    MessageBox.Show("DB 상태를 확인해 주세요.", "DB 구동 실패", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show("데이터베이스 연결 확인이 필요합니다.", "DB 연결 실패", MessageBoxButton.OK, MessageBoxImage.Error);
                     this.Close();
                 }
             }
@@ -271,7 +271,7 @@ namespace AndoW_Manager
 
             NetworkTools.SetFTPConfigHomeDir();
             NetworkTools.StartFTPSrv();
-            SignalRServerTools.StartSignalRServer();
+            SignalRClientTools.StartSignalRClient();
 
             checkTimer.Tick += new EventHandler(checkTimer_Tick);
             checkTimer.Interval = new TimeSpan(0, 0, 4);
@@ -329,7 +329,7 @@ namespace AndoW_Manager
 
             queueManager.SupersedePending(playerId, entry.Id);
 
-            if (pushSignalR && SignalRServerTools.IsRunning())
+            if (pushSignalR && SignalRClientTools.IsConnected())
             {
                 var envelope = new SignalRCommandEnvelope
                 {
@@ -340,7 +340,7 @@ namespace AndoW_Manager
                     CreatedAt = entry.CreatedAt
                 };
 
-                if (SignalRServerTools.TrySendCommandToClient(playerId, envelope))
+                if (SignalRClientTools.TrySendCommandToClient(playerId, envelope))
                 {
                     queueManager.MarkStatus(entry.Id, playerId, "sent");
                 }
@@ -362,7 +362,7 @@ namespace AndoW_Manager
                 return true;
             }
 
-            if (!SignalRServerTools.IsRunning())
+            if (!SignalRClientTools.IsConnected())
             {
                 return false;
             }
@@ -378,7 +378,7 @@ namespace AndoW_Manager
                 IsUrgent = true
             };
 
-            return SignalRServerTools.TrySendCommandToClient(player.PIF_GUID, envelope);
+            return SignalRClientTools.TrySendCommandToClient(player.PIF_GUID, envelope);
         }
 
         private static bool IsAndroidPlayer(PlayerInfoClass player)

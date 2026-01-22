@@ -14,6 +14,13 @@ namespace AndoWSettings
             return path;
         }
 
+        public static string GetDataDirPath()
+        {
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
+            CreateOrPass(path);
+            return path;
+        }
+
         public static string GetFontsTargetFolderPath()
         {
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Fonts");
@@ -132,6 +139,11 @@ namespace AndoWSettings
         public static string GetAuthKeyPath()
         {
             return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AuthKeys");
+        }
+
+        public static string GetLocalDbPath()
+        {
+            return Path.Combine(GetDataDirPath(), "local.db");
         }
         #endregion
 

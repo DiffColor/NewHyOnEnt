@@ -2,6 +2,7 @@ using System;
 using System.Configuration;
 using System.Net;
 using System.Net.Sockets;
+using AndoW_Manager;
 
 namespace TurtleTools
 {
@@ -57,7 +58,10 @@ namespace TurtleTools
                     port = parsedPort;
                 }
 
-                string configuredHost = string.IsNullOrWhiteSpace(host) ? DefaultHost : host;
+                string localDbHost = GetLocalDbHostOrDefault();
+                string configuredHost = string.IsNullOrWhiteSpace(localDbHost)
+                    ? (string.IsNullOrWhiteSpace(host) ? DefaultHost : host)
+                    : localDbHost;
                 string configuredUser = string.IsNullOrWhiteSpace(user) ? DefaultUser : user;
                 string configuredPassword = string.IsNullOrWhiteSpace(password) ? DefaultPassword : password;
                 RethinkDbContext.Configure(configuredHost, port, configuredUser, configuredPassword);
@@ -85,6 +89,28 @@ namespace TurtleTools
             }
 
             return LoopbackHost;
+        }
+
+        private static string GetLocalDbHostOrDefault()
+        {
+            try
+            {
+                using (var db = LocalDbContext.OpenDatabase())
+                {
+                    var collection = db.GetCollection<ServerSettings>("ServerSettings");
+                    var settings = collection.FindById(0);
+                    if (settings != null && string.IsNullOrWhiteSpace(settings.DataServerIp) == false)
+                    {
+                        return settings.DataServerIp.Trim();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"local.db 데이터 서버 IP 확인 실패: {ex.Message}", Logger.GetLogFileName());
+            }
+
+            return null;
         }
     }
 }

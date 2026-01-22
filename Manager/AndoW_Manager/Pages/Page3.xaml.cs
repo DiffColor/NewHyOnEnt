@@ -58,7 +58,7 @@ namespace AndoW_Manager
 
             _heartbeatMonitor = new PlayerHeartbeatMonitor();
             _heartbeatMonitor.HeartbeatsChanged += OnHeartbeatsChanged;
-            SignalRServerTools.HeartbeatReceived += OnSignalRHeartbeatReceived;
+            SignalRClientTools.HeartbeatReceived += OnSignalRHeartbeatReceived;
             _heartbeatUiTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
             {
                 Interval = TimeSpan.FromMilliseconds(100)
@@ -939,7 +939,7 @@ namespace AndoW_Manager
 
             //_heartbeatDisposed = true;
             //_heartbeatMonitor.HeartbeatsChanged -= OnHeartbeatsChanged;
-            //SignalRServerTools.HeartbeatReceived -= OnSignalRHeartbeatReceived;
+            //SignalRClientTools.HeartbeatReceived -= OnSignalRHeartbeatReceived;
             //_heartbeatMonitor.Dispose();
         }
 

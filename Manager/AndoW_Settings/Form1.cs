@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Diagnostics;
-using System.IO;
 using System.Windows.Forms;
 using TurtleTools;
 
@@ -69,6 +68,9 @@ namespace AndoWSettings
                 sServerSettings.FTP_Port = FTPPortNum;
                 sServerSettings.FTP_PasvMinPort = FTPPasvMinPortNum;
                 sServerSettings.FTP_PasvMaxPort = FTPPasvMaxPortNum;
+                sServerSettings.PreserveAspectRatio = aspect_ratio_chbox.Checked;
+                sServerSettings.DataServerIp = dataServerIpTextBox?.Text?.Trim() ?? string.Empty;
+                sServerSettings.MessageServerIp = messageServerIpTextBox?.Text?.Trim() ?? string.Empty;
 
                 sServerSettingsManager.SaveData(sServerSettings);
 
@@ -88,9 +90,6 @@ namespace AndoWSettings
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
-
-            InitLogComboBox();
-
             DisplayServerSettings();
         }
 
@@ -101,92 +100,13 @@ namespace AndoWSettings
             PasvMaxPort.Text = sServerSettings.FTP_PasvMaxPort.ToString();
 
             aspect_ratio_chbox.Checked = sServerSettings.PreserveAspectRatio;
-        }
-
-        void ViewLogBtn_Click(object sender, EventArgs e)
-        {
-            if (LogComboBox.Items.Count > 0 && LogSubComboBox.Items.Count > 0)
+            if (dataServerIpTextBox != null)
             {
-                if (LogComboBox.SelectedIndex > -1 && LogSubComboBox.SelectedIndex > -1)
-                {
-                    string logFilePath = string.Empty;
-                    logFilePath = string.Format("{0}\\{1}.txt", FNDTools.GetLogSubDirPath(LogComboBox.SelectedItem.ToString()),
-                        LogSubComboBox.SelectedItem.ToString());
-
-                    FormLogView tmpForm = new FormLogView(logFilePath);
-                    tmpForm.ShowDialog();
-
-                }
+                dataServerIpTextBox.Text = sServerSettings.DataServerIp ?? string.Empty;
             }
-        }
-
-        public void RefreshLoagSubFolderCombo()
-        {
-            if (LogComboBox.Items.Count > 0 && LogComboBox.SelectedIndex > -1)
+            if (messageServerIpTextBox != null)
             {
-                LogSubComboBox.Items.Clear();
-
-                string[] strListNames = Directory.GetFiles(FNDTools.GetLogSubDirPath(LogComboBox.SelectedItem.ToString()));
-
-                foreach (string item in strListNames)
-                {
-                    string nonefileName = System.IO.Path.GetFileName(item);
-                    int fileLastIndex = nonefileName.LastIndexOf('.');
-                    string playListName = nonefileName.Substring(0, fileLastIndex);
-
-                    LogSubComboBox.Items.Add(playListName);
-                }
-
-                if (LogSubComboBox.Items.Count > 0)
-                {
-                    LogSubComboBox.SelectedIndex = 0;
-                }
-            }
-        }
-
-        void LogComboBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            RefreshLoagSubFolderCombo();
-        }
-     
-        public void InitLogComboBox()
-        {
-            LogComboBox.Items.Clear();
-
-            string[] dirs = Directory.GetDirectories(FNDTools.GetLogRootDirPath());
-            foreach (string dir in dirs)
-            {
-                string folderName = dir.Remove(0, dir.LastIndexOf('\\') + 1);
-                LogComboBox.Items.Add(folderName);
-            }
-
-            if (LogComboBox.Items.Count > 0)
-            {
-                LogComboBox.SelectedIndex = 0;
-            }
-        }
-
-        private void DeleteLogBtn_Click(object sender, EventArgs e)
-        {
-            if (LogComboBox.Items.Count > 0 && LogSubComboBox.Items.Count > 0)
-            {
-                if (LogComboBox.SelectedIndex > -1 && LogSubComboBox.SelectedIndex > -1)
-                {
-                    string logFilePath = string.Empty;
-                    logFilePath = string.Format("{0}\\{1}.txt", FNDTools.GetLogSubDirPath(LogComboBox.SelectedItem.ToString()),
-                        LogSubComboBox.SelectedItem.ToString());
-
-                    try
-                    {
-                        new FileInfo(logFilePath).Delete();
-                    }
-                    catch (Exception ex)
-                    {
-
-                    }
-
-                    InitLogComboBox();
-                }
+                messageServerIpTextBox.Text = sServerSettings.MessageServerIp ?? string.Empty;
             }
         }
 
