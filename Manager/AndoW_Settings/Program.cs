@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Threading;
 using System.Windows.Forms;
-using TurtleTools;
-
 namespace AndoWSettings
 {
     static class Program
@@ -16,12 +14,8 @@ namespace AndoWSettings
             bool newProc;
             Mutex dup = new Mutex(true, "AndoW_Settings", out newProc);
 
-            RethinkDbBootstrapper.EnsureRethinkDbReady();
-
             if (newProc)
             {
-                RethinkDbConfigurator.EnsureConfigured();
-
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 

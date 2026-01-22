@@ -24,6 +24,14 @@ namespace AndoW_Manager
                 return;
             }
 
+            RethinkDbConfigurator.EnsureConfigured();
+            if (!RethinkDbBootstrapper.EnsureRethinkDbReadyWithWait())
+            {
+                MessageBox.Show("데이터베이스 연결 확인이 필요합니다.", "DB 연결 실패", MessageBoxButton.OK, MessageBoxImage.Error);
+                Application.Current.Shutdown();
+                return;
+            }
+
             // 모든 창이 열릴 때 ModernScrollViewer 마우스 휠 스크롤 기능을 적용
             EventManager.RegisterClassHandler(typeof(Window), Window.LoadedEvent,
                 new RoutedEventHandler((sender, args) => {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
@@ -11,15 +11,14 @@ using Microsoft.Owin.Cors;
 using Microsoft.Owin.Hosting;
 using Owin;
 
-namespace TurtleTools
+namespace SignalRNet472
 {
-    public static class SignalRServerTools
+    public static class SignalRServerHost
     {
-        internal const string DefaultHubPath = "/AndoW";
+        internal const string DefaultHubPath = "/Data";
         private const int DefaultPort = 5000;
         private static readonly object SyncRoot = new object();
         private static IDisposable _webApp;
-        public static event EventHandler<SignalRHeartbeatEventArgs> HeartbeatReceived;
 
         public static bool IsRunning()
         {
@@ -29,7 +28,7 @@ namespace TurtleTools
             }
         }
 
-        public static void StartSignalRServer()
+        public static void Start()
         {
             lock (SyncRoot)
             {
@@ -52,11 +51,12 @@ namespace TurtleTools
                     Logger.WriteErrorLog($"SignalR server start failed: {ex}", Logger.GetLogFileName());
                     _webApp?.Dispose();
                     _webApp = null;
+                    throw;
                 }
             }
         }
 
-        public static void StopSignalRServer()
+        public static void Stop()
         {
             IDisposable host = null;
             lock (SyncRoot)
@@ -97,66 +97,6 @@ namespace TurtleTools
             return value;
         }
 
-        internal static int GetSignalRPort()
-        {
-            return ResolvePort();
-        }
-
-        internal static void RaiseHeartbeatReceived(SignalRHeartbeatPayload payload)
-        {
-            if (payload == null || string.IsNullOrWhiteSpace(payload.ClientId))
-            {
-                return;
-            }
-
-            HeartbeatReceived?.Invoke(null, new SignalRHeartbeatEventArgs(payload));
-        }
-
-        public static bool TrySendCommandToClient(string clientId, SignalRCommandEnvelope envelope)
-        {
-            if (string.IsNullOrWhiteSpace(clientId) || envelope == null)
-            {
-                return false;
-            }
-
-            var connections = SignalRMsgHub.GetConnectionsByClientId(clientId);
-            if (connections == null || connections.Count == 0)
-            {
-                return false;
-            }
-
-            var hubContext = GlobalHost.ConnectionManager.GetHubContext<SignalRMsgHub>();
-            foreach (string connectionId in connections)
-            {
-                try
-                {
-                    //hubContext.Clients.Client(connectionId).ReceiveMessage(new SignalRMessage
-                    //{
-                    //    From = "Server",
-                    //    To = clientId,
-                    //    Command = envelope.Command ?? string.Empty,
-                    //    DataType = "CommandQueue",
-                    //    Data = envelope
-                    //});
-
-                    hubContext.Clients.Client(connectionId).ReceiveMessage(new SignalRMessage
-                    {
-                        From = "Server",
-                        To = clientId,
-                        Command = envelope.Command ?? string.Empty,
-                        DataType = "CommandQueue",
-                        Data = envelope
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Logger.WriteErrorLog($"SignalR command send failed: {connectionId}, ex={ex}", Logger.GetLogFileName());
-                }
-            }
-
-            return true;
-        }
-
         private static int ResolvePort()
         {
             string value = ConfigurationManager.AppSettings["SignalRPort"];
@@ -192,9 +132,10 @@ namespace TurtleTools
         }
     }
 
-    [HubName("SignalRMsgHub")]
-    public class SignalRMsgHub : Hub
+    [HubName("MsgHub")]
+    public class MsgHub : Hub
     {
+        private const string ManagerGroupName = "Managers";
         private static readonly List<string> ConnectedClients = new List<string>();
         private static readonly Dictionary<string, ClientIdentity> ConnectedClientInfos = new Dictionary<string, ClientIdentity>();
         private static readonly Dictionary<string, string> ConnectionClientIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -228,7 +169,7 @@ namespace TurtleTools
             TouchConnection(clientId);
             Logger.WriteLog($"SignalR client connected: {FormatClientIdentity(clientId, identity)}", Logger.GetLogFileName());
             var onlinePayload = CreateOnlinePayload(clientId, identity);
-            SignalRServerTools.RaiseHeartbeatReceived(onlinePayload);
+            BroadcastHeartbeat(onlinePayload);
             return base.OnConnected();
         }
 
@@ -268,7 +209,7 @@ namespace TurtleTools
 
             await ((Task)Clients.All.ReceiveMessage(message));
             var offlinePayload = CreateOfflinePayload(clientId, identity);
-            SignalRServerTools.RaiseHeartbeatReceived(offlinePayload);
+            BroadcastHeartbeat(offlinePayload);
             await base.OnDisconnected(stopCalled);
         }
 
@@ -298,8 +239,13 @@ namespace TurtleTools
         {
             TouchConnection(Context.ConnectionId);
             var resolved = NormalizeHeartbeatPayload(payload);
-            SignalRServerTools.RaiseHeartbeatReceived(resolved);
+            BroadcastHeartbeat(resolved);
             return Task.CompletedTask;
+        }
+
+        public Task RegisterManager()
+        {
+            return JoinGroup(ManagerGroupName);
         }
 
         public Task<object> Heartbeat()
@@ -513,6 +459,41 @@ namespace TurtleTools
             }
 
             return false;
+        }
+
+        public async Task<bool> SendCommandToClient(string clientId, SignalRCommandEnvelope envelope)
+        {
+            if (string.IsNullOrWhiteSpace(clientId) || envelope == null)
+            {
+                return false;
+            }
+
+            var connections = GetConnectionsByClientId(clientId);
+            if (connections == null || connections.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (string connectionId in connections)
+            {
+                try
+                {
+                    await ((Task)Clients.Client(connectionId).ReceiveMessage(new SignalRMessage
+                    {
+                        From = "Server",
+                        To = clientId,
+                        Command = envelope.Command ?? string.Empty,
+                        DataType = "CommandQueue",
+                        Data = envelope
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteErrorLog($"SignalR command send failed: {connectionId}, ex={ex}", Logger.GetLogFileName());
+                }
+            }
+
+            return true;
         }
 
         private static int GetConnectedClientCount()
@@ -815,6 +796,23 @@ namespace TurtleTools
             };
         }
 
+        private void BroadcastHeartbeat(SignalRHeartbeatPayload payload)
+        {
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ClientId))
+            {
+                return;
+            }
+
+            try
+            {
+                Clients.Group(ManagerGroupName).ReceiveHeartbeat(payload);
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"SignalR heartbeat broadcast failed: {ex}", Logger.GetLogFileName());
+            }
+        }
+
         private sealed class ClientIdentity
         {
             public ClientIdentity(string playerName, string playerGuid)
@@ -826,65 +824,5 @@ namespace TurtleTools
             public string PlayerName { get; }
             public string PlayerGuid { get; }
         }
-    }
-
-    public sealed class SignalRHeartbeatPayload
-    {
-        public string ClientId { get; set; }
-        public string Status { get; set; }
-        public int Process { get; set; }
-        public string Version { get; set; }
-        public string CurrentPage { get; set; }
-        public bool HdmiState { get; set; }
-        public DateTime Timestamp { get; set; }
-    }
-
-    public sealed class SignalRHeartbeatEventArgs : EventArgs
-    {
-        public SignalRHeartbeatEventArgs(SignalRHeartbeatPayload payload)
-        {
-            Payload = payload;
-        }
-
-        public SignalRHeartbeatPayload Payload { get; }
-    }
-
-    public sealed class SignalRCommandEnvelope
-    {
-        public string CommandId { get; set; }
-        public string Command { get; set; }
-        public string PlayerId { get; set; }
-        public string PayloadJson { get; set; }
-        public string CreatedAt { get; set; }
-        public bool IsUrgent { get; set; }
-    }
-
-    public class SignalRMessage
-    {
-        public string From { get; set; } = "Server";
-
-        public string To { get; set; } = "All";
-
-        public string Command { get; set; } = "Update";
-
-        public string DataType { get; set; } = "String";
-
-        public object Data { get; set; } = null;
-    }
-
-    public class StateMessage
-    {
-        public string Who { get; set; } = "Unknown";
-
-        public string State { get; set; } = "Disconnected";
-
-        public string Description { get; set; } = "";
-    }
-
-    public class ProgressData
-    {
-        public string FromGUID { get; set; }
-
-        public int Porgress { get; set; }
     }
 }

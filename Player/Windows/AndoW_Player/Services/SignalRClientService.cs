@@ -15,7 +15,7 @@ namespace HyOnPlayer
     internal sealed class SignalRClientService : IDisposable
     {
         private const int DefaultPort = 5000;
-        private const string DefaultHubPath = "/AndoW";
+        private const string DefaultHubPath = "/Data";
         private const int ReconnectDelayMs = 5000;
 
         private readonly MainWindow owner;
@@ -114,7 +114,7 @@ namespace HyOnPlayer
         private HubConnection BuildConnection(string url)
         {
             var hub = new HubConnection(url, BuildQueryString());
-            hubProxy = hub.CreateHubProxy("SignalRMsgHub");
+            hubProxy = hub.CreateHubProxy("MsgHub");
             hubProxy.On<SignalRMessage>("ReceiveMessage", OnReceiveMessage);          
             hub.Closed += OnClosed;
             hub.Error += ex => Logger.WriteErrorLog($"SignalR client error: {ex}", Logger.GetLogFileName());

@@ -210,6 +210,11 @@ namespace AndoW_Manager
         {
             return Path.Combine(GetDataDirPath(), "thumb.png");
         }
+
+        public static string GetLocalDbPath()
+        {
+            return Path.Combine(GetDataDirPath(), "local.db");
+        }
         #endregion
 
 
