@@ -478,7 +478,7 @@ namespace HyOnPlayer
                 var playerInfo = owner?.g_PlayerInfoManager?.g_PlayerInfo;
                 EnqueueScheduleDownloads(playerInfo, playlists);
                 ApplyWeeklySchedule(payload.WeeklySchedule, playerInfo);
-                owner?.RequestScheduleEvaluation(force: true);
+                owner?.HandleWeeklyScheduleUpdated();
             }
             catch (Exception ex)
             {
@@ -499,7 +499,7 @@ namespace HyOnPlayer
 
             if (ApplyWeeklySchedule(schedule, playerInfo))
             {
-                owner?.RequestScheduleEvaluation(force: true);
+                owner?.HandleWeeklyScheduleUpdated();
             }
         }
 

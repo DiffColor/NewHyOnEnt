@@ -17,6 +17,7 @@ namespace HyOnPlayer.Services
         private bool disposed;
         private bool lastOnAir = true;
         private bool blackScreenApplied;
+        private bool hiddenApplied;
         private bool monitorPowerBlocked;
         private SharedWeeklyPlayScheduleInfo cachedWeekly;
         private DateTime cachedLoadedAt = DateTime.MinValue;
@@ -53,6 +54,34 @@ namespace HyOnPlayer.Services
             }
 
             timer.Stop();
+        }
+
+        public void RefreshWeeklySchedule()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            cachedWeekly = null;
+            cachedLoadedAt = DateTime.MinValue;
+
+            if (Interlocked.Exchange(ref isChecking, 1) == 1)
+            {
+                return;
+            }
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    CheckOnAirNow();
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref isChecking, 0);
+                }
+            });
         }
 
         public void Dispose()
@@ -269,17 +298,7 @@ namespace HyOnPlayer.Services
                     ProcessTools.ExecuteCommand("shutdown /r /t 0");
                     break;
                 case PowerControlType.ApplicationClose:
-                    owner?.Dispatcher?.Invoke(() =>
-                    {
-                        try
-                        {
-                            owner.StopAllTimer();
-                        }
-                        catch
-                        {
-                        }
-                        owner?.DoApplicationShutdown();
-                    });
+                    ApplyHidden();
                     break;
                 case PowerControlType.BlackScreen:
                     ApplyBlackScreen();
@@ -326,6 +345,29 @@ namespace HyOnPlayer.Services
             }
         }
 
+        private void ApplyHidden()
+        {
+            if (hiddenApplied)
+            {
+                return;
+            }
+
+            hiddenApplied = true;
+            owner?.Dispatcher?.Invoke(() =>
+            {
+                try
+                {
+                    owner.PausePlaybackForOffAir();
+                    owner.HideAllContentsPlayWindow();
+                    owner.Hide();
+                }
+                catch
+                {
+                }
+            });
+        }
+
+
         private void RestoreFromOffAir()
         {
             RestoreMonitor();
@@ -351,6 +393,23 @@ namespace HyOnPlayer.Services
                 catch
                 {
                 }
+            }
+
+            if (hiddenApplied)
+            {
+                hiddenApplied = false;
+                owner?.Dispatcher?.Invoke(() =>
+                {
+                    try
+                    {
+                        owner.Show();
+                        owner.Opacity = 1;
+                        owner.StartPlaybackFromOffAir();
+                    }
+                    catch
+                    {
+                    }
+                });
             }
 
             Logger.WriteLog("방송시간 재진입: 재생 유지", Logger.GetLogFileName());
