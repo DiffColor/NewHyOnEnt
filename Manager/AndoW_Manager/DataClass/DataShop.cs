@@ -44,6 +44,7 @@ namespace AndoW_Manager
         public CommandQueueManager g_CommandQueueManager = new CommandQueueManager();
         public UpdateThrottleSettingsManager g_UpdateThrottleSettingsManager = new UpdateThrottleSettingsManager();
         public UpdatePayloadBuilder g_UpdatePayloadBuilder = new UpdatePayloadBuilder();
+        public ContentDetailsManager g_ContentDetailsManager = new ContentDetailsManager();
 
         private DataShop()
         {

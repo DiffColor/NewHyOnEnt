@@ -83,6 +83,7 @@ namespace TurtleTools
                 List<CopyFileInfo> copyfilelist = BuildCopyFileList(pages, targetContentFolder);
 
                 SavingFileWindow form = new SavingFileWindow(copyfilelist);
+                form.Owner = this;
                 form.ShowDialog();
 
                 this.Close();

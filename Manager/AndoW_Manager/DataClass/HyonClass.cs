@@ -459,6 +459,8 @@ namespace AndoW_Manager
         public string CFI_TargetFileName = string.Empty;
         public string CFI_FileSourceFullPath = string.Empty;
         public string CFI_PageName = string.Empty;
+        public string CFI_StorageGuid = string.Empty;
+        public bool CFI_RequireCopy = true;
 
         public void CopyData(CopyFileInfo tmpData)
         {
@@ -466,6 +468,8 @@ namespace AndoW_Manager
             this.CFI_TargetFileName = tmpData.CFI_TargetFileName;
             this.CFI_FileSourceFullPath = tmpData.CFI_FileSourceFullPath;
             this.CFI_PageName = tmpData.CFI_PageName;
+            this.CFI_StorageGuid = tmpData.CFI_StorageGuid;
+            this.CFI_RequireCopy = tmpData.CFI_RequireCopy;
         }
     }
 
