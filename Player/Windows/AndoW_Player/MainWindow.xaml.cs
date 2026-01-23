@@ -294,10 +294,6 @@ namespace HyOnPlayer
                 {
                     signalRClientService?.Reconnect();
                 };
-                rethinkSyncService.WeeklyScheduleSynced += () =>
-                {
-                    HandleWeeklyScheduleUpdated();
-                };
             }
             catch (Exception ex)
             {
@@ -322,6 +318,7 @@ namespace HyOnPlayer
             onAirService = new OnAirService(this);
             onAirService.Start();
             portInfoManager = new PortInfoManager();
+
             StartSyncService();
 
             ChangePlayerStyle();
@@ -367,6 +364,12 @@ namespace HyOnPlayer
                     Logger.WriteLog("PC Scheduler 실행", Logger.GetLogFileName());
                 }
             }
+
+            rethinkSyncService.WeeklyScheduleSynced += () =>
+            {
+                HandleWeeklyScheduleUpdated();
+            };
+            onAirService.Start();
         }
 
         private void StartSyncService()
@@ -820,15 +823,11 @@ namespace HyOnPlayer
 
                 heartbeatReporter?.SendHeartbeatNow();
             }
-            catch (IndexOutOfRangeException ex)
+            catch (Exception ex)
             {
                 Logger.WriteLog("g_PageIndex 인덱스 오류로 인해 g_PageIndex를 0 으로 세팅.", Logger.GetLogFileName());
                 g_PageIndex = 0;
                 RunTickTimer();
-                Logger.WriteLog(ex.ToString(), Logger.GetLogFileName());
-            }
-            catch (Exception ex)
-            {
                 Logger.WriteLog(ex.ToString(), Logger.GetLogFileName());
             }
         }
@@ -911,14 +910,13 @@ namespace HyOnPlayer
             g_TickTimer.Tick += new System.EventHandler(TickTask);
         }
         
-
-        void RunTickTimer()
+        public void RunTickTimer()
         {
             g_TickTimer.Start();
             g_IsTickTimerStopped = false;
         }
 
-        void StopTickTimer()
+        public void StopTickTimer()
         {
             g_TickTimer.Stop();
             g_TickCount = 0;
@@ -944,15 +942,9 @@ namespace HyOnPlayer
             onAirService?.RefreshWeeklySchedule();
         }
 
-        internal void PausePlaybackForOffAir()
+        internal void RequestWeeklyScheduleSyncNow()
         {
-            try
-            {
-                StopTickTimer();
-            }
-            catch
-            {
-            }
+            rethinkSyncService?.TriggerSyncNow();
         }
 
         internal void StartPlaybackFromOffAir()

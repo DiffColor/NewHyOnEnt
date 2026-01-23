@@ -924,63 +924,6 @@
   <data name="&gt;&gt;checkBox1.ZOrder" xml:space="preserve">
     <value>3</value>
   </data>
-  <data name="&gt;&gt;button3.Name" xml:space="preserve">
-    <value>button3</value>
-  </data>
-  <data name="&gt;&gt;button3.Type" xml:space="preserve">
-    <value>System.Windows.Forms.Button, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;button3.Parent" xml:space="preserve">
-    <value>groupBox1</value>
-  </data>
-  <data name="&gt;&gt;button3.ZOrder" xml:space="preserve">
-    <value>0</value>
-  </data>
-  <data name="&gt;&gt;label1.Name" xml:space="preserve">
-    <value>label1</value>
-  </data>
-  <data name="&gt;&gt;label1.Type" xml:space="preserve">
-    <value>System.Windows.Forms.Label, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;label1.Parent" xml:space="preserve">
-    <value>groupBox1</value>
-  </data>
-  <data name="&gt;&gt;label1.ZOrder" xml:space="preserve">
-    <value>5</value>
-  </data>
-  <data name="groupBox1.Font" type="System.Drawing.Font, System.Drawing">
-    <value>굴림, 9pt, style=Bold</value>
-  </data>
-  <data name="groupBox1.Location" type="System.Drawing.Point, System.Drawing">
-    <value>18, 16</value>
-  </data>
-  <data name="groupBox1.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
-    <value>4, 2, 4, 2</value>
-  </data>
-  <data name="groupBox1.Padding" type="System.Windows.Forms.Padding, System.Windows.Forms">
-    <value>4, 2, 4, 2</value>
-  </data>
-  <data name="groupBox1.Size" type="System.Drawing.Size, System.Drawing">
-    <value>430, 110</value>
-  </data>
-  <data name="groupBox1.TabIndex" type="System.Int32, mscorlib">
-    <value>100</value>
-  </data>
-  <data name="groupBox1.Text" xml:space="preserve">
-    <value>Network Settings</value>
-  </data>
-  <data name="&gt;&gt;groupBox1.Name" xml:space="preserve">
-    <value>groupBox1</value>
-  </data>
-  <data name="&gt;&gt;groupBox1.Type" xml:space="preserve">
-    <value>System.Windows.Forms.GroupBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;groupBox1.Parent" xml:space="preserve">
-    <value>$this</value>
-  </data>
-  <data name="&gt;&gt;groupBox1.ZOrder" xml:space="preserve">
-    <value>19</value>
-  </data>
   <data name="button3.Font" type="System.Drawing.Font, System.Drawing">
     <value>굴림, 9pt</value>
   </data>
@@ -1046,6 +989,39 @@
   </data>
   <data name="&gt;&gt;label1.ZOrder" xml:space="preserve">
     <value>5</value>
+  </data>
+  <data name="groupBox1.Font" type="System.Drawing.Font, System.Drawing">
+    <value>굴림, 9pt, style=Bold</value>
+  </data>
+  <data name="groupBox1.Location" type="System.Drawing.Point, System.Drawing">
+    <value>18, 16</value>
+  </data>
+  <data name="groupBox1.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>4, 2, 4, 2</value>
+  </data>
+  <data name="groupBox1.Padding" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>4, 2, 4, 2</value>
+  </data>
+  <data name="groupBox1.Size" type="System.Drawing.Size, System.Drawing">
+    <value>430, 110</value>
+  </data>
+  <data name="groupBox1.TabIndex" type="System.Int32, mscorlib">
+    <value>100</value>
+  </data>
+  <data name="groupBox1.Text" xml:space="preserve">
+    <value>Network Settings</value>
+  </data>
+  <data name="&gt;&gt;groupBox1.Name" xml:space="preserve">
+    <value>groupBox1</value>
+  </data>
+  <data name="&gt;&gt;groupBox1.Type" xml:space="preserve">
+    <value>System.Windows.Forms.GroupBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="&gt;&gt;groupBox1.Parent" xml:space="preserve">
+    <value>$this</value>
+  </data>
+  <data name="&gt;&gt;groupBox1.ZOrder" xml:space="preserve">
+    <value>19</value>
   </data>
   <data name="auth_group.Font" type="System.Drawing.Font, System.Drawing">
     <value>굴림, 9pt, style=Bold</value>
@@ -2619,6 +2595,21 @@
   <data name="&gt;&gt;weekCombo2_2.ZOrder" xml:space="preserve">
     <value>1</value>
   </data>
+  <data name="SetAllBtn.Location" type="System.Drawing.Point, System.Drawing">
+    <value>329, 27</value>
+  </data>
+  <data name="SetAllBtn.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>4, 3, 4, 3</value>
+  </data>
+  <data name="SetAllBtn.Size" type="System.Drawing.Size, System.Drawing">
+    <value>94, 24</value>
+  </data>
+  <data name="SetAllBtn.TabIndex" type="System.Int32, mscorlib">
+    <value>60</value>
+  </data>
+  <data name="SetAllBtn.Text" xml:space="preserve">
+    <value>Set All</value>
+  </data>
   <data name="&gt;&gt;SetAllBtn.Name" xml:space="preserve">
     <value>SetAllBtn</value>
   </data>
@@ -2663,186 +2654,6 @@
   </data>
   <data name="&gt;&gt;OnAirGroupBox.ZOrder" xml:space="preserve">
     <value>1</value>
-  </data>
-  <data name="SetAllBtn.Location" type="System.Drawing.Point, System.Drawing">
-    <value>329, 29</value>
-  </data>
-  <data name="SetAllBtn.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
-    <value>4, 3, 4, 3</value>
-  </data>
-  <data name="SetAllBtn.Size" type="System.Drawing.Size, System.Drawing">
-    <value>94, 20</value>
-  </data>
-  <data name="SetAllBtn.TabIndex" type="System.Int32, mscorlib">
-    <value>60</value>
-  </data>
-  <data name="SetAllBtn.Text" xml:space="preserve">
-    <value>Set All</value>
-  </data>
-  <data name="&gt;&gt;SetAllBtn.Name" xml:space="preserve">
-    <value>SetAllBtn</value>
-  </data>
-  <data name="&gt;&gt;SetAllBtn.Type" xml:space="preserve">
-    <value>System.Windows.Forms.Button, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;SetAllBtn.Parent" xml:space="preserve">
-    <value>OnAirGroupBox</value>
-  </data>
-  <data name="&gt;&gt;SetAllBtn.ZOrder" xml:space="preserve">
-    <value>0</value>
-  </data>
-  <data name="&gt;&gt;label32.Name" xml:space="preserve">
-    <value>label32</value>
-  </data>
-  <data name="&gt;&gt;label32.Type" xml:space="preserve">
-    <value>System.Windows.Forms.Label, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;label32.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;label32.ZOrder" xml:space="preserve">
-    <value>0</value>
-  </data>
-  <data name="&gt;&gt;HeightValueBox.Name" xml:space="preserve">
-    <value>HeightValueBox</value>
-  </data>
-  <data name="&gt;&gt;HeightValueBox.Type" xml:space="preserve">
-    <value>System.Windows.Forms.TextBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;HeightValueBox.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;HeightValueBox.ZOrder" xml:space="preserve">
-    <value>1</value>
-  </data>
-  <data name="&gt;&gt;TopValueBox.Name" xml:space="preserve">
-    <value>TopValueBox</value>
-  </data>
-  <data name="&gt;&gt;TopValueBox.Type" xml:space="preserve">
-    <value>System.Windows.Forms.TextBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;TopValueBox.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;TopValueBox.ZOrder" xml:space="preserve">
-    <value>2</value>
-  </data>
-  <data name="&gt;&gt;label30.Name" xml:space="preserve">
-    <value>label30</value>
-  </data>
-  <data name="&gt;&gt;label30.Type" xml:space="preserve">
-    <value>System.Windows.Forms.Label, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;label30.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;label30.ZOrder" xml:space="preserve">
-    <value>3</value>
-  </data>
-  <data name="&gt;&gt;label31.Name" xml:space="preserve">
-    <value>label31</value>
-  </data>
-  <data name="&gt;&gt;label31.Type" xml:space="preserve">
-    <value>System.Windows.Forms.Label, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;label31.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;label31.ZOrder" xml:space="preserve">
-    <value>4</value>
-  </data>
-  <data name="&gt;&gt;textBox8.Name" xml:space="preserve">
-    <value>textBox8</value>
-  </data>
-  <data name="&gt;&gt;textBox8.Type" xml:space="preserve">
-    <value>System.Windows.Forms.TextBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;textBox8.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;textBox8.ZOrder" xml:space="preserve">
-    <value>5</value>
-  </data>
-  <data name="&gt;&gt;LeftValueBox.Name" xml:space="preserve">
-    <value>LeftValueBox</value>
-  </data>
-  <data name="&gt;&gt;LeftValueBox.Type" xml:space="preserve">
-    <value>System.Windows.Forms.TextBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;LeftValueBox.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;LeftValueBox.ZOrder" xml:space="preserve">
-    <value>6</value>
-  </data>
-  <data name="&gt;&gt;label24.Name" xml:space="preserve">
-    <value>label24</value>
-  </data>
-  <data name="&gt;&gt;label24.Type" xml:space="preserve">
-    <value>System.Windows.Forms.Label, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;label24.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;label24.ZOrder" xml:space="preserve">
-    <value>7</value>
-  </data>
-  <data name="&gt;&gt;label29.Name" xml:space="preserve">
-    <value>label29</value>
-  </data>
-  <data name="&gt;&gt;label29.Type" xml:space="preserve">
-    <value>System.Windows.Forms.Label, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;label29.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;label29.ZOrder" xml:space="preserve">
-    <value>8</value>
-  </data>
-  <data name="&gt;&gt;WidthValueBox.Name" xml:space="preserve">
-    <value>WidthValueBox</value>
-  </data>
-  <data name="&gt;&gt;WidthValueBox.Type" xml:space="preserve">
-    <value>System.Windows.Forms.TextBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;WidthValueBox.Parent" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;WidthValueBox.ZOrder" xml:space="preserve">
-    <value>9</value>
-  </data>
-  <data name="LEDPropertyGroup.Font" type="System.Drawing.Font, System.Drawing">
-    <value>굴림, 9pt, style=Bold</value>
-  </data>
-  <data name="LEDPropertyGroup.Location" type="System.Drawing.Point, System.Drawing">
-    <value>484, 254</value>
-  </data>
-  <data name="LEDPropertyGroup.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
-    <value>4, 3, 4, 3</value>
-  </data>
-  <data name="LEDPropertyGroup.Padding" type="System.Windows.Forms.Padding, System.Windows.Forms">
-    <value>4, 3, 4, 3</value>
-  </data>
-  <data name="LEDPropertyGroup.Size" type="System.Drawing.Size, System.Drawing">
-    <value>412, 92</value>
-  </data>
-  <data name="LEDPropertyGroup.TabIndex" type="System.Int32, mscorlib">
-    <value>106</value>
-  </data>
-  <data name="LEDPropertyGroup.Text" xml:space="preserve">
-    <value>LED Property</value>
-  </data>
-  <data name="&gt;&gt;LEDPropertyGroup.Name" xml:space="preserve">
-    <value>LEDPropertyGroup</value>
-  </data>
-  <data name="&gt;&gt;LEDPropertyGroup.Type" xml:space="preserve">
-    <value>System.Windows.Forms.GroupBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="&gt;&gt;LEDPropertyGroup.Parent" xml:space="preserve">
-    <value>$this</value>
-  </data>
-  <data name="&gt;&gt;LEDPropertyGroup.ZOrder" xml:space="preserve">
-    <value>0</value>
   </data>
   <data name="label32.Font" type="System.Drawing.Font, System.Drawing">
     <value>굴림, 9pt, style=Bold</value>
@@ -3185,6 +2996,39 @@
   </data>
   <data name="&gt;&gt;WidthValueBox.ZOrder" xml:space="preserve">
     <value>9</value>
+  </data>
+  <data name="LEDPropertyGroup.Font" type="System.Drawing.Font, System.Drawing">
+    <value>굴림, 9pt, style=Bold</value>
+  </data>
+  <data name="LEDPropertyGroup.Location" type="System.Drawing.Point, System.Drawing">
+    <value>484, 254</value>
+  </data>
+  <data name="LEDPropertyGroup.Margin" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>4, 3, 4, 3</value>
+  </data>
+  <data name="LEDPropertyGroup.Padding" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>4, 3, 4, 3</value>
+  </data>
+  <data name="LEDPropertyGroup.Size" type="System.Drawing.Size, System.Drawing">
+    <value>412, 92</value>
+  </data>
+  <data name="LEDPropertyGroup.TabIndex" type="System.Int32, mscorlib">
+    <value>106</value>
+  </data>
+  <data name="LEDPropertyGroup.Text" xml:space="preserve">
+    <value>LED Property</value>
+  </data>
+  <data name="&gt;&gt;LEDPropertyGroup.Name" xml:space="preserve">
+    <value>LEDPropertyGroup</value>
+  </data>
+  <data name="&gt;&gt;LEDPropertyGroup.Type" xml:space="preserve">
+    <value>System.Windows.Forms.GroupBox, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="&gt;&gt;LEDPropertyGroup.Parent" xml:space="preserve">
+    <value>$this</value>
+  </data>
+  <data name="&gt;&gt;LEDPropertyGroup.ZOrder" xml:space="preserve">
+    <value>0</value>
   </data>
   <metadata name="$this.Localizable" type="System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089">
     <value>True</value>

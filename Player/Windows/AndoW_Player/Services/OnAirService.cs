@@ -1,8 +1,6 @@
 using AndoW.Shared;
 using System;
 using System.Threading;
-using HyOnPlayer.DataManager;
-using HyOnPlayer;
 using TurtleTools;
 using SharedWeeklyPlayScheduleInfo = AndoW.Shared.WeeklyPlayScheduleInfo;
 
@@ -273,6 +271,11 @@ namespace HyOnPlayer.Services
 
         private void HandleOffAirAction()
         {
+            owner?.Dispatcher?.Invoke(() => {
+                owner.StopTickTimer();
+                owner.g_PageIndex = 0;
+            });
+
             var settings = owner?.g_LocalSettingsManager?.Settings;
             string actionValue = settings?.EndTimeAction ?? PowerControlType.ApplicationClose.ToString();
 
@@ -336,13 +339,6 @@ namespace HyOnPlayer.Services
                 }
             });
             blackScreenApplied = true;
-            try
-            {
-                WindowTools.AllowSleep();
-            }
-            catch
-            {
-            }
         }
 
         private void ApplyHidden()
@@ -357,7 +353,6 @@ namespace HyOnPlayer.Services
             {
                 try
                 {
-                    owner.PausePlaybackForOffAir();
                     owner.HideAllContentsPlayWindow();
                     owner.Hide();
                 }
@@ -380,19 +375,13 @@ namespace HyOnPlayer.Services
                     try
                     {
                         owner.Opacity = 1;
+                        owner.Show();
                         owner.PopPage();
                     }
                     catch
                     {
                     }
                 });
-                try
-                {
-                    WindowTools.PreventSleep();
-                }
-                catch
-                {
-                }
             }
 
             if (hiddenApplied)
