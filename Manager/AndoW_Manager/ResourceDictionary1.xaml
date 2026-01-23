@@ -274,7 +274,7 @@
     <SolidColorBrush x:Key="ButtonNormalBorder" Color="#FF707070"/>
     <Style x:Key="ChangeOrderStyle" TargetType="{x:Type Button}">
         <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonFocusVisual}"/>
-        <Setter Property="Background" Value="{StaticResource ButtonNormalBackground}"/>
+        <Setter Property="Background" Value="#FF9498D0"/>
         <Setter Property="BorderBrush" Value="{StaticResource ButtonNormalBorder}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
@@ -300,8 +300,7 @@
                                 <VisualState x:Name="Disabled"/>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
-                        <Border x:Name="border" CornerRadius="4,4,4,4" Grid.Column="0" d:LayoutOverrides="GridBox" BorderBrush="{x:Null}" Background="#FF9498D0"/>
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border x:Name="border" CornerRadius="4,4,4,4" Grid.Column="0" d:LayoutOverrides="GridBox" BorderBrush="{x:Null}" Background="{TemplateBinding Background}"/>                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocused" Value="true"/>
