@@ -11,8 +11,8 @@
 	    x:Name="Window"    
 	    Title="NEW HYON"
         Closed="Window_Closed"
-	    mc:Ignorable="d" MinWidth="1280" MinHeight="720" 
-        WindowStartupLocation="CenterScreen" WindowStyle="None" BorderThickness="1" BorderBrush="Black" ResizeMode="CanMinimize" Background="{x:Null}" WindowState="Normal" ShowInTaskbar="True">
+        mc:Ignorable="d" MinWidth="1280" MinHeight="720" AllowsTransparency="True" 
+        WindowStartupLocation="CenterScreen" WindowStyle="None" BorderThickness="1" BorderBrush="Black" ResizeMode="CanResizeWithGrip" WindowState="Normal" ShowInTaskbar="True">
     <Window.Resources>
         <Style x:Key="Btn_default2" TargetType="{x:Type Button}">
             <Setter Property="Template">
