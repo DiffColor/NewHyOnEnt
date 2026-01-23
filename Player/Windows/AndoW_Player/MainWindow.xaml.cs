@@ -296,8 +296,7 @@ namespace HyOnPlayer
                 };
                 rethinkSyncService.WeeklyScheduleSynced += () =>
                 {
-                    scheduleEvaluator?.InvalidateWeeklyCache();
-                    RequestScheduleEvaluation(force: true);
+                    HandleWeeklyScheduleUpdated();
                 };
             }
             catch (Exception ex)
@@ -936,6 +935,61 @@ namespace HyOnPlayer
         internal void RequestScheduleEvaluation(bool force = false)
         {
             EvaluateSchedule(force);
+        }
+
+        internal void HandleWeeklyScheduleUpdated()
+        {
+            scheduleEvaluator?.InvalidateWeeklyCache();
+            RequestScheduleEvaluation(force: true);
+            onAirService?.RefreshWeeklySchedule();
+        }
+
+        internal void PausePlaybackForOffAir()
+        {
+            try
+            {
+                StopTickTimer();
+            }
+            catch
+            {
+            }
+        }
+
+        internal void StartPlaybackFromOffAir()
+        {
+            try
+            {
+                var playerInfo = g_PlayerInfoManager?.g_PlayerInfo;
+                string playlist = playerInfo?.PIF_CurrentPlayList;
+                if (string.IsNullOrWhiteSpace(playlist))
+                {
+                    playlist = playerInfo?.PIF_DefaultPlayList;
+                }
+
+                if (!string.IsNullOrWhiteSpace(playlist))
+                {
+                    g_PageInfoManager.LoadData(playlist);
+                    g_PageIndex = 0;
+                }
+
+                StopTickTimer();
+                EvaluateSchedule(force: true);
+                if (!TryApplyScheduledSwitch(isPageBoundary: true, isContentBoundary: true))
+                {
+                    if (g_PageInfoManager.g_PageInfoClassList.Count == 0
+                        && !string.IsNullOrWhiteSpace(playerInfo?.PIF_DefaultPlayList))
+                    {
+                        g_PageInfoManager.LoadData(playerInfo.PIF_DefaultPlayList);
+                        g_PageIndex = 0;
+                    }
+
+                    PopPage();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog(ex.ToString(), Logger.GetLogFileName());
+            }
         }
 
         private void EvaluateSchedule(bool force)
