@@ -27,32 +27,24 @@ namespace AndoW_Manager
             TextAngleGrade1_Copy1.Text = paramCls.PIF_PlayerName;
         }
 
-         public void InitWeeklyInfoEventHandler()
-         {
-             WeekSchInfoElement1.EventUpdateWIFD += WeekSchInfoElement1_EventUpdateWIFD;
-             WeekSchInfoElement2.EventUpdateWIFD += WeekSchInfoElement1_EventUpdateWIFD;
-             WeekSchInfoElement3.EventUpdateWIFD += WeekSchInfoElement1_EventUpdateWIFD;
-             WeekSchInfoElement4.EventUpdateWIFD += WeekSchInfoElement1_EventUpdateWIFD;
-             WeekSchInfoElement5.EventUpdateWIFD += WeekSchInfoElement1_EventUpdateWIFD;
-             WeekSchInfoElement6.EventUpdateWIFD += WeekSchInfoElement1_EventUpdateWIFD;
-             WeekSchInfoElement7.EventUpdateWIFD += WeekSchInfoElement1_EventUpdateWIFD;
+        public void InitWeeklyInfoEventHandler()
+        {
+            DayOfWeekRect1.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
+            DayOfWeekRect2.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
+            DayOfWeekRect3.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
+            DayOfWeekRect4.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
+            DayOfWeekRect5.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
+            DayOfWeekRect6.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
+            DayOfWeekRect7.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
 
-             DayOfWeekRect1.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
-             DayOfWeekRect2.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
-             DayOfWeekRect3.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
-             DayOfWeekRect4.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
-             DayOfWeekRect5.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
-             DayOfWeekRect6.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
-             DayOfWeekRect7.PreviewMouseLeftButtonDown += DayOfWeekRect1_PreviewMouseLeftButtonDown;
-
-             DayOfWeekText1.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
-             DayOfWeekText2.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
-             DayOfWeekText3.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
-             DayOfWeekText4.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
-             DayOfWeekText5.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
-             DayOfWeekText6.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
-             DayOfWeekText7.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
-         }
+            DayOfWeekText1.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
+            DayOfWeekText2.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
+            DayOfWeekText3.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
+            DayOfWeekText4.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
+            DayOfWeekText5.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
+            DayOfWeekText6.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
+            DayOfWeekText7.PreviewMouseLeftButtonDown += DayOfWeekText1_PreviewMouseLeftButtonDown;
+        }
 
          void DayOfWeekText1_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
          {
@@ -126,11 +118,10 @@ namespace AndoW_Manager
                      break;
              }
 
-             g_WeeklyInfoManagerClass.SaveWeeklySchedule(this.g_CurrentSelectedPlayerInfoClass.PIF_GUID, this.g_CurrentSelectedPlayerInfoClass.PIF_PlayerName);
-             DisplayWeekOfDay();
-         }
+            DisplayWeekOfDay();
+        }
 
-         public void DisplayWeekOfDay()
+        public void DisplayWeekOfDay()
          {
              if (g_WeeklyInfoManagerClass.PIF_WPS_InfoList.Count == 0)
              {
@@ -245,50 +236,42 @@ namespace AndoW_Manager
                      break;
              }
 
-             g_WeeklyInfoManagerClass.SaveWeeklySchedule(this.g_CurrentSelectedPlayerInfoClass.PIF_GUID, this.g_CurrentSelectedPlayerInfoClass.PIF_PlayerName);
-             DisplayWeekOfDay();
+            DisplayWeekOfDay();
 
-         }
+        }
 
-         void WeekSchInfoElement1_EventUpdateWIFD(WeeklyDayScheduleInfo paramCls)
-         {
-             if (g_WeeklyInfoManagerClass.PIF_WPS_InfoList.Count == 0)
-             {
-                 return;
-             }
+        private void SyncWeeklyInfoFromUI()
+        {
+            if (g_WeeklyInfoManagerClass.PIF_WPS_InfoList.Count == 0)
+            {
+                return;
+            }
 
-             switch (paramCls.DayOfWeek)
-             {
-                 case "SUN":
-                     g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0].CopyData(paramCls);
-                     break;
-                 case "MON":
-                     g_WeeklyInfoManagerClass.PIF_WPS_InfoList[1].CopyData(paramCls);
-                     break;
-                 case "TUE":
-                     g_WeeklyInfoManagerClass.PIF_WPS_InfoList[2].CopyData(paramCls);
-                     break;
-                 case "WED":
-                     g_WeeklyInfoManagerClass.PIF_WPS_InfoList[3].CopyData(paramCls);
-                     break;
-                 case "THU":
-                     g_WeeklyInfoManagerClass.PIF_WPS_InfoList[4].CopyData(paramCls);
-                     break;
-                 case "FRI":
-                     g_WeeklyInfoManagerClass.PIF_WPS_InfoList[5].CopyData(paramCls);
-                     break;
-                 case "SAT":
-                     g_WeeklyInfoManagerClass.PIF_WPS_InfoList[6].CopyData(paramCls);
-                     break;
+            ApplyWeekTime(WeekSchInfoElement1, 0);
+            ApplyWeekTime(WeekSchInfoElement2, 1);
+            ApplyWeekTime(WeekSchInfoElement3, 2);
+            ApplyWeekTime(WeekSchInfoElement4, 3);
+            ApplyWeekTime(WeekSchInfoElement5, 4);
+            ApplyWeekTime(WeekSchInfoElement6, 5);
+            ApplyWeekTime(WeekSchInfoElement7, 6);
+        }
 
-                 default:
-                     break;
-             }
+        private void ApplyWeekTime(WeekSchInfoElement element, int index)
+        {
+            if (element == null)
+            {
+                return;
+            }
 
-             g_WeeklyInfoManagerClass.SaveWeeklySchedule(this.g_CurrentSelectedPlayerInfoClass.PIF_GUID, this.g_CurrentSelectedPlayerInfoClass.PIF_PlayerName);
-         }
+            if (g_WeeklyInfoManagerClass.PIF_WPS_InfoList.Count <= index)
+            {
+                return;
+            }
 
-         public void InitEventHandler()
+            element.ApplyCurrentTimeTo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[index]);
+        }
+
+        public void InitEventHandler()
          {
              BTN0DO_Copy2.Click += BTN0DO_Copy2_Click;  // 취소
              ExitBTN.Click +=ExitBTN_Click;
@@ -299,8 +282,8 @@ namespace AndoW_Manager
              BTN0DO_Copy5.Click += BTN0DO_Copy5_Click;  //  업데이트
          }
 
-         void BTN0DO_Copy5_Click(object sender, RoutedEventArgs e)
-         {
+        void BTN0DO_Copy5_Click(object sender, RoutedEventArgs e)
+        {
             //if (CheckIsPlayerOffline() == true)
             //{
             //    MessageTools.ShowMessageBox("플레이어가 중지 상태입니다.", "확인");
@@ -310,11 +293,8 @@ namespace AndoW_Manager
 
             try
             {
-                //if (this.g_CurrentSelectedPlayerInfoClass.PIF_OSName.Equals("Android"))
-                //{
-                //    string filelistJSON = JsonConvert.SerializeObject(this.g_WeeklyInfoManagerClass.g_Dt_WeekSchInfo, Formatting.Indented);
-                //       // RPCaller.RPCall(g_CurrentSelectedPlayerInfoClass.PIF_IPAddress, RP_ID.UpdateWeeklySchedule, filelistJSON);
-                //}
+                SyncWeeklyInfoFromUI();
+                g_WeeklyInfoManagerClass.SaveWeeklySchedule(this.g_CurrentSelectedPlayerInfoClass.PIF_GUID, this.g_CurrentSelectedPlayerInfoClass.PIF_PlayerName);
 
                 MainWindow.Instance.EnqueueCommandForPlayer(g_CurrentSelectedPlayerInfoClass, RP_ORDER.updateschedule.ToString(), pushSignalR: true);
 
@@ -324,9 +304,9 @@ namespace AndoW_Manager
             {
                 MessageTools.ShowMessageBox("방송시간 설정을 실패했습니다.", "확인");
             }
-         }
+        }
 
-         public bool CheckIsPlayerOffline()
+        public bool CheckIsPlayerOffline()
          {
              if (MainWindow.Instance.onlineList.Contains(this.g_CurrentSelectedPlayerInfoClass.PIF_PlayerName) == true)
              {
@@ -339,52 +319,50 @@ namespace AndoW_Manager
              
          }
 
-         void BTN0DO_Copy_Click(object sender, RoutedEventArgs e)
-         {
-             foreach (PlayerInfoClass item in DataShop.Instance.g_PlayerInfoManager.g_PlayerInfoClassList)
-             {
-                 g_WeeklyInfoManagerClass.SaveWeeklySchedule(item.PIF_GUID, item.PIF_PlayerName);
+        void BTN0DO_Copy_Click(object sender, RoutedEventArgs e)
+        {
+            SyncWeeklyInfoFromUI();
 
-                 if (item.PIF_OSName.Equals("Android"))
-                 {
-                     try
-                     {
-                         string filelistJSON = JsonConvert.SerializeObject(g_WeeklyInfoManagerClass.PIF_WPS_InfoList, Formatting.Indented);
-                         //RPCaller.RPCall(g_CurrentSelectedPlayerInfoClass.PIF_IPAddress, RP_ID.UpdateWeeklySchedule, filelistJSON);
-                     }
-                     catch (Exception ex)
-                     {
-                     }
-                 }
-             }
+            foreach (PlayerInfoClass item in DataShop.Instance.g_PlayerInfoManager.g_PlayerInfoClassList)
+            {
+                g_WeeklyInfoManagerClass.SaveWeeklySchedule(item.PIF_GUID, item.PIF_PlayerName);
 
-             MessageTools.ShowMessageBox("모든 플레이어에 적용했습니다.", "확인");
-         }
+                try
+                {
+                    MainWindow.Instance.EnqueueCommandForPlayer(item, RP_ORDER.updateschedule.ToString(), pushSignalR: true);
+                }
+                catch (Exception)
+                {
+                }
+            }
 
-         void EditOnAirTimeWindow_Loaded(object sender, RoutedEventArgs e)
-         {
+            MessageTools.ShowMessageBox("모든 플레이어에 적용했습니다.", "확인");
+        }
+
+        void EditOnAirTimeWindow_Loaded(object sender, RoutedEventArgs e)
+        {
              g_WeeklyInfoManagerClass.InitPlayerInfoListFromDataTable(g_CurrentSelectedPlayerInfoClass.PIF_GUID, g_CurrentSelectedPlayerInfoClass.PIF_PlayerName);
 
              UpdateWeeklyInfo();             
-         }
+        }
 
-         public void UpdateWeeklyInfo()
-         {
-             WeekSchInfoElement1.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0]);
-             WeekSchInfoElement2.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[1]);
-             WeekSchInfoElement3.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[2]);
-             WeekSchInfoElement4.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[3]);
-             WeekSchInfoElement5.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[4]);
-             WeekSchInfoElement6.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[5]);
-             WeekSchInfoElement7.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[6]);
+        public void UpdateWeeklyInfo()
+        {
+            WeekSchInfoElement1.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0]);
+            WeekSchInfoElement2.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[1]);
+            WeekSchInfoElement3.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[2]);
+            WeekSchInfoElement4.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[3]);
+            WeekSchInfoElement5.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[4]);
+            WeekSchInfoElement6.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[5]);
+            WeekSchInfoElement7.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[6]);
 
-             DisplayWeekOfDay();
-         }
+            DisplayWeekOfDay();
+        }
 
-         void BTN0DO_Copy2_Click(object sender, RoutedEventArgs e)
-         {
-             this.Close();
-         }
+        void BTN0DO_Copy2_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
+        }
 
         void CancelBTN_Click(object sender, RoutedEventArgs e)
         {
@@ -425,7 +403,12 @@ namespace AndoW_Manager
 
         private void SetAllBtn_Click(object sender, RoutedEventArgs e)
         {
-            WeekSchInfoElement1.SetDataAndState();
+            if (g_WeeklyInfoManagerClass.PIF_WPS_InfoList.Count == 0)
+            {
+                return;
+            }
+
+            WeekSchInfoElement1.ApplyCurrentTimeTo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0]);
 
             WeekSchInfoElement1.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0], true);
             WeekSchInfoElement2.UpdateWeekInfo(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0], true);
@@ -442,8 +425,6 @@ namespace AndoW_Manager
             g_WeeklyInfoManagerClass.PIF_WPS_InfoList[4].CopyData(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0], true);
             g_WeeklyInfoManagerClass.PIF_WPS_InfoList[5].CopyData(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0], true);
             g_WeeklyInfoManagerClass.PIF_WPS_InfoList[6].CopyData(g_WeeklyInfoManagerClass.PIF_WPS_InfoList[0], true);
-
-            g_WeeklyInfoManagerClass.SaveWeeklySchedule(this.g_CurrentSelectedPlayerInfoClass.PIF_GUID, this.g_CurrentSelectedPlayerInfoClass.PIF_PlayerName);
 
             DisplayWeekOfDay();
         }
