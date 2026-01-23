@@ -198,15 +198,14 @@ namespace HyOnPlayer
                         {
                             string historyId = RecordCommandQueued(playerGuid, command);
                             bool applied = payloadData != null && ApplySchedulePayload(payloadData.Schedule);
-                            if (applied)
+                            owner?.RequestWeeklyScheduleSyncNow();
+                            if (!applied && payloadData == null)
                             {
-                                RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
-                                return true;
+                                Logger.WriteLog("updateschedule payload missing. Triggered weekly sync only.", Logger.GetLogFileName());
                             }
 
-                            Logger.WriteLog("updateschedule payload missing or invalid.", Logger.GetLogFileName());
-                            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "SCHEDULE_PAYLOAD", "payload missing");
-                            return false;
+                            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
+                            return true;
                         }
                     case "updateweekly":
                         {
