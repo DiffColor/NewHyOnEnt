@@ -313,6 +313,7 @@
     <Compile Include="DataManager\PlayerInfoManager.cs" />
     <Compile Include="DataManager\CommandQueueManager.cs" />
     <Compile Include="DataManager\UpdatePayloadBuilder.cs" />
+    <Compile Include="DataManager\ContentDetailsManager.cs" />
     <Compile Include="DataManager\UpdateThrottleSettingsManager.cs" />
     <Compile Include="DataManager\ServerSettingsManager.cs" />
     <Compile Include="DataManager\WeeklyInfoManagerClass.cs" />
@@ -431,6 +432,7 @@
     <Compile Include="SubWindow\SavePreviewImageWindow.xaml.cs">
       <DependentUpon>SavePreviewImageWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="SubWindow\ProgressWidthConverter.cs" />
     <Compile Include="SubWindow\SavingFileWindow.xaml.cs">
       <DependentUpon>SavingFileWindow.xaml</DependentUpon>
     </Compile>

@@ -1776,7 +1776,8 @@ namespace AndoW_Manager
                 List<CopyFileInfo> copyJobs = PrepareCopyFileJobs(savedPageName);
                 if (copyJobs.Count > 0)
                 {
-                    SavingFileWindow copyWindow = new SavingFileWindow(copyJobs, generateAssets);
+                    SavingFileWindow copyWindow = new SavingFileWindow(copyJobs, generateAssets, enableFtpUpload: true);
+                    copyWindow.Owner = Window.GetWindow(this) ?? Application.Current?.MainWindow;
                     copyWindow.ShowDialog();
                 }
                 else
@@ -1852,13 +1853,21 @@ namespace AndoW_Manager
             List<CopyFileInfo> jobs = new List<CopyFileInfo>();
             HashSet<string> jobKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            AppendMediaCopyJobs(jobs, jobKeys, pageName);
-            AppendWelcomeBoardCopyJobs(jobs, jobKeys, pageName);
+            var detailsManager = DataShop.Instance?.g_ContentDetailsManager;
+            var detailsLookup = new ContentDetailsQueryCache(detailsManager);
+
+            AppendMediaCopyJobs(jobs, jobKeys, pageName, detailsManager, detailsLookup);
+            AppendWelcomeBoardCopyJobs(jobs, jobKeys, pageName, detailsManager, detailsLookup);
 
             return jobs;
         }
 
-        private void AppendMediaCopyJobs(List<CopyFileInfo> jobs, HashSet<string> jobKeys, string pageName)
+        private void AppendMediaCopyJobs(
+            List<CopyFileInfo> jobs,
+            HashSet<string> jobKeys,
+            string pageName,
+            ContentDetailsManager detailsManager,
+            ContentDetailsQueryCache detailsLookup)
         {
             foreach (DisplayElementForEditor display in g_DspElmtList)
             {
@@ -1877,38 +1886,46 @@ namespace AndoW_Manager
                         continue;
                     }
 
-                    string fileName = !string.IsNullOrWhiteSpace(content.CIF_FileName)
-                        ? content.CIF_FileName
-                        : Path.GetFileName(sourcePath);
+                    string originalFileName = ResolveOriginalFileName(content, sourcePath);
+                    ContentDetailsResolution resolution = ResolveContentDetails(
+                        sourcePath,
+                        originalFileName,
+                        detailsManager,
+                        detailsLookup);
 
-                    if (string.IsNullOrWhiteSpace(fileName))
+                    string storageFileName = resolution.StorageFileName;
+                    string destinationPath = FNDTools.GetTargetContentsFilePath(storageFileName);
+                    bool requireCopy = resolution.RequireCopy && !File.Exists(destinationPath);
+
+                    string jobKey = destinationPath;
+                    if (jobKeys.Add(jobKey))
                     {
-                        fileName = $"{Guid.NewGuid():N}{Path.GetExtension(sourcePath)}";
-                    }
-
-                    string destinationPath = FNDTools.GetTargetContentsFilePath(fileName);
-
-                    if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase) == false)
-                    {
-                        string jobKey = $"{sourcePath}|{destinationPath}";
-                        if (jobKeys.Add(jobKey))
+                        jobs.Add(new CopyFileInfo
                         {
-                            jobs.Add(new CopyFileInfo
-                            {
-                                CFI_FileName = fileName,
-                                CFI_FileSourceFullPath = sourcePath,
-                                CFI_TargetFileName = destinationPath,
-                                CFI_PageName = pageName
-                            });
-                        }
+                            CFI_FileName = storageFileName,
+                            CFI_FileSourceFullPath = sourcePath,
+                            CFI_TargetFileName = destinationPath,
+                            CFI_PageName = pageName,
+                            CFI_StorageGuid = resolution.StorageGuid,
+                            CFI_RequireCopy = requireCopy
+                        });
                     }
 
-                    content.CIF_FileName = fileName;
+                    content.CIF_FileName = storageFileName;
+                    content.CIF_RelativePath = $"Contents/{storageFileName}";
+                    content.CIF_FileHash = resolution.PartialHash;
+                    content.CIF_FileSize = resolution.FileSize;
+                    content.CIF_FileExist = true;
                 }
             }
         }
 
-        private void AppendWelcomeBoardCopyJobs(List<CopyFileInfo> jobs, HashSet<string> jobKeys, string pageName)
+        private void AppendWelcomeBoardCopyJobs(
+            List<CopyFileInfo> jobs,
+            HashSet<string> jobKeys,
+            string pageName,
+            ContentDetailsManager detailsManager,
+            ContentDetailsQueryCache detailsLookup)
         {
             foreach (WelcomeBoardForEditor welcome in g_WelcomBoardForEditorList)
             {
@@ -1926,35 +1943,317 @@ namespace AndoW_Manager
                     continue;
                 }
 
-                string fileName = !string.IsNullOrWhiteSpace(textInfo.CIF_BGImageFileName)
-                    ? textInfo.CIF_BGImageFileName
-                    : Path.GetFileName(sourcePath);
+                string originalFileName = ResolveOriginalFileName(textInfo, sourcePath);
+                ContentDetailsResolution resolution = ResolveContentDetails(
+                    sourcePath,
+                    originalFileName,
+                    detailsManager,
+                    detailsLookup);
 
-                if (string.IsNullOrWhiteSpace(fileName))
+                string storageFileName = resolution.StorageFileName;
+                string destinationPath = FNDTools.GetTargetContentsFilePath(storageFileName);
+                bool requireCopy = resolution.RequireCopy && !File.Exists(destinationPath);
+
+                string jobKey = destinationPath;
+                if (jobKeys.Add(jobKey))
                 {
-                    fileName = $"{Guid.NewGuid():N}{Path.GetExtension(sourcePath)}";
-                }
-
-                string destinationPath = FNDTools.GetTargetContentsFilePath(fileName);
-
-                if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase) == false)
-                {
-                    string jobKey = $"{sourcePath}|{destinationPath}";
-                    if (jobKeys.Add(jobKey))
+                    jobs.Add(new CopyFileInfo
                     {
-                        jobs.Add(new CopyFileInfo
-                        {
-                            CFI_FileName = fileName,
-                            CFI_FileSourceFullPath = sourcePath,
-                            CFI_TargetFileName = destinationPath,
-                            CFI_PageName = pageName
-                        });
-                    }
+                        CFI_FileName = storageFileName,
+                        CFI_FileSourceFullPath = sourcePath,
+                        CFI_TargetFileName = destinationPath,
+                        CFI_PageName = pageName,
+                        CFI_StorageGuid = resolution.StorageGuid,
+                        CFI_RequireCopy = requireCopy
+                    });
                 }
 
-                textInfo.CIF_BGImageFileName = fileName;
+                textInfo.CIF_BGImageFileName = storageFileName;
                 textInfo.CIF_IsBGImageExist = true;
             }
+        }
+
+        private sealed class ContentDetailsResolution
+        {
+            public string StorageGuid { get; set; } = string.Empty;
+            public string StorageFileName { get; set; } = string.Empty;
+            public string PartialHash { get; set; } = string.Empty;
+            public string EntireHash { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty;
+            public long FileSize { get; set; }
+            public double VideoLength { get; set; }
+            public bool RequireCopy { get; set; } = true;
+        }
+
+        private sealed class ContentDetailsQueryCache
+        {
+            private readonly ContentDetailsManager _manager;
+            private readonly Dictionary<string, List<ContentDetails>> _partialCache = new Dictionary<string, List<ContentDetails>>(StringComparer.OrdinalIgnoreCase);
+            private readonly Dictionary<string, List<ContentDetails>> _entireCache = new Dictionary<string, List<ContentDetails>>(StringComparer.OrdinalIgnoreCase);
+
+            public ContentDetailsQueryCache(ContentDetailsManager manager)
+            {
+                _manager = manager;
+            }
+
+            public List<ContentDetails> FindByPartialHash(string partialHash)
+            {
+                if (string.IsNullOrWhiteSpace(partialHash))
+                {
+                    return new List<ContentDetails>();
+                }
+
+                if (_partialCache.TryGetValue(partialHash, out var cached))
+                {
+                    return cached;
+                }
+
+                var result = _manager?.FindByPartialHash(partialHash) ?? new List<ContentDetails>();
+                _partialCache[partialHash] = result;
+                return result;
+            }
+
+            public List<ContentDetails> FindByEntireHash(string entireHash)
+            {
+                if (string.IsNullOrWhiteSpace(entireHash))
+                {
+                    return new List<ContentDetails>();
+                }
+
+                if (_entireCache.TryGetValue(entireHash, out var cached))
+                {
+                    return cached;
+                }
+
+                var result = _manager?.FindByEntireHash(entireHash) ?? new List<ContentDetails>();
+                _entireCache[entireHash] = result;
+                return result;
+            }
+
+            public void Track(ContentDetails details)
+            {
+                if (details == null)
+                {
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(details.PartialHash))
+                {
+                    AddToCache(_partialCache, details.PartialHash, details);
+                }
+
+                if (!string.IsNullOrWhiteSpace(details.EntireHash))
+                {
+                    AddToCache(_entireCache, details.EntireHash, details);
+                }
+            }
+
+            private static void AddToCache(Dictionary<string, List<ContentDetails>> cache, string key, ContentDetails details)
+            {
+                if (string.IsNullOrWhiteSpace(key) || details == null)
+                {
+                    return;
+                }
+
+                if (!cache.TryGetValue(key, out var list))
+                {
+                    list = new List<ContentDetails>();
+                    cache[key] = list;
+                }
+
+                if (list.Any(x => string.Equals(x.Id, details.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return;
+                }
+
+                list.Add(details);
+            }
+        }
+
+        private static string ResolveOriginalFileName(ContentsInfoClass content, string fallbackPath)
+        {
+            if (content != null)
+            {
+                if (!string.IsNullOrWhiteSpace(content.CIF_FileFullPath))
+                {
+                    return Path.GetFileName(content.CIF_FileFullPath);
+                }
+
+                if (!string.IsNullOrWhiteSpace(content.CIF_FileName))
+                {
+                    return Path.GetFileName(content.CIF_FileName);
+                }
+            }
+
+            return Path.GetFileName(fallbackPath);
+        }
+
+        private static string ResolveOriginalFileName(TextInfoClass textInfo, string fallbackPath)
+        {
+            if (textInfo != null)
+            {
+                if (!string.IsNullOrWhiteSpace(textInfo.CIF_BGImageFileFullPath))
+                {
+                    return Path.GetFileName(textInfo.CIF_BGImageFileFullPath);
+                }
+
+                if (!string.IsNullOrWhiteSpace(textInfo.CIF_BGImageFileName))
+                {
+                    return Path.GetFileName(textInfo.CIF_BGImageFileName);
+                }
+            }
+
+            return Path.GetFileName(fallbackPath);
+        }
+
+        private ContentDetailsResolution ResolveContentDetails(
+            string sourcePath,
+            string originalFileName,
+            ContentDetailsManager detailsManager,
+            ContentDetailsQueryCache detailsLookup)
+        {
+            ContentDetailsResolution resolution = new ContentDetailsResolution();
+
+            string ext = Path.GetExtension(originalFileName);
+            if (string.IsNullOrWhiteSpace(ext))
+            {
+                ext = Path.GetExtension(sourcePath);
+            }
+
+            if (string.IsNullOrWhiteSpace(ext))
+            {
+                ext = string.Empty;
+            }
+
+            long fileSize = 0;
+            try
+            {
+                fileSize = new FileInfo(sourcePath).Length;
+            }
+            catch
+            {
+                fileSize = 0;
+            }
+
+            string partialHash = XXHash64.ComputePartialSignature(sourcePath);
+            string entireHash = XXHash64.ComputeXXHash64Async(sourcePath).GetAwaiter().GetResult();
+
+            string type = ResolveContentType(sourcePath);
+            double vLength = 0;
+            if (type == "video")
+            {
+                vLength = MediaTools.GetVideoDuration(sourcePath).TotalSeconds;
+            }
+
+            List<ContentDetails> sameContent = new List<ContentDetails>();
+
+            if (detailsLookup != null)
+            {
+                if (!string.IsNullOrWhiteSpace(partialHash))
+                {
+                    sameContent = detailsLookup.FindByPartialHash(partialHash);
+                }
+                else if (!string.IsNullOrWhiteSpace(entireHash))
+                {
+                    sameContent = detailsLookup.FindByEntireHash(entireHash);
+                }
+            }
+
+            bool hasSameContent = sameContent.Count > 0;
+            ContentDetails sameName = null;
+            if (hasSameContent && !string.IsNullOrWhiteSpace(originalFileName))
+            {
+                sameName = sameContent.FirstOrDefault(x =>
+                    string.Equals(x.FileName, originalFileName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            string storageGuid = hasSameContent ? sameContent[0].Id : Guid.NewGuid().ToString("N");
+            string storageFileName = BuildStorageFileName(storageGuid, ext);
+
+            bool requireCopy = true;
+            string storagePath = FNDTools.GetTargetContentsFilePath(storageFileName);
+            if (File.Exists(storagePath))
+            {
+                requireCopy = false;
+            }
+
+            if (detailsManager != null && !string.IsNullOrWhiteSpace(originalFileName))
+            {
+                if (sameName == null)
+                {
+                    string recordGuid = hasSameContent ? Guid.NewGuid().ToString("N") : storageGuid;
+                    var record = new ContentDetails
+                    {
+                        Id = recordGuid,
+                        FileName = originalFileName,
+                        PartialHash = partialHash,
+                        EntireHash = entireHash,
+                        Type = type,
+                        FileSize = fileSize,
+                        VideoLength = vLength
+                    };
+
+                    detailsManager.Save(record);
+                    detailsLookup?.Track(record);
+                }
+            }
+
+            resolution.StorageGuid = storageGuid;
+            resolution.StorageFileName = storageFileName;
+            resolution.PartialHash = partialHash;
+            resolution.EntireHash = entireHash;
+            resolution.Type = type;
+            resolution.FileSize = fileSize;
+            resolution.VideoLength = vLength;
+            resolution.RequireCopy = requireCopy;
+
+            return resolution;
+        }
+
+        private static string BuildStorageFileName(string guid, string extension)
+        {
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                guid = Guid.NewGuid().ToString("N");
+            }
+
+            string ext = extension ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(ext) && !ext.StartsWith("."))
+            {
+                ext = "." + ext;
+            }
+
+            return string.IsNullOrWhiteSpace(ext) ? guid : $"{guid}{ext}";
+        }
+
+        private static string ResolveContentType(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return "other";
+            }
+
+            if (MediaTools.CheckIsVideoFile(filePath))
+            {
+                return "video";
+            }
+
+            if (MediaTools.CheckIsImageFile(filePath))
+            {
+                return "image";
+            }
+
+            if (MediaTools.CheckIsFlashFile(filePath))
+            {
+                return "flash";
+            }
+
+            if (MediaTools.CheckIsPPTFile(filePath))
+            {
+                return "ppt";
+            }
+
+            return "other";
         }
 
         private List<ElementInfoClass> BuildElementSnapshot(string pageName)
