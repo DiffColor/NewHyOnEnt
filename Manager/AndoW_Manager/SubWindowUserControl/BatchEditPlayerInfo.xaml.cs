@@ -19,10 +19,12 @@ namespace AndoW_Manager
         public string noticeTitle = string.Empty;
         public string noticeImageName = string.Empty;
 
-       // ContentsInfoClass g_ContentsInfoClass = new ContentsInfoClass();
+        // ContentsInfoClass g_ContentsInfoClass = new ContentsInfoClass();
 
         public PlayerInfoClass g_PlayerInfoClass = new PlayerInfoClass();
         bool isAuth = false;
+        private const string AuthPendingColor = "#FFB95454";
+        private const string AuthDoneColor = "#FF3E8E63";
 
         public BatchEditPlayerInfo(PlayerBatchEditWindow paramPage)
         {
@@ -98,15 +100,16 @@ namespace AndoW_Manager
 
         private void SetAuthState(bool state)
         {
-            if(state)
+            if (state)
             {
                 AuthBtn.Content = "인증 완료";
-                AuthBtn.Background = new SolidColorBrush(Colors.DarkGreen);
+                AuthBtn.Background = ColorTools.GetSolidBrushByColorString(AuthDoneColor);
                 PWKeyTBox.IsEnabled = false;
-            } else
+            }
+            else
             {
                 AuthBtn.Content = "인증 필요";
-                AuthBtn.Background = new SolidColorBrush(Colors.IndianRed);
+                AuthBtn.Background = ColorTools.GetSolidBrushByColorString(AuthPendingColor);
                 PWKeyTBox.IsEnabled = true;
             }
 

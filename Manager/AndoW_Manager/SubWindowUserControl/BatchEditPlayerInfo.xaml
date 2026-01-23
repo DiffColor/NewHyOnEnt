@@ -50,7 +50,7 @@
             </ComboBox>
             <TextBox Grid.Column="3" IsReadOnly="True" x:Name="SourceKeyTBox" Text="" TextWrapping="NoWrap" FontFamily="Malgun Gothic" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Foreground="#FF181642" Margin="12,2,12,2" BorderThickness="0" VerticalAlignment="Center" Background="{x:Null}"/>
             <PasswordBox Grid.Column="4" x:Name="PWKeyTBox" FontFamily="Malgun Gothic" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Foreground="#FF181642" BorderBrush="{x:Null}" Margin="8,1,8,1" VerticalAlignment="Center" Background="{x:Null}"/>
-            <Button Grid.Column="5" x:Name="AuthBtn" Click="AuthBtn_Click" Content="인증 필요" Background="IndianRed" FontFamily="Malgun Gothic" FontSize="11" Style="{DynamicResource ChangeOrderStyle}" Height="26" FontWeight="Bold" Foreground="White" />
+            <Button Grid.Column="5" x:Name="AuthBtn" Click="AuthBtn_Click" Content="인증 필요" Background="#FFB95454" FontFamily="Malgun Gothic" FontSize="11" Style="{DynamicResource ChangeOrderStyle}" Height="26" FontWeight="Bold" Foreground="White" />
         </Grid>
     </Grid>
 </UserControl>
