@@ -187,12 +187,27 @@ namespace HyOnPlayer
             {
                 ClientId = player.PIF_GUID,
                 Status = status,
-                Process = process,
+                Process = NormalizeHeartbeatProcess(process),
                 Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
                 CurrentPage = owner?.g_CurrentPageName ?? string.Empty,
                 HdmiState = true,
                 Timestamp = DateTime.Now
             };
+        }
+
+        private static int NormalizeHeartbeatProcess(int progress)
+        {
+            int value = progress;
+            if (value < 0)
+            {
+                value = 0;
+            }
+            else if (value > 100)
+            {
+                value = 100;
+            }
+
+            return value;
         }
     }
 

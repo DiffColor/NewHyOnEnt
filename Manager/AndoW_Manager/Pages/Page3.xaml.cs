@@ -730,7 +730,7 @@ namespace AndoW_Manager
                     item.g_PlayerInfoClass.PIF_PlayerName.Equals(playerIdOrName, StringComparison.CurrentCultureIgnoreCase));
         }
 
-        public void SetPlayerNetworkStatus(string playerIdOrName, PlayerStatus status, int process=0, string version="", string pagename="", string hdmi_state="", bool? isConnected = null)
+        public void SetPlayerNetworkStatus(string playerIdOrName, PlayerStatus status, double process=0, string version="", string pagename="", string hdmi_state="", bool? isConnected = null)
         {
             var element = FindPlayerElement(playerIdOrName);
             if (element != null)
