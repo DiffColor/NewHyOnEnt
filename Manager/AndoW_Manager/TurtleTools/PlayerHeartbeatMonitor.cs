@@ -47,10 +47,11 @@ namespace TurtleTools
             bool isDisconnected = string.Equals(payload.Status, "disconnected", StringComparison.OrdinalIgnoreCase);
             DateTime timestamp = payload.Timestamp == default(DateTime) ? DateTime.Now : payload.Timestamp;
             DateTime? heartbeat = isDisconnected ? (DateTime?)null : timestamp;
+            double progress = NormalizeHeartbeatProcess(payload.Process);
             var state = new PlayerHeartbeatState(
                 payload.ClientId.Trim(),
                 ParseStatusValue(payload.Status),
-                payload.Process,
+                progress,
                 payload.Version,
                 payload.CurrentPage,
                 payload.HdmiState.ToString(),
@@ -200,6 +201,17 @@ namespace TurtleTools
             return state;
         }
 
+        private static double NormalizeHeartbeatProcess(double process)
+        {
+            double value = process;
+            if (value > 1.0)
+            {
+                value /= 100.0;
+            }
+
+            return Math.Min(1.0, Math.Max(0.0, value));
+        }
+
         public void Dispose()
         {
             _timer?.Dispose();
@@ -208,7 +220,7 @@ namespace TurtleTools
 
     public sealed class PlayerHeartbeatState
     {
-        public PlayerHeartbeatState(string clientId, PlayerStatus status, int process, string version, string currentPageName, string hdmiState, DateTime? lastHeartbeat)
+        public PlayerHeartbeatState(string clientId, PlayerStatus status, double process, string version, string currentPageName, string hdmiState, DateTime? lastHeartbeat)
         {
             ClientId = clientId;
             Status = status;
@@ -221,7 +233,7 @@ namespace TurtleTools
 
         public string ClientId { get; }
         public PlayerStatus Status { get; }
-        public int Process { get; }
+        public double Process { get; }
         public string Version { get; }
         public string CurrentPageName { get; }
         public string HdmiState { get; }
@@ -240,7 +252,7 @@ namespace TurtleTools
             }
 
             return Status == other.Status &&
-                   Process == other.Process &&
+                   Math.Abs(Process - other.Process) < 0.0001 &&
                    string.Equals(Version, other.Version, StringComparison.Ordinal) &&
                    string.Equals(CurrentPageName, other.CurrentPageName, StringComparison.Ordinal) &&
                    string.Equals(HdmiState, other.HdmiState, StringComparison.Ordinal);

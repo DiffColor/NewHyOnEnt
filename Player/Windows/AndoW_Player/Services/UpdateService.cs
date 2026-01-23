@@ -52,6 +52,9 @@ namespace HyOnPlayer
         private string heartbeatStatus = string.Empty;
         private int heartbeatProgress;
         private int forceRefreshFtpSettings;
+        private static readonly TimeSpan ProgressReportInterval = TimeSpan.FromMilliseconds(500);
+        private long lastProgressReportTicks;
+        private int lastProgressReportPercent;
 
         public UpdateService(MainWindow owner)
         {
@@ -1033,9 +1036,111 @@ namespace HyOnPlayer
         private static double CalculateDownloadProgress(List<DownloadEntry> entries)
         {
             var list = entries ?? new List<DownloadEntry>();
-            int total = list.Count;
-            int done = list.Count(e => e != null && e.Status == DownloadStatus.Done);
-            return Math.Min(1.0, (double)done / Math.Max(1, total));
+            long totalBytes = CalculateTotalBytes(list);
+            if (totalBytes <= 0)
+            {
+                int total = list.Count;
+                int done = list.Count(e => e != null && e.Status == DownloadStatus.Done);
+                return Math.Min(1.0, (double)done / Math.Max(1, total));
+            }
+
+            long downloadedBytes = CalculateDownloadedBytes(list);
+            if (downloadedBytes < 0)
+            {
+                downloadedBytes = 0;
+            }
+            if (downloadedBytes > totalBytes)
+            {
+                downloadedBytes = totalBytes;
+            }
+
+            return Math.Min(1.0, (double)downloadedBytes / totalBytes);
+        }
+
+        private static long CalculateTotalBytes(List<DownloadEntry> entries)
+        {
+            if (entries == null) return 0;
+            long total = 0;
+            foreach (var entry in entries)
+            {
+                if (entry == null) continue;
+                if (entry.SizeBytes > 0)
+                {
+                    total += entry.SizeBytes;
+                }
+                else if (entry.Chunks != null && entry.Chunks.Count > 0)
+                {
+                    foreach (var chunk in entry.Chunks)
+                    {
+                        if (chunk == null) continue;
+                        if (chunk.Length > 0) total += chunk.Length;
+                    }
+                }
+            }
+            return total;
+        }
+
+        private static long CalculateDownloadedBytes(List<DownloadEntry> entries)
+        {
+            if (entries == null) return 0;
+            long downloaded = 0;
+            foreach (var entry in entries)
+            {
+                if (entry == null) continue;
+                if (entry.Status == DownloadStatus.Done)
+                {
+                    if (entry.SizeBytes > 0)
+                    {
+                        downloaded += entry.SizeBytes;
+                        continue;
+                    }
+                }
+
+                if (entry.Chunks == null || entry.Chunks.Count == 0)
+                {
+                    continue;
+                }
+
+                foreach (var chunk in entry.Chunks)
+                {
+                    if (chunk == null) continue;
+                    long chunkTotal = chunk.Length > 0 ? chunk.Length : chunk.DownloadedBytes;
+                    long chunkDone = chunk.DownloadedBytes;
+                    if (chunkDone < 0) chunkDone = 0;
+                    if (chunkTotal > 0 && chunkDone > chunkTotal)
+                    {
+                        chunkDone = chunkTotal;
+                    }
+                    downloaded += chunkDone;
+                }
+            }
+            return downloaded;
+        }
+
+        private void ReportDownloadProgress(UpdateQueue queue, List<DownloadEntry> entries, bool force)
+        {
+            if (queue == null)
+            {
+                return;
+            }
+
+            double progress = CalculateDownloadProgress(entries);
+            int percent = (int)Math.Round(Math.Min(1.0, Math.Max(0.0, progress)) * 100);
+            long nowTicks = DateTime.Now.Ticks;
+
+            if (!force)
+            {
+                if (percent == lastProgressReportPercent &&
+                    nowTicks - lastProgressReportTicks < ProgressReportInterval.Ticks)
+                {
+                    return;
+                }
+            }
+
+            lastProgressReportPercent = percent;
+            lastProgressReportTicks = nowTicks;
+            queue.DownloadProgress = progress;
+            UpdateHeartbeatSnapshot(queue, progress);
         }
 
         private static void ResetChunksToPending(DownloadEntry entry)
@@ -1084,13 +1189,13 @@ namespace HyOnPlayer
                     entry.Status = DownloadStatus.Downloading;
                     MarkChunkStatus(entry, ChunkStatus.Downloading, 0);
                     queue.DownloadJson = JsonConvert.SerializeObject(entries);
-                    queue.DownloadProgress = Math.Min(1.0, (double)completed / Math.Max(1, total));
+                    queue.DownloadProgress = CalculateDownloadProgress(entries);
                     queueRepository.Upsert(queue);
                     LogStatus(queue, $"Downloading {entry.FileName}");
                     SendQueueStatus(queue);
                     SyncQueueToRethink(queue);
 
-                    bool success = DownloadSingle(managerHost, entry);
+                    bool success = DownloadSingle(managerHost, queue, entries, entry);
                     if (!success)
                     {
                         if (!ignoreLease && !string.IsNullOrWhiteSpace(entry.LastError)
@@ -1124,7 +1229,7 @@ namespace HyOnPlayer
                     entry.LastError = string.Empty;
                     queue.DownloadJson = JsonConvert.SerializeObject(entries);
                     completed++;
-                    queue.DownloadProgress = Math.Min(1.0, (double)completed / Math.Max(1, total));
+                    queue.DownloadProgress = CalculateDownloadProgress(entries);
                     queueRepository.Upsert(queue);
                     LogStatus(queue, $"Downloaded {entry.FileName}");
                     SendQueueStatus(queue);
@@ -1156,7 +1261,7 @@ namespace HyOnPlayer
             return true;
         }
 
-        private bool DownloadSingle(string managerHost, DownloadEntry entry)
+        private bool DownloadSingle(string managerHost, UpdateQueue queue, List<DownloadEntry> entries, DownloadEntry entry)
         {
             if (entry == null || string.IsNullOrWhiteSpace(entry.FileName))
                 return true;
@@ -1182,7 +1287,7 @@ namespace HyOnPlayer
                 chunk.DownloadedBytes = 0;
                 chunk.LastUpdatedTicks = nowTicks;
 
-                bool chunkOk = DownloadChunkRange(entry, chunk, tempFilePath);
+                bool chunkOk = DownloadChunkRange(queue, entries, entry, chunk, tempFilePath);
                 if (!chunkOk)
                 {
                     chunk.Status = ChunkStatus.Pending;
@@ -1303,7 +1408,13 @@ namespace HyOnPlayer
                     return;
                 }
 
-                double progress = Math.Min(1.0, Math.Max(0.0, (queue.DownloadProgress + queue.ValidateProgress) / 2.0));
+                double downloadProgress = Math.Min(1.0, Math.Max(0.0, queue.DownloadProgress));
+                double validateProgress = Math.Min(1.0, Math.Max(0.0, queue.ValidateProgress));
+                double progress = downloadProgress;
+                if (progress <= 0 && validateProgress > 0)
+                {
+                    progress = validateProgress;
+                }
                 UpdateHeartbeatSnapshot(queue, progress);
                 UpdatePlayerQueueFields(managerHost, player.PIF_GUID, queue.Status, progress, queue.LastError, queue.RetryCount, queue.NextAttemptTicks);
             }
@@ -1644,7 +1755,7 @@ namespace HyOnPlayer
             }
         }
 
-        private bool DownloadChunkRange(DownloadEntry entry, DownloadChunk chunk, string tempFilePath)
+        private bool DownloadChunkRange(UpdateQueue queue, List<DownloadEntry> entries, DownloadEntry entry, DownloadChunk chunk, string tempFilePath)
         {
             if (chunk == null)
             {
@@ -1702,6 +1813,14 @@ namespace HyOnPlayer
                                 break;
                             }
                             local.Write(buffer, 0, read);
+                            long updated = chunk.DownloadedBytes + read;
+                            if (chunk.Length > 0 && updated > chunk.Length)
+                            {
+                                updated = chunk.Length;
+                            }
+                            chunk.DownloadedBytes = updated;
+                            chunk.LastUpdatedTicks = DateTime.Now.Ticks;
+                            ReportDownloadProgress(queue, entries, false);
                             remaining -= read;
                         }
 
@@ -1715,6 +1834,7 @@ namespace HyOnPlayer
                 chunk.Status = ChunkStatus.Done;
                 chunk.DownloadedBytes = chunk.Length;
                 chunk.LastUpdatedTicks = DateTime.Now.Ticks;
+                ReportDownloadProgress(queue, entries, true);
                 return true;
             }
             catch (IOException ioEx)

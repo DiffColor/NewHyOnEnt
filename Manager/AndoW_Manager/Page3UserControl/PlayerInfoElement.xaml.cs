@@ -761,7 +761,7 @@ namespace AndoW_Manager
             return CurrentPlayingPageName?.Text ?? string.Empty;
         }
 
-        public void DisplayPlayerStatus(PlayerStatus status, int process=0, string version="", string pagename="", string hdmi_state = "", bool? isConnected = null)
+        public void DisplayPlayerStatus(PlayerStatus status, double process=0, string version="", string pagename="", string hdmi_state = "", bool? isConnected = null)
         {
             this.Dispatcher.Invoke(DispatcherPriority.Normal,
                      new Action(() =>
@@ -810,7 +810,7 @@ namespace AndoW_Manager
                 : new SolidColorBrush(Colors.Gray);
         }
 
-        internal void ApplyPlayerStatus(PlayerStatus status, int process = 0, string version = "", string pagename = "", string hdmi_state = "", bool? isConnected = null)
+        internal void ApplyPlayerStatus(PlayerStatus status, double process = 0, string version = "", string pagename = "", string hdmi_state = "", bool? isConnected = null)
         {
             UpdateOnlineState(isConnected);
             ApplyConnectionIndicator(isConnected);
@@ -863,7 +863,8 @@ namespace AndoW_Manager
 
             CurrentPlayingPageName.Text = statusText;
             CurrentPlayingPageName.Foreground = statusBrush;
-            UpdatingProgress.Width = this.ActualWidth * (process / 100.0);
+            double normalized = Math.Min(1.0, Math.Max(0.0, process));
+            UpdatingProgress.Width = this.ActualWidth * normalized;
 
             if (string.IsNullOrEmpty(hdmi_state))
             {
