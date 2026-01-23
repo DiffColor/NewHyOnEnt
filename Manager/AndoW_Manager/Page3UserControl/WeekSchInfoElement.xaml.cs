@@ -15,14 +15,11 @@ namespace AndoW_Manager
         public delegate void UpdateWIFD(WeeklyDayScheduleInfo paramCls);              // Contents Play
         public event UpdateWIFD EventUpdateWIFD;
 
-        bool g_IsEditing = false;
-
         public WeekSchInfoElement()
         {
             InitializeComponent();
-            InitEventHandler();
             InitComboBoxes();
-            WeekStackPanel1.Visibility = Visibility.Hidden;
+            WeekStackPanel1.Visibility = Visibility.Visible;
         }
 
         public void InitComboBoxes()
@@ -47,21 +44,8 @@ namespace AndoW_Manager
                 g_WeeklyPlayScheduleInfo.StartMinute,
                 g_WeeklyPlayScheduleInfo.EndHour,
                 g_WeeklyPlayScheduleInfo.EndMinute);
-
-            if (g_IsEditing == true)
-            {
-                BorderBTN_Copy1.Content = "저장";
-                BorderBTN_Copy1.Foreground = new SolidColorBrush(Colors.OrangeRed);
-                WeekStackPanel1.Visibility = System.Windows.Visibility.Visible;
-                DisplaytimeText.Visibility = System.Windows.Visibility.Hidden;
-            }
-            else
-            {
-                BorderBTN_Copy1.Content = "편집";
-                BorderBTN_Copy1.Foreground = new SolidColorBrush(Colors.Black);
-                WeekStackPanel1.Visibility = System.Windows.Visibility.Hidden;
-                DisplaytimeText.Visibility = System.Windows.Visibility.Visible;
-            }
+            WeekStackPanel1.Visibility = Visibility.Visible;
+            DisplaytimeText.Visibility = Visibility.Collapsed;
 
             DispStartHourCombo.SelectedIndex = g_WeeklyPlayScheduleInfo.StartHour;
             DispStartMinCombo.SelectedIndex = g_WeeklyPlayScheduleInfo.StartMinute;
@@ -77,53 +61,29 @@ namespace AndoW_Manager
                 DisplaytimeText_Copy.Text = "방송안함";
             }
         }
-
-        public void InitEventHandler()
+        public void ApplyCurrentTimeTo(WeeklyDayScheduleInfo target)
         {
-            BorderBTN_Copy1.Click += BorderBTN_Copy1_Click;
-        }
-
-        void BorderBTN_Copy1_Click(object sender, RoutedEventArgs e)  // 저장
-        {
-            SetDataAndToggle();
-        }
-
-        public void SetDataAndToggle()
-        {
-            if (g_IsEditing == false)
+            if (target == null)
             {
-                g_IsEditing = true;
-            }
-            else
-            {
-                g_IsEditing = false;
+                return;
             }
 
-            if (g_IsEditing == false)
+            if (DispStartHourCombo.SelectedIndex >= 0)
             {
-                g_WeeklyPlayScheduleInfo.StartHour = DispStartHourCombo.SelectedIndex;
-                g_WeeklyPlayScheduleInfo.StartMinute = DispStartMinCombo.SelectedIndex;
-                g_WeeklyPlayScheduleInfo.EndHour = DispEndHourCombo.SelectedIndex;
-                g_WeeklyPlayScheduleInfo.EndMinute = DispEndMinCombo.SelectedIndex;
-
-                EventUpdateWIFD(this.g_WeeklyPlayScheduleInfo);
+                target.StartHour = DispStartHourCombo.SelectedIndex;
             }
-
-            DisplayThisElement();
-        }
-
-        public void SetDataAndState() {
-
-            g_IsEditing = false;
-
-            g_WeeklyPlayScheduleInfo.StartHour = DispStartHourCombo.SelectedIndex;
-            g_WeeklyPlayScheduleInfo.StartMinute = DispStartMinCombo.SelectedIndex;
-            g_WeeklyPlayScheduleInfo.EndHour = DispEndHourCombo.SelectedIndex;
-            g_WeeklyPlayScheduleInfo.EndMinute = DispEndMinCombo.SelectedIndex;
-
-            EventUpdateWIFD(this.g_WeeklyPlayScheduleInfo);
-
-            DisplayThisElement();
+            if (DispStartMinCombo.SelectedIndex >= 0)
+            {
+                target.StartMinute = DispStartMinCombo.SelectedIndex;
+            }
+            if (DispEndHourCombo.SelectedIndex >= 0)
+            {
+                target.EndHour = DispEndHourCombo.SelectedIndex;
+            }
+            if (DispEndMinCombo.SelectedIndex >= 0)
+            {
+                target.EndMinute = DispEndMinCombo.SelectedIndex;
+            }
         }
 
         public void UpdateWeekInfo(WeeklyDayScheduleInfo paramCls, bool onlyTime = false)

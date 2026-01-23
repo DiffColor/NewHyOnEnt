@@ -84,9 +84,6 @@
                         <RowDefinition Height="280*"/>
                         <RowDefinition Height="29*"/>
                     </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="492"/>
-                    </Grid.ColumnDefinitions>
                     <Grid Margin="8,0,8,8">
                         <Grid Margin="0,6,0,7">
                             <Grid.RowDefinitions>
@@ -143,9 +140,6 @@
                         </Grid>
                     </Grid>
                     <Grid Grid.Row="3">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition />
-                        </Grid.ColumnDefinitions>
                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal" HorizontalAlignment="Center">
                             <Button x:Name="BTN0DO_Copy" Style="{DynamicResource Btn_defaultSW}" Height="24" Width="149">
                                 <StackPanel Orientation="Horizontal">
