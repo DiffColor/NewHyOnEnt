@@ -9,8 +9,9 @@ namespace AndoWSettings
 {
     public partial class Form1 : Form
     {
-        public ServerSettingsManager sServerSettingsManager = new ServerSettingsManager();
-        public ServerSettings sServerSettings = new ServerSettings();
+        private LocalConnectionSettings _connectionSettings;
+        private LocalFtpSettings _ftpSettings;
+        private LocalUiSettings _uiSettings;
 
         public Form1()
         {
@@ -20,8 +21,7 @@ namespace AndoWSettings
             {
                 InitializeComponent();
                 InitEventHandler();
-
-                sServerSettings = sServerSettingsManager.LoadData();
+                LoadLocalSettings();
             }
             catch (Exception ex)
             {
@@ -39,7 +39,6 @@ namespace AndoWSettings
         {
             ProcessTools.KillExeProcess(FNDTools.GetManagerProcName());
             ProcessTools.KillExeProcess(FNDTools.GetHyOnManagerProcName());
-            NetworkTools.StopFTPSrv();
 
             SaveTurtlePort();
         }
@@ -56,23 +55,73 @@ namespace AndoWSettings
 
             try
             {
-                int FTPPortNum = Convert.ToInt32(FTPPort.Text);
-                int FTPPasvMinPortNum = Convert.ToInt32(PasvMinPort.Text);
-                int FTPPasvMaxPortNum = Convert.ToInt32(PasvMaxPort.Text);
+                int ftpPortNum = Convert.ToInt32(FTPPort.Text);
+                int ftpPasvMinPortNum = Convert.ToInt32(PasvMinPort.Text);
+                int ftpPasvMaxPortNum = Convert.ToInt32(PasvMaxPort.Text);
 
-                SecurityTools.DeletePort("ftp_port", FTPPortNum);
-                SecurityTools.DeletePasvFTPPorts("ftp_ports", FTPPasvMinPortNum, FTPPasvMaxPortNum);
+                if (ftpPortNum <= 0 || ftpPortNum > 65535)
+                {
+                    MessageBox.Show("FTP 포트 범위를 확인해주세요.");
+                    return;
+                }
 
-                NetworkTools.SetFTPConfigPort(FTP_TYPE.FileZilla, FTPPortNum, FTPPasvMinPortNum, FTPPasvMaxPortNum);
+                if (ftpPasvMinPortNum <= 0 || ftpPasvMinPortNum > 65535 ||
+                    ftpPasvMaxPortNum <= 0 || ftpPasvMaxPortNum > 65535 ||
+                    ftpPasvMinPortNum > ftpPasvMaxPortNum)
+                {
+                    MessageBox.Show("패시브 포트 범위를 확인해주세요.");
+                    return;
+                }
 
-                sServerSettings.FTP_Port = FTPPortNum;
-                sServerSettings.FTP_PasvMinPort = FTPPasvMinPortNum;
-                sServerSettings.FTP_PasvMaxPort = FTPPasvMaxPortNum;
-                sServerSettings.PreserveAspectRatio = aspect_ratio_chbox.Checked;
-                sServerSettings.DataServerIp = dataServerIpTextBox?.Text?.Trim() ?? string.Empty;
-                sServerSettings.MessageServerIp = messageServerIpTextBox?.Text?.Trim() ?? string.Empty;
+                if (_connectionSettings == null)
+                {
+                    _connectionSettings = LocalSettingsStore.GetConnectionSettings();
+                }
 
-                sServerSettingsManager.SaveData(sServerSettings);
+                if (_ftpSettings == null)
+                {
+                    _ftpSettings = LocalSettingsStore.GetFtpSettings();
+                }
+
+                if (_uiSettings == null)
+                {
+                    _uiSettings = LocalSettingsStore.GetUiSettings();
+                }
+
+                string dataServerIp = dataServerIpTextBox?.Text?.Trim() ?? string.Empty;
+                string messageServerIp = messageServerIpTextBox?.Text?.Trim() ?? string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(dataServerIp))
+                {
+                    _connectionSettings.RethinkHost = dataServerIp;
+                    _ftpSettings.Host = dataServerIp;
+                }
+
+                if (!string.IsNullOrWhiteSpace(messageServerIp))
+                {
+                    _connectionSettings.SignalRHost = messageServerIp;
+                }
+
+                _ftpSettings.Port = ftpPortNum;
+                _ftpSettings.PasvMinPort = ftpPasvMinPortNum;
+                _ftpSettings.PasvMaxPort = ftpPasvMaxPortNum;
+                _uiSettings.PreserveAspectRatio = aspect_ratio_chbox.Checked;
+
+                LocalSettingsStore.SaveConnectionSettings(_connectionSettings);
+                LocalSettingsStore.SaveFtpSettings(_ftpSettings);
+                LocalSettingsStore.SaveUiSettings(_uiSettings);
+
+                var serverSettings = new ServerSettings
+                {
+                    DataServerIp = _connectionSettings.RethinkHost,
+                    MessageServerIp = _connectionSettings.SignalRHost,
+                    FTP_Port = _ftpSettings.Port,
+                    FTP_PasvMinPort = _ftpSettings.PasvMinPort,
+                    FTP_PasvMaxPort = _ftpSettings.PasvMaxPort,
+                    PreserveAspectRatio = _uiSettings.PreserveAspectRatio
+                };
+
+                new ServerSettingsManager().SaveData(serverSettings);
 
                 MessageBox.Show("설정을 저장했습니다.");
 
@@ -95,19 +144,32 @@ namespace AndoWSettings
 
         private void DisplayServerSettings()
         {
-            FTPPort.Text = sServerSettings.FTP_Port.ToString();
-            PasvMinPort.Text = sServerSettings.FTP_PasvMinPort.ToString();
-            PasvMaxPort.Text = sServerSettings.FTP_PasvMaxPort.ToString();
+            if (_ftpSettings == null || _connectionSettings == null || _uiSettings == null)
+            {
+                LoadLocalSettings();
+            }
 
-            aspect_ratio_chbox.Checked = sServerSettings.PreserveAspectRatio;
+            FTPPort.Text = (_ftpSettings?.Port ?? NetworkTools.FTP_PORT).ToString();
+            PasvMinPort.Text = (_ftpSettings?.PasvMinPort ?? NetworkTools.FTP_PASV_MIN_PORT).ToString();
+            PasvMaxPort.Text = (_ftpSettings?.PasvMaxPort ?? NetworkTools.FTP_PASV_MAX_PORT).ToString();
+
+            aspect_ratio_chbox.Checked = _uiSettings?.PreserveAspectRatio ?? false;
             if (dataServerIpTextBox != null)
             {
-                dataServerIpTextBox.Text = sServerSettings.DataServerIp ?? string.Empty;
+                dataServerIpTextBox.Text = _connectionSettings?.RethinkHost ?? string.Empty;
             }
             if (messageServerIpTextBox != null)
             {
-                messageServerIpTextBox.Text = sServerSettings.MessageServerIp ?? string.Empty;
+                messageServerIpTextBox.Text = _connectionSettings?.SignalRHost ?? string.Empty;
             }
+        }
+
+        private void LoadLocalSettings()
+        {
+            LocalSettingsStore.EnsureSeeded();
+            _connectionSettings = LocalSettingsStore.GetConnectionSettings();
+            _ftpSettings = LocalSettingsStore.GetFtpSettings();
+            _uiSettings = LocalSettingsStore.GetUiSettings();
         }
 
         private void showipbtn_Click(object sender, EventArgs e)
