@@ -28,7 +28,7 @@ namespace SignalRNet472
             }
         }
 
-        public static void Start()
+        public static void Start(int? portOverride = null, string hubPathOverride = null)
         {
             lock (SyncRoot)
             {
@@ -37,8 +37,8 @@ namespace SignalRNet472
                     return;
                 }
 
-                int port = ResolvePort();
-                string hubPath = ResolveHubPath();
+                int port = ResolvePort(portOverride);
+                string hubPath = ResolveHubPath(hubPathOverride);
                 string url = $"http://+:{port}";
 
                 try
@@ -81,31 +81,54 @@ namespace SignalRNet472
             }
         }
 
-        internal static string ResolveHubPath()
+        internal static string ResolveHubPath(string overrideValue)
         {
-            string value = ConfigurationManager.AppSettings["SignalRHubPath"];
-            if (string.IsNullOrWhiteSpace(value))
+            string value = NormalizeHubPath(overrideValue);
+            if (!string.IsNullOrWhiteSpace(value))
             {
-                return DefaultHubPath;
+                return value;
             }
 
+            value = NormalizeHubPath(ConfigurationManager.AppSettings["SignalRHubPath"]);
+
+            return string.IsNullOrWhiteSpace(value) ? DefaultHubPath : value;
+        }
+
+        private static int ResolvePort(int? overridePort)
+        {
+            if (overridePort.HasValue && IsValidPort(overridePort.Value))
+            {
+                return overridePort.Value;
+            }
+
+            string value = ConfigurationManager.AppSettings["SignalRPort"];
+            if (int.TryParse(value, out int port) && IsValidPort(port))
+            {
+                return port;
+            }
+
+            return DefaultPort;
+        }
+
+        private static bool IsValidPort(int port)
+        {
+            return port > 0 && port <= 65535;
+        }
+
+        private static string NormalizeHubPath(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            value = value.Trim();
             if (!value.StartsWith("/"))
             {
                 value = "/" + value;
             }
 
             return value;
-        }
-
-        private static int ResolvePort()
-        {
-            string value = ConfigurationManager.AppSettings["SignalRPort"];
-            if (int.TryParse(value, out int port) && port > 0 && port <= 65535)
-            {
-                return port;
-            }
-
-            return DefaultPort;
         }
     }
 
