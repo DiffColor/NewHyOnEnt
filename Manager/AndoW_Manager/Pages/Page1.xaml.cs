@@ -2550,7 +2550,8 @@ namespace AndoW_Manager
                 string viewerPath = FNDTools.GetPageViewerPath();
                 if (File.Exists(viewerPath))
                 {
-                    ProcessTools.LaunchProcess(viewerPath, false, "1280 720");
+                    string previewArgs = g_CurrentPageInfo.PIC_IsLandscape ? "1280 720" : "720 1280";
+                    ProcessTools.LaunchProcess(viewerPath, false, previewArgs);
                 }
                 else
                 {
