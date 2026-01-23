@@ -493,8 +493,8 @@ namespace AndoW_Manager
 
         private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            if (e.NewSize.Width < 320) this.Width = 319;
-            if (e.NewSize.Height < 180) this.Height = 179;
+            if (e.NewSize.Width <= 160) this.Width = 160;
+            if (e.NewSize.Height <= 107) this.Height = 107;
             pxTBox.Text = string.Format("{0:F0} x {1:F0}", e.NewSize.Width, e.NewSize.Height);
         }   
     }
