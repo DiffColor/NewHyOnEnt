@@ -147,70 +147,88 @@ namespace SignalRNet472
 
         public override Task OnConnected()
         {
-            string clientId = Context.ConnectionId;
-            ClientIdentity identity = BuildClientIdentity(Context);
-            string resolvedClientId = ResolveClientId(null, identity, clientId);
-            lock (ClientsLock)
+            try
             {
-                if (!ConnectedClients.Contains(clientId))
+                string clientId = Context.ConnectionId;
+                ClientIdentity identity = BuildClientIdentity(Context);
+                string resolvedClientId = ResolveClientId(null, identity, clientId);
+                lock (ClientsLock)
                 {
-                    ConnectedClients.Add(clientId);
+                    if (!ConnectedClients.Contains(clientId))
+                    {
+                        ConnectedClients.Add(clientId);
+                    }
+
+                    ConnectionClientIds.Remove(clientId);
+                    CacheClientId(clientId, resolvedClientId);
+
+                    if (identity != null)
+                    {
+                        ConnectedClientInfos[clientId] = identity;
+                    }
                 }
 
-                ConnectionClientIds.Remove(clientId);
-                CacheClientId(clientId, resolvedClientId);
-
-                if (identity != null)
-                {
-                    ConnectedClientInfos[clientId] = identity;
-                }
+                TouchConnection(clientId);
+                Logger.WriteLog($"SignalR client connected: {FormatClientIdentity(clientId, identity)}", Logger.GetLogFileName());
+                var onlinePayload = CreateOnlinePayload(clientId, identity);
+                BroadcastHeartbeat(onlinePayload);
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"SignalR OnConnected failed: {ex}", Logger.GetLogFileName());
             }
 
-            TouchConnection(clientId);
-            Logger.WriteLog($"SignalR client connected: {FormatClientIdentity(clientId, identity)}", Logger.GetLogFileName());
-            var onlinePayload = CreateOnlinePayload(clientId, identity);
-            BroadcastHeartbeat(onlinePayload);
             return base.OnConnected();
         }
 
         public override async Task OnDisconnected(bool stopCalled)
         {
-            string clientId = Context.ConnectionId;
-            string cachedClientId = GetCachedClientId(clientId);
-            ClientIdentity identity = null;
-            lock (ClientsLock)
+            try
             {
-                ConnectedClients.Remove(clientId);
-                if (ConnectedClientInfos.TryGetValue(clientId, out ClientIdentity stored))
+                string clientId = Context.ConnectionId;
+                string cachedClientId = GetCachedClientId(clientId);
+                ClientIdentity identity = null;
+                lock (ClientsLock)
                 {
-                    identity = stored;
-                    ConnectedClientInfos.Remove(clientId);
+                    ConnectedClients.Remove(clientId);
+                    if (ConnectedClientInfos.TryGetValue(clientId, out ClientIdentity stored))
+                    {
+                        identity = stored;
+                        ConnectedClientInfos.Remove(clientId);
+                    }
+                    ConnectionClientIds.Remove(clientId);
+                    RemoveClientConnection(cachedClientId, clientId);
+                    ConnectionLastSeen.Remove(clientId);
                 }
-                ConnectionClientIds.Remove(clientId);
-                RemoveClientConnection(cachedClientId, clientId);
-                ConnectionLastSeen.Remove(clientId);
+
+                Logger.WriteLog($"SignalR client disconnected: {FormatClientIdentity(clientId, identity)}", Logger.GetLogFileName());
+
+                var message = new SignalRMessage()
+                {
+                    From = "Server",
+                    To = "Others",
+                    Command = "Message",
+                    DataType = "StateMessage",
+                    Data = new StateMessage()
+                    {
+                        Who = clientId,
+                        State = "Disconnected",
+                        Description = "Client disconnected"
+                    }
+                };
+
+                await ((Task)Clients.All.ReceiveMessage(message));
+                var offlinePayload = CreateOfflinePayload(clientId, identity);
+                BroadcastHeartbeat(offlinePayload);
             }
-
-            Logger.WriteLog($"SignalR client disconnected: {FormatClientIdentity(clientId, identity)}", Logger.GetLogFileName());
-
-            var message = new SignalRMessage()
+            catch (Exception ex)
             {
-                From = "Server",
-                To = "Others",
-                Command = "Message",
-                DataType = "StateMessage",
-                Data = new StateMessage()
-                {
-                    Who = clientId,
-                    State = "Disconnected",
-                    Description = "Client disconnected"
-                }
-            };
-
-            await ((Task)Clients.All.ReceiveMessage(message));
-            var offlinePayload = CreateOfflinePayload(clientId, identity);
-            BroadcastHeartbeat(offlinePayload);
-            await base.OnDisconnected(stopCalled);
+                Logger.WriteErrorLog($"SignalR OnDisconnected failed: {ex}", Logger.GetLogFileName());
+            }
+            finally
+            {
+                await base.OnDisconnected(stopCalled);
+            }
         }
 
         public async Task JoinGroup(string groupName)
@@ -237,15 +255,31 @@ namespace SignalRNet472
 
         public Task ReportHeartbeat(SignalRHeartbeatPayload payload)
         {
-            TouchConnection(Context.ConnectionId);
-            var resolved = NormalizeHeartbeatPayload(payload);
-            BroadcastHeartbeat(resolved);
-            return Task.CompletedTask;
+            try
+            {
+                TouchConnection(Context.ConnectionId);
+                var resolved = NormalizeHeartbeatPayload(payload);
+                BroadcastHeartbeat(resolved);
+                return Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"SignalR ReportHeartbeat failed: {ex}", Logger.GetLogFileName());
+                return Task.CompletedTask;
+            }
         }
 
         public Task RegisterManager()
         {
-            return JoinGroup(ManagerGroupName);
+            try
+            {
+                return JoinGroup(ManagerGroupName);
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"SignalR RegisterManager failed: {ex}", Logger.GetLogFileName());
+                return Task.CompletedTask;
+            }
         }
 
         public Task<object> Heartbeat()
@@ -253,7 +287,7 @@ namespace SignalRNet472
             return Task.FromResult<object>(new
             {
                 Status = "OK",
-                Timestamp = DateTime.UtcNow,
+                Timestamp = DateTime.Now,
                 ConnectionId = Context.ConnectionId,
                 Message = "Heartbeat"
             });
@@ -265,9 +299,9 @@ namespace SignalRNet472
             return Task.FromResult<object>(new
             {
                 Status = "Healthy",
-                Timestamp = DateTime.UtcNow,
+                Timestamp = DateTime.Now,
                 ConnectedClients = GetConnectedClientCount(),
-                ServerUptime = DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime(),
+                ServerUptime = DateTime.Now - Process.GetCurrentProcess().StartTime,
                 Message = "Server is running"
             });
         }
@@ -279,9 +313,9 @@ namespace SignalRNet472
             {
                 ConnectionId = Context.ConnectionId,
                 ConnectedClients = GetConnectedClientCount(),
-                ServerStartTime = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
-                CurrentTime = DateTime.UtcNow,
-                Uptime = DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()
+                ServerStartTime = Process.GetCurrentProcess().StartTime,
+                CurrentTime = DateTime.Now,
+                Uptime = DateTime.Now - Process.GetCurrentProcess().StartTime
             });
         }
 
