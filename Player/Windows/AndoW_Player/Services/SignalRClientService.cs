@@ -68,6 +68,37 @@ namespace HyOnPlayer
             }
         }
 
+        public void StopForExit()
+        {
+            Interlocked.Exchange(ref stopping, 1);
+            HubConnection local;
+
+            lock (syncRoot)
+            {
+                local = connection;
+                hubProxy = null;
+                connection = null;
+            }
+
+            if (local == null)
+            {
+                return;
+            }
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    local.Stop();
+                    local.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteErrorLog($"SignalR client stop failed: {ex}", Logger.GetLogFileName());
+                }
+            });
+        }
+
         public void Reconnect()
         {
             Stop();

@@ -1,6 +1,7 @@
 ﻿using System;
 using AndoW.LiteDb;
 using AndoW.Shared;
+using System.Linq;
 
 namespace ConfigPlayer
 {
@@ -16,14 +17,20 @@ namespace ConfigPlayer
 
         public void LoadData()
         {
-            PlayerInfoClass stored = repository.FindOne(_ => true);
-            if (stored == null)
+            var storedList = repository.LoadAll() ?? new System.Collections.Generic.List<PlayerInfoClass>();
+            if (storedList.Count == 0)
             {
                 NewPlayerInfo();
+                return;
             }
-            else
+
+            var preferred = SelectPreferredRecord(storedList);
+            g_PlayerInfo = preferred;
+
+            if (storedList.Count > 1)
             {
-                g_PlayerInfo = stored;
+                preferred.Id = 0;
+                repository.ReplaceAll(new[] { preferred });
             }
         }
 
@@ -58,7 +65,21 @@ namespace ConfigPlayer
             }
 
             g_PlayerInfo.Id = 0;
-            repository.Upsert(g_PlayerInfo);
+            repository.ReplaceAll(new[] { g_PlayerInfo });
+        }
+
+        private PlayerInfoClass SelectPreferredRecord(System.Collections.Generic.List<PlayerInfoClass> records)
+        {
+            if (records == null || records.Count == 0)
+            {
+                return new PlayerInfoClass();
+            }
+
+            return records
+                .OrderByDescending(x => x.Id == 0)
+                .ThenByDescending(x => !string.IsNullOrWhiteSpace(x.PIF_GUID))
+                .ThenByDescending(x => !string.IsNullOrWhiteSpace(x.PIF_PlayerName))
+                .First();
         }
 
         private class PlayerInfoRepository : LiteDbRepository<PlayerInfoClass>

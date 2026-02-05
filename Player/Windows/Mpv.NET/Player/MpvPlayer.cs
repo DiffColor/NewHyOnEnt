@@ -253,7 +253,8 @@ namespace Mpv.NET.Player
 				double duration;
 				lock (mpvLock)
 				{
-					duration = mpv.GetPropertyDouble("duration");
+					if (!TryGetPropertyDoubleLocked("duration", out duration))
+						return TimeSpan.Zero;
 				}
 
 				return TimeSpan.FromSeconds(duration);
@@ -273,26 +274,15 @@ namespace Mpv.NET.Player
 				double position;
 				lock (mpvLock)
 				{
-					position = mpv.GetPropertyDouble("time-pos");
+					if (!TryGetPropertyDoubleLocked("time-pos", out position))
+						return TimeSpan.Zero;
 				}
 
 				return TimeSpan.FromSeconds(position);
 			}
 			set
 			{
-				GuardAgainstNotLoaded();
-
-				if (value < TimeSpan.Zero || value > Duration)
-					throw new ArgumentOutOfRangeException("Desired position is out of range of the duration or less than zero.");
-
-				var totalSeconds = value.TotalSeconds;
-
-				var totalSecondsString = totalSeconds.ToString(CultureInfo.InvariantCulture);
-
-				lock (mpvLock)
-				{
-					mpv.Command("seek", totalSecondsString, "absolute");
-				}
+				TrySeek(value);
 			}
 		}
 
@@ -309,7 +299,8 @@ namespace Mpv.NET.Player
 				double remaining;
 				lock (mpvLock)
 				{
-					remaining = mpv.GetPropertyDouble("time-remaining");
+					if (!TryGetPropertyDoubleLocked("time-remaining", out remaining))
+						return TimeSpan.Zero;
 				}
 
 				return TimeSpan.FromSeconds(remaining);
@@ -649,10 +640,11 @@ namespace Mpv.NET.Player
 
 			isExternalSeeking = true;
 
-			if (relative)
-				Position += position;
-			else
-				Position = position;
+			if (!TrySeek(position, relative))
+			{
+				seekCompletionSource.TrySetResult(null);
+				return seekCompletionSource.Task;
+			}
 
 			return seekCompletionSource.Task;
 		}
@@ -1037,10 +1029,64 @@ namespace Mpv.NET.Player
 			positionChanged?.Invoke(this, eventArgs);
 		}
 
-		private void GuardAgainstNotLoaded()
+		public bool TrySeek(TimeSpan position, bool relative = false)
 		{
 			if (!IsMediaLoaded)
-				throw new InvalidOperationException("Operation could not be completed because no media file has been loaded.");
+				return false;
+
+			lock (mpvLock)
+			{
+				if (!relative)
+				{
+					if (position < TimeSpan.Zero)
+						position = TimeSpan.Zero;
+
+					double durationSeconds = double.NaN;
+					if (TryGetPropertyDoubleLocked("duration", out double duration))
+						durationSeconds = duration;
+
+					if (!double.IsNaN(durationSeconds) && position > TimeSpan.FromSeconds(durationSeconds))
+						position = TimeSpan.FromSeconds(durationSeconds);
+				}
+
+				var totalSecondsString = position.TotalSeconds.ToString(CultureInfo.InvariantCulture);
+
+				try
+				{
+					mpv.Command("seek", totalSecondsString, relative ? "relative" : "absolute");
+					return true;
+				}
+				catch (MpvAPIException)
+				{
+					return false;
+				}
+				catch
+				{
+					return false;
+				}
+			}
+		}
+
+		private bool TryGetPropertyDoubleLocked(string name, out double value)
+		{
+			try
+			{
+				value = mpv.GetPropertyDouble(name);
+				return true;
+			}
+			catch (MpvAPIException ex) when (ex.Error == MpvError.PropertyUnavailable
+				|| ex.Error == MpvError.PropertyNotFound
+				|| ex.Error == MpvError.PropertyError
+				|| ex.Error == MpvError.PropertyFormat)
+			{
+				value = 0;
+				return false;
+			}
+			catch
+			{
+				value = 0;
+				return false;
+			}
 		}
 
 		private static bool HandleCommandMpvAPIException(MpvAPIException exception)

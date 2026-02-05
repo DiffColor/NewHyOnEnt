@@ -106,6 +106,7 @@ namespace HyOnPlayer
         private int lastPreparedFromIndex = -1;
         private int lastCommitFromIndex = -1;
         private bool hasReceivedSyncMessage;
+        private int commStarted;
 
         //public ulong memorylimit = 3000;   // 3GB
 
@@ -227,32 +228,34 @@ namespace HyOnPlayer
                 debugWindow = null;
             }
 
-            if (signalRClientService != null)
-            {
-                signalRClientService.Stop();
-                signalRClientService.Dispose();
-                signalRClientService = null;
-            }
-
-            if (commandService != null)
-            {
-                commandService.Stop();
-                commandService.Dispose();
-                commandService = null;
-            }
-
-            if (rethinkSyncService != null)
-            {
-                rethinkSyncService.Stop();
-                rethinkSyncService.Dispose();
-                rethinkSyncService = null;
-            }
-
             if (heartbeatReporter != null)
             {
                 heartbeatReporter.SendStopped();
                 heartbeatReporter.Dispose();
                 heartbeatReporter = null;
+            }
+
+            var signalRServiceLocal = signalRClientService;
+            signalRClientService = null;
+            if (signalRServiceLocal != null)
+            {
+                signalRServiceLocal.StopForExit();
+            }
+
+            var commandServiceLocal = commandService;
+            commandService = null;
+            if (commandServiceLocal != null)
+            {
+                commandServiceLocal.Stop();
+                DisposeInBackground(commandServiceLocal);
+            }
+
+            var rethinkServiceLocal = rethinkSyncService;
+            rethinkSyncService = null;
+            if (rethinkServiceLocal != null)
+            {
+                rethinkServiceLocal.Stop();
+                DisposeInBackground(rethinkServiceLocal);
             }
 
             if (onAirService != null)
@@ -270,6 +273,37 @@ namespace HyOnPlayer
             Settings.Default.WindowLocation = new Point(this.Left, this.Top);
             Settings.Default.Save();
         }
+
+        private void DisposeInBackground(IDisposable disposable)
+        {
+            if (disposable == null)
+            {
+                return;
+            }
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch
+                {
+                }
+            });
+        }
+
+        private void EnsureCommunicationStarted()
+        {
+            if (Interlocked.Exchange(ref commStarted, 1) == 1)
+            {
+                heartbeatReporter?.SendHeartbeatNow();
+                return;
+            }
+            signalRClientService?.Start();
+            heartbeatReporter?.Start();
+            heartbeatReporter?.SendHeartbeatNow();
+        }
         
         void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
@@ -279,42 +313,43 @@ namespace HyOnPlayer
             SpecificTools.DisableWindowHWAcceleration(this, g_TTPlayerInfoManager.g_PlayerInfo.TTInfo_DAta2.Equals("NO", StringComparison.CurrentCultureIgnoreCase));
 
             // RethinkDB에서 플레이어 정보를 동기화하여 GUID/플레이리스트 등을 맞춘다.
+            bool rethinkInitFailed = false;
             try
             {
                 rethinkSyncService = new RethinkSyncService(g_PlayerInfoManager, g_LocalSettingsManager, 5000);
                 rethinkSyncService.PlayerSynced += () =>
                 {
                     g_PlayerName = g_PlayerInfoManager.g_PlayerInfo.PIF_PlayerName;
-                    heartbeatReporter?.SendHeartbeatNow();
-                    if (signalRClientService != null && !string.IsNullOrWhiteSpace(g_PlayerInfoManager.g_PlayerInfo.PIF_GUID))
-                    {
-                        signalRClientService.Start();
-                    }
+                    EnsureCommunicationStarted();
                 };
                 rethinkSyncService.PlayerGuidChanged += guid =>
                 {
                     signalRClientService?.Reconnect();
+                    heartbeatReporter?.SendHeartbeatNow();
+                };
+                rethinkSyncService.SyncFailed += () =>
+                {
+                    EnsureCommunicationStarted();
                 };
             }
             catch (Exception ex)
             {
                 Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
+                rethinkInitFailed = true;
             }
 
             commandService = new RemoteCommandService(this);
             commandService.Start();
 
             signalRClientService = new SignalRClientService(this, commandService);
-            if (!string.IsNullOrWhiteSpace(g_PlayerInfoManager.g_PlayerInfo.PIF_GUID))
-            {
-                signalRClientService.Start();
-            }
 
             heartbeatReporter = new HeartbeatReporter(this, signalRClientService);
-            heartbeatReporter.Start();
-            heartbeatReporter.SendHeartbeatNow();
 
             rethinkSyncService?.Start();
+            if (rethinkInitFailed)
+            {
+                EnsureCommunicationStarted();
+            }
             scheduleEvaluator = new ScheduleEvaluator(g_PlayerInfoManager);
             onAirService = new OnAirService(this);
             onAirService.Start();
@@ -919,6 +954,16 @@ namespace HyOnPlayer
         internal bool IsSyncPlaybackActive => g_LocalSettingsManager?.Settings?.IsSyncEnabled ?? false;
         internal bool IsSyncLeader => IsSyncPlaybackActive && (g_LocalSettingsManager?.Settings?.IsLeading ?? false);
         internal bool ShouldHoldForSyncContent => IsSyncPlaybackActive && (IsSyncLeader || hasReceivedSyncMessage);
+        internal bool HasPendingSyncPrepare
+        {
+            get
+            {
+                lock (syncStateLock)
+                {
+                    return pendingSyncIndex.HasValue;
+                }
+            }
+        }
 
         internal void RequestScheduleEvaluation(bool force = false)
         {
