@@ -40,7 +40,7 @@ namespace HyOnPlayer
             historyClient = new CommandHistoryClient(string.IsNullOrWhiteSpace(managerHost) ? "127.0.0.1" : managerHost);
             updateService = new UpdateService(owner);
             scheduleEvaluator = new ScheduleEvaluator(owner?.g_PlayerInfoManager);
-            historyClient.PurgeOlderThanDays(30);
+            ThreadPool.QueueUserWorkItem(_ => historyClient.PurgeOlderThanDays(30));
             timer = new MultimediaTimer.Timer
             {
                 Mode = MultimediaTimer.TimerMode.OneShot,
@@ -152,9 +152,27 @@ namespace HyOnPlayer
                 return;
             }
 
+            bool handled = false;
+            string playerId = string.Empty;
+
+            if (string.Equals(command, "authkey", StringComparison.OrdinalIgnoreCase))
+            {
+                handled = HandleAuthKeyCommand(playerInfo, entry.PayloadBase64);
+                playerId = playerInfo.PIF_GUID;
+                if (handled)
+                {
+                    commandQueueClient.MarkAck(entry.Id, playerId);
+                }
+                else
+                {
+                    commandQueueClient.MarkFailed(entry.Id, playerId);
+                }
+                return;
+            }
+
             var payload = DecodePayload(entry.PayloadBase64);
-            bool handled = HandleCommandCore(playerInfo, command, payload, isUrgent);
-            string playerId = playerInfo.PIF_GUID;
+            handled = HandleCommandCore(playerInfo, command, payload, isUrgent);
+            playerId = playerInfo.PIF_GUID;
             if (handled)
             {
                 commandQueueClient.MarkAck(entry.Id, playerId);
@@ -584,6 +602,11 @@ namespace HyOnPlayer
             }
 
             string normalized = command.Trim().ToLowerInvariant();
+            if (string.Equals(normalized, "authkey", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.WriteLog("authkey command received without payload.", Logger.GetLogFileName());
+                return;
+            }
             HandleCommandCore(infoManager.g_PlayerInfo, normalized, null, false);
         }
 
@@ -600,12 +623,32 @@ namespace HyOnPlayer
                 return;
             }
 
+            bool handled = false;
+            string playerId = string.Empty;
+
             string normalized = envelope.Command.Trim().ToLowerInvariant();
+            if (string.Equals(normalized, "authkey", StringComparison.OrdinalIgnoreCase))
+            {
+                handled = HandleAuthKeyCommand(infoManager.g_PlayerInfo, envelope.PayloadJson);
+                if (!string.IsNullOrWhiteSpace(envelope.CommandId))
+                {
+                    playerId = infoManager.g_PlayerInfo?.PIF_GUID;
+                    if (handled)
+                    {
+                        commandQueueClient.MarkAck(envelope.CommandId, playerId);
+                    }
+                    else
+                    {
+                        commandQueueClient.MarkFailed(envelope.CommandId, playerId);
+                    }
+                }
+                return;
+            }
             var payload = DecodePayload(envelope.PayloadJson);
-            bool handled = HandleCommandCore(infoManager.g_PlayerInfo, normalized, payload, envelope.IsUrgent);
+            handled = HandleCommandCore(infoManager.g_PlayerInfo, normalized, payload, envelope.IsUrgent);
             if (!string.IsNullOrWhiteSpace(envelope.CommandId))
             {
-                string playerId = infoManager.g_PlayerInfo?.PIF_GUID;
+                playerId = infoManager.g_PlayerInfo?.PIF_GUID;
                 if (handled)
                 {
                     commandQueueClient.MarkAck(envelope.CommandId, playerId);
@@ -646,6 +689,31 @@ namespace HyOnPlayer
                     EnqueueScheduleDownloads(playerInfo, new[] { target });
                 }
             }
+        }
+
+        private bool HandleAuthKeyCommand(PlayerInfoClass playerInfo, string authKey)
+        {
+            if (playerInfo == null)
+            {
+                return false;
+            }
+
+            string resolvedKey = authKey?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(resolvedKey))
+            {
+                Logger.WriteLog("authkey command missing payload.", Logger.GetLogFileName());
+                return false;
+            }
+
+            if (string.Equals(playerInfo.PIF_AuthKey, resolvedKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            playerInfo.PIF_AuthKey = resolvedKey;
+            owner?.g_PlayerInfoManager?.SaveData();
+            Logger.WriteLog($"AuthKey updated via command. player={playerInfo.PIF_PlayerName}, guid={playerInfo.PIF_GUID}", Logger.GetLogFileName());
+            return true;
         }
 
         private void EnqueueScheduleDownloads(PlayerInfoClass playerInfo, IEnumerable<SchedulePlaylistPayload> playlists)

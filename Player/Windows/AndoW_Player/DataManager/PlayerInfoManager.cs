@@ -1,4 +1,5 @@
 ﻿using AndoW.Shared;
+using System.Linq;
 
 namespace HyOnPlayer
 {
@@ -14,14 +15,20 @@ namespace HyOnPlayer
 
         public void LoadData()
         {
-            PlayerInfoClass stored = repository.FindOne(_ => true);
-            if (stored == null)
+            var storedList = repository.LoadAll() ?? new System.Collections.Generic.List<PlayerInfoClass>();
+            if (storedList.Count == 0)
             {
                 NewPlayerInfo();
+                return;
             }
-            else
+
+            var preferred = SelectPreferredRecord(storedList);
+            g_PlayerInfo = preferred;
+
+            if (storedList.Count > 1)
             {
-                g_PlayerInfo = stored;
+                preferred.Id = 0;
+                repository.ReplaceAll(new[] { preferred });
             }
         }
 
@@ -45,9 +52,23 @@ namespace HyOnPlayer
 
         public void SaveData()
         {
-            // 플레이어 원격 스키마 저장
+            // ÇÃ·¹ÀÌ¾î ¿ø°Ý ½ºÅ°¸¶ ÀúÀå
             g_PlayerInfo.Id = 0;
-            repository.Upsert(g_PlayerInfo);
+            repository.ReplaceAll(new[] { g_PlayerInfo });
+        }
+
+        private PlayerInfoClass SelectPreferredRecord(System.Collections.Generic.List<PlayerInfoClass> records)
+        {
+            if (records == null || records.Count == 0)
+            {
+                return new PlayerInfoClass();
+            }
+
+            return records
+                .OrderByDescending(x => x.Id == 0)
+                .ThenByDescending(x => !string.IsNullOrWhiteSpace(x.PIF_GUID))
+                .ThenByDescending(x => !string.IsNullOrWhiteSpace(x.PIF_PlayerName))
+                .First();
         }
     }
 }

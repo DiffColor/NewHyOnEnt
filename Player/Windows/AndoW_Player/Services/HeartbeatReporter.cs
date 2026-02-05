@@ -183,6 +183,13 @@ namespace HyOnPlayer
                 }
             }
 
+            bool hdmiState = true;
+            if (string.Equals(status, "stopped", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "idle", StringComparison.OrdinalIgnoreCase))
+            {
+                hdmiState = false;
+            }
+
             return new HeartbeatPayload
             {
                 ClientId = player.PIF_GUID,
@@ -190,7 +197,7 @@ namespace HyOnPlayer
                 Process = NormalizeHeartbeatProcess(process),
                 Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
                 CurrentPage = owner?.g_CurrentPageName ?? string.Empty,
-                HdmiState = true,
+                HdmiState = hdmiState,
                 Timestamp = DateTime.Now
             };
         }

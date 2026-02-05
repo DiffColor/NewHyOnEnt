@@ -115,7 +115,10 @@ namespace HyOnPlayer
 
         public void SetLoopState(bool loop)
         {
-            MPVPlayer.Loop = needLoop = loop;
+            this.Dispatcher.Invoke(DispatcherPriority.Normal, (Action)(() =>
+            {
+                MPVPlayer.Loop = needLoop = loop;
+            }));
         }
 
         public void OrderingCanvasBGContents()
@@ -366,6 +369,7 @@ namespace HyOnPlayer
 
                 MPVPlayer.Load(contentPath);
                 MPVPlayer.Loop = needLoop;
+                MPVPlayer.Play();
             }
             catch (Exception ex)
             {
@@ -552,7 +556,22 @@ namespace HyOnPlayer
 
         private void Player_FileEndedEvent()
         {
-            if (MainWindow.Instance != null && MainWindow.Instance.ShouldHoldForSyncContent)
+            var main = MainWindow.Instance;
+            if (main != null && main.IsSyncPlaybackActive && !main.IsSyncLeader)
+            {
+                if (!main.HasPendingSyncPrepare)
+                {
+                    RestartCurrentVideoForSync();
+                    return;
+                }
+
+                if (main.ShouldHoldForSyncContent)
+                {
+                    SetLoopState(true);
+                    return;
+                }
+            }
+            else if (main != null && main.ShouldHoldForSyncContent)
             {
                 SetLoopState(true);
                 return;
@@ -566,6 +585,40 @@ namespace HyOnPlayer
                     {
                         OrderingCanvasBGContents();
                     }));
+        }
+
+        private void RestartCurrentVideoForSync()
+        {
+            try
+            {
+                this.Dispatcher.Invoke(DispatcherPriority.Normal,
+                    new Action(() =>
+                    {
+                        if (!MPVPlayer.IsMediaLoaded())
+                        {
+                            if (!string.IsNullOrWhiteSpace(current_fpath))
+                            {
+                                DisplayVideo(current_fpath);
+                            }
+                            return;
+                        }
+
+                        if (MPVPlayer.TrySeek(TimeSpan.Zero))
+                        {
+                            MPVPlayer.Play();
+                            return;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(current_fpath))
+                        {
+                            DisplayVideo(current_fpath);
+                        }
+                    }));
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog(ex.ToString(), Logger.GetLogFileName());
+            }
         }
 
         private void Player_FileLoadedEvent()

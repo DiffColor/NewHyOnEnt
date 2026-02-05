@@ -251,6 +251,16 @@ namespace HyOnPlayer
             }
         }
 
+        public bool TrySeek(TimeSpan position, bool relative = false)
+        {
+            if (sPlayer == null)
+            {
+                return false;
+            }
+
+            return sPlayer.TrySeek(position, relative);
+        }
+
         public string ImageDuration
         {
             get
@@ -325,7 +335,8 @@ namespace HyOnPlayer
         public void Stop()
         {
             Pause(true);
-            Position = new TimeSpan(0);
+            if (IsMediaLoaded())
+                Position = new TimeSpan(0);
         }
 
         public void Close()

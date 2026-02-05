@@ -54,7 +54,10 @@ namespace HyOnPlayer
                     .Filter(row => row["PlayerIds"].Contains(normalizedPlayerId))
                     .OrderBy("CreatedAt");
 
-                var entries = query.RunCursor<CommandQueueEntry>(conn).ToList();
+                var entries = query
+                    .CoerceTo("array")
+                    .RunAtom<List<CommandQueueEntry>>(conn) ?? new List<CommandQueueEntry>();
+
                 return entries
                     .Where(entry => HasPlayer(entry, normalizedPlayerId)
                         && IsStatus(entry, normalizedPlayerId, "pending"))

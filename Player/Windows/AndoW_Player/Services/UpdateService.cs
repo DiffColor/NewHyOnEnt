@@ -65,20 +65,70 @@ namespace HyOnPlayer
             queueRethinkClient = new UpdateQueueRethinkClient(string.IsNullOrWhiteSpace(managerHost) ? "127.0.0.1" : managerHost);
             leaseClient = new UpdateLeaseClient(string.IsNullOrWhiteSpace(managerHost) ? "127.0.0.1" : managerHost);
             throttleSettingsClient = new UpdateThrottleSettingsClient(string.IsNullOrWhiteSpace(managerHost) ? "127.0.0.1" : managerHost);
-            // 시작 시 자신의 기존 리스를 정리해 고아 리스가 남지 않도록 함
-            try
-            {
-                var selfId = owner?.g_PlayerInfoManager?.g_PlayerInfo?.PIF_GUID;
-                if (!string.IsNullOrWhiteSpace(selfId))
-                {
-                    leaseClient?.ReleaseByPlayer(selfId);
-                }
-            }
-            catch { }
-            Task.Run(() => EnsureUpdateQueueTable(managerHost));
             processorTimer = new Timer(ProcessorTick, null, 0, ProcessorIntervalMs);
-            RecoverStalledQueues();
-            ProcessQueue();
+            StartBackgroundInitialization();
+        }
+
+        private void StartBackgroundInitialization()
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                if (disposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    var selfId = owner?.g_PlayerInfoManager?.g_PlayerInfo?.PIF_GUID;
+                    if (!string.IsNullOrWhiteSpace(selfId))
+                    {
+                        leaseClient?.ReleaseByPlayer(selfId);
+                    }
+                }
+                catch
+                {
+                }
+
+                if (disposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    EnsureUpdateQueueTable(managerHost);
+                }
+                catch
+                {
+                }
+
+                if (disposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    RecoverStalledQueues();
+                }
+                catch
+                {
+                }
+
+                if (disposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    ProcessQueue();
+                }
+                catch
+                {
+                }
+            });
         }
 
         public bool IsRunning => Interlocked.CompareExchange(ref isRunning, 1, 1) == 1;

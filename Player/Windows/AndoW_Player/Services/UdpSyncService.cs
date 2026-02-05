@@ -32,72 +32,52 @@ namespace HyOnPlayer.Services
 
     internal sealed class UdpSyncService : IDisposable
     {
-        private readonly object syncRoot = new object();
-        private UdpClient receiver;
-        private Thread receiveThread;
-        private bool isRunning;
-        private int port;
-
         public event Action<UdpSyncMessage> MessageReceived;
+
+        public UDPer sUDP;
+        public int sPort { get; set; }
+
 
         public void Start(int port)
         {
-            lock (syncRoot)
+            if (sUDP != null)
+                sUDP.Stop();
+
+            sPort = port;
+            sUDP = new UDPer();
+            sUDP.Start(port);
+            sUDP.MessageReceived += UDPMessageReceived;
+        }
+
+        private void UDPMessageReceived(IPEndPoint endpoint, string msg)
+        {
+            try
             {
-                if (isRunning)
+                if (TryParseMessage(msg, endpoint, out UdpSyncMessage parsed))
                 {
-                    return;
+                    MessageReceived?.Invoke(parsed);
                 }
-
-                this.port = port;
-                receiver = new UdpClient(port);
-                receiver.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                isRunning = true;
-
-                receiveThread = new Thread(ReceiveLoop)
-                {
-                    IsBackground = true,
-                    Name = "UdpSyncReceiver"
-                };
-                receiveThread.Start();
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog(ex.ToString(), Logger.GetLogFileName());
             }
         }
 
         public void Stop()
         {
-            lock (syncRoot)
-            {
-                if (!isRunning)
-                {
-                    return;
-                }
-
-                isRunning = false;
-                try
-                {
-                    receiver?.Close();
-                }
-                catch (Exception)
-                {
-                }
-                receiver = null;
-            }
-
-            if (receiveThread != null && receiveThread.IsAlive)
-            {
-                receiveThread.Join(500);
-            }
-            receiveThread = null;
+            sUDP.MessageReceived -= UDPMessageReceived;
+            sUDP.Stop();
         }
 
-        public void SendPrepare(IEnumerable<IPEndPoint> targets, int index, int burstCount = 3)
+        public void SendPrepare(IEnumerable<IPEndPoint> targets, int index)
         {
-            SendMessage("P", targets, index, burstCount);
+            SendMessage("P", targets, index);
         }
 
-        public void SendCommit(IEnumerable<IPEndPoint> targets, int index, int burstCount = 3)
+        public void SendCommit(IEnumerable<IPEndPoint> targets, int index)
         {
-            SendMessage("C", targets, index, burstCount);
+            SendMessage("C", targets, index);
         }
 
         public void Dispose()
@@ -105,7 +85,7 @@ namespace HyOnPlayer.Services
             Stop();
         }
 
-        private void SendMessage(string prefix, IEnumerable<IPEndPoint> targets, int index, int burstCount)
+        private void SendMessage(string prefix, IEnumerable<IPEndPoint> targets, int index)
         {
             if (targets == null)
             {
@@ -113,72 +93,19 @@ namespace HyOnPlayer.Services
             }
 
             string payload = string.Concat(prefix, ",", index.ToString());
-            byte[] data = Encoding.UTF8.GetBytes(payload);
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
                     using (UdpClient sender = new UdpClient())
-                    {
-                        for (int i = 0; i < Math.Max(1, burstCount); i++)
-                        {
-                            foreach (var target in targets)
-                            {
-                                sender.Send(data, data.Length, target);
-                            }
-                        }
-                    }
+                        UDPer.SendUnicast(payload, targets);
                 }
                 catch (Exception ex)
                 {
                     Logger.WriteLog(ex.ToString(), Logger.GetLogFileName());
                 }
             });
-        }
-
-        private void ReceiveLoop()
-        {
-            IPEndPoint remote = new IPEndPoint(IPAddress.Any, 0);
-
-            while (isRunning)
-            {
-                try
-                {
-                    if (receiver == null)
-                    {
-                        Thread.Sleep(10);
-                        continue;
-                    }
-
-                    byte[] data = receiver.Receive(ref remote);
-                    if (data == null || data.Length == 0)
-                    {
-                        continue;
-                    }
-
-                    string message = Encoding.UTF8.GetString(data).Trim();
-                    if (TryParseMessage(message, remote, out UdpSyncMessage parsed))
-                    {
-                        MessageReceived?.Invoke(parsed);
-                    }
-                }
-                catch (ObjectDisposedException)
-                {
-                    break;
-                }
-                catch (SocketException)
-                {
-                    if (!isRunning)
-                    {
-                        break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.WriteLog(ex.ToString(), Logger.GetLogFileName());
-                }
-            }
         }
 
         private static bool TryParseMessage(string message, IPEndPoint remote, out UdpSyncMessage parsed)
