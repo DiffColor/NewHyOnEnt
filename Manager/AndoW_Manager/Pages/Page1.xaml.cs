@@ -266,7 +266,7 @@ namespace AndoW_Manager
             {
                 MainWindow.Instance.g_static_Width = (int)Math.Round(widthPixels);
                 MainWindow.Instance.g_static_Height = (int)Math.Round(heightPixels);
-                UpdateOrientationScale(rows, columns);
+                //UpdateOrientationScale(rows, columns);
                 MainWindow.Instance.isPortraitEditor = orientation == DeviceOrientation.Portrait;
             }
 
@@ -284,21 +284,21 @@ namespace AndoW_Manager
             return (columns * baseWidth, rows * baseHeight);
         }
 
-        private void UpdateOrientationScale(int rows, int columns)
-        {
-            rows = Math.Max(1, rows);
-            columns = Math.Max(1, columns);
+        //private void UpdateOrientationScale(int rows, int columns)
+        //{
+        //    rows = Math.Max(1, rows);
+        //    columns = Math.Max(1, columns);
 
-            double landW = Math.Max(1, columns * BaseLandscapeWidth);
-            double landH = Math.Max(1, rows * BaseLandscapeHeight);
-            double portW = Math.Max(1, columns * BasePortraitWidth);
-            double portH = Math.Max(1, rows * BasePortraitHeight);
+        //    double landW = Math.Max(1, columns * BaseLandscapeWidth);
+        //    double landH = Math.Max(1, rows * BaseLandscapeHeight);
+        //    double portW = Math.Max(1, columns * BasePortraitWidth);
+        //    double portH = Math.Max(1, rows * BasePortraitHeight);
 
-            MainWindow.Instance.g_wLandScale = landW / portW;
-            MainWindow.Instance.g_hLandScale = landH / portH;
-            MainWindow.Instance.g_wPortScale = portW / landW;
-            MainWindow.Instance.g_hPortScale = portH / landH;
-        }
+        //    MainWindow.Instance.g_wLandScale = landW / portW;
+        //    MainWindow.Instance.g_hLandScale = landH / portH;
+        //    MainWindow.Instance.g_wPortScale = portW / landW;
+        //    MainWindow.Instance.g_hPortScale = portH / landH;
+        //}
 
         /*
         public void SelectedContentInfo(ContentsInfoClass paramCls, string paramType)
@@ -1632,13 +1632,13 @@ namespace AndoW_Manager
             Canvas.SetLeft(dspElement, paramCls.EIF_PosLeft);
             Canvas.SetTop(dspElement, paramCls.EIF_PosTop);
 
-            if (MainWindow.Instance.isPortraitEditor)
-            {
-                dspElement.Width *= MainWindow.Instance.g_wPortScale;
-                dspElement.Height *= MainWindow.Instance.g_hPortScale;
-                Canvas.SetLeft(dspElement, paramCls.EIF_PosLeft * MainWindow.Instance.g_wPortScale);
-                Canvas.SetTop(dspElement, paramCls.EIF_PosTop * MainWindow.Instance.g_hPortScale);
-            }
+            //if (MainWindow.Instance.isPortraitEditor)
+            //{
+            //    dspElement.Width *= MainWindow.Instance.g_wPortScale;
+            //    dspElement.Height *= MainWindow.Instance.g_hPortScale;
+            //    Canvas.SetLeft(dspElement, paramCls.EIF_PosLeft * MainWindow.Instance.g_wPortScale);
+            //    Canvas.SetTop(dspElement, paramCls.EIF_PosTop * MainWindow.Instance.g_hPortScale);
+            //}
 
             DesignerCanvas.Children.Add(dspElement);
 
@@ -2403,18 +2403,18 @@ namespace AndoW_Manager
                 double offsetY = (thumbHeight - contentHeight) / 2d;
 
                 List<ElementInfoClass> previewElements = elements;
-                if (!isLandscape && elements != null && elements.Count > 0)
-                {
-                    previewElements = new List<ElementInfoClass>(elements.Count);
-                    foreach (ElementInfoClass element in elements)
-                    {
-                        ElementInfoClass previewElement = CreatePortraitPreviewElement(element);
-                        if (previewElement != null)
-                        {
-                            previewElements.Add(previewElement);
-                        }
-                    }
-                }
+                //if (!isLandscape && elements != null && elements.Count > 0)
+                //{
+                //    previewElements = new List<ElementInfoClass>(elements.Count);
+                //    foreach (ElementInfoClass element in elements)
+                //    {
+                //        ElementInfoClass previewElement = CreatePortraitPreviewElement(element);
+                //        if (previewElement != null)
+                //        {
+                //            previewElements.Add(previewElement);
+                //        }
+                //    }
+                //}
 
                 DrawingVisual visual = new DrawingVisual();
                 using (DrawingContext drawingContext = visual.RenderOpen())
@@ -2570,7 +2570,7 @@ namespace AndoW_Manager
 
                     if (MediaTools.CheckIsVideoFile(filePath))
                     {
-                        BitmapSource videoThumb = MediaTools.GetVideoThumb(filePath);
+                        BitmapSource videoThumb = MediaTools.GetVideoThumb(filePath, 2);
                         videoThumb?.Freeze();
                         return videoThumb;
                     }
@@ -2954,20 +2954,20 @@ namespace AndoW_Manager
         {
             double canvasWidth = Math.Max(1, g_CurrentPageInfo.PIC_CanvasWidth);
             double canvasHeight = Math.Max(1, g_CurrentPageInfo.PIC_CanvasHeight);
-            if (!g_CurrentPageInfo.PIC_IsLandscape)
-            {
-                double widthScale = MainWindow.Instance?.g_wLandScale ?? 0;
-                double heightScale = MainWindow.Instance?.g_hLandScale ?? 0;
+            //if (!g_CurrentPageInfo.PIC_IsLandscape)
+            //{
+            //    double widthScale = MainWindow.Instance.isPortraitEditor ? MainWindow.Instance.g_wPortScale : MainWindow.Instance.g_wLandScale;
+            //    double heightScale = MainWindow.Instance.isPortraitEditor ? MainWindow.Instance.g_hPortScale : MainWindow.Instance.g_hLandScale;
 
-                if (widthScale <= 0 || heightScale <= 0)
-                {
-                    widthScale = BaseLandscapeWidth / BasePortraitWidth;
-                    heightScale = BaseLandscapeHeight / BasePortraitHeight;
-                }
+            //    if (widthScale <= 0 || heightScale <= 0)
+            //    {
+            //        widthScale = BaseLandscapeWidth / BasePortraitWidth;
+            //        heightScale = BaseLandscapeHeight / BasePortraitHeight;
+            //    }
 
-                canvasWidth = Math.Max(1, canvasWidth * widthScale);
-                canvasHeight = Math.Max(1, canvasHeight * heightScale);
-            }
+            //    canvasWidth = Math.Max(1, canvasWidth * widthScale);
+            //    canvasHeight = Math.Max(1, canvasHeight * heightScale);
+            //}
 
             PreviewCanvas canvas = new PreviewCanvas();
             canvas.Direction = g_CurrentPageInfo.PIC_IsLandscape ? DeviceOrientation.Landscape.ToString() : DeviceOrientation.Portrait.ToString();
@@ -3363,7 +3363,7 @@ namespace AndoW_Manager
                 foreach (ContentsInfoClass item in this.g_SelectedCurElement.EIF_ContentsInfoClassList)
                 {
                     ScrollTextInfoElement tmpElement = new ScrollTextInfoElement(item);
-                    tmpElement.TextBlockPageName.Text = item.CIF_FileName;
+                    tmpElement.TextBlockPageName.Text = item.CIF_DisplayFileName;
                     tmpElement.TextBlockOrderingNumber.Text = string.Format("{0:D2}", idx);
                     tmpElement.Margin = new Thickness(5, 2, 5, 0);
                     ScrollTextStackPanel.Children.Add(tmpElement);
