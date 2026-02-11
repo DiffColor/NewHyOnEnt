@@ -493,14 +493,15 @@ namespace AndoW_Manager
             };
         }
 
-        Dictionary<string, string> progDic = new Dictionary<string, string>();
-        Dictionary<string, int> portDic = new Dictionary<string, int>();
         void CheckAndAddSecurityRules()
         {
+            Dictionary<string, string> progDic = new Dictionary<string, string>();
+            Dictionary<string, int> portDic = new Dictionary<string, int>();
+
             SecurityTools.SetICMP();
 
             if (SecurityTools.NeedToAddRule("signage_manager"))
-                progDic.Add("signage_manager", FNDTools.GetManagerExeFilePath());
+                progDic["signage_manager"] = FNDTools.GetManagerExeFilePath();
             
             SecurityTools.ReleaseFirewallRules(SecurityTools.CreateAuthorAppNetshCmdList(progDic));
             SecurityTools.ReleaseFirewallRules(SecurityTools.CreateOpenPortNetshCmdList(portDic));
