@@ -66,33 +66,34 @@ namespace ConfigPlayer
         }
         
 
-        Dictionary<string, string> progDic = new Dictionary<string, string>();
-        Dictionary<string, int> portDic = new Dictionary<string, int>();
         void CheckAndAddSecurityRules()
         {
+            Dictionary<string, string> progDic = new Dictionary<string, string>();
+            Dictionary<string, int> portDic = new Dictionary<string, int>();
+
             SecurityTools.SetICMP();
 
             if (SecurityTools.NeedToAddRule("vnc"))
             {
-                progDic.Add("vnc", FNDTools.GetVNCServerExeFilePath());
-                portDic.Add("vnc1_port", 5900);
-                portDic.Add("vnc2_port", 5800);
+                progDic["vnc"] = FNDTools.GetVNCServerExeFilePath();
+                portDic["vnc1_port"] = 5900;
+                portDic["vnc2_port"] = 5800;
             }
 
             if (SecurityTools.NeedToAddRule("ftp_ports"))
-                portDic.Add("ftp_ports", g_PortInfoManager.g_DataClassList[0].AIF_FTP);
+                portDic["ftp_ports"] = g_PortInfoManager.g_DataClassList[0].AIF_FTP;
 
             if (SecurityTools.NeedToAddRule("agent_port"))
-                portDic.Add("agent_port", g_PortInfoManager.g_DataClassList[0].AIF_AgentSVCPort);
+                portDic["agent_port"] = g_PortInfoManager.g_DataClassList[0].AIF_AgentSVCPort;
 
             if (SecurityTools.NeedToAddRule("op_port"))
-                portDic.Add("op_port", g_PortInfoManager.g_DataClassList[0].AIF_OperaterSVCPort);
+                portDic["op_port"] = g_PortInfoManager.g_DataClassList[0].AIF_OperaterSVCPort;
 
             if (SecurityTools.NeedToAddRule("sync_port"))
-                portDic.Add("sync_port", g_PortInfoManager.g_DataClassList[0].AIF_SYNC);
+                portDic["sync_port"] = g_PortInfoManager.g_DataClassList[0].AIF_SYNC;
 
             if (SecurityTools.NeedToAddRule("agent"))
-                progDic.Add("agent", FNDTools.GetAgentExeFilePath());
+                progDic["agent"] = FNDTools.GetAgentExeFilePath();
 
             SecurityTools.ReleaseFirewallRules(SecurityTools.CreateAuthorAppNetshCmdList(progDic));
             SecurityTools.ReleaseFirewallRules(SecurityTools.CreateOpenPortNetshCmdList(portDic));
