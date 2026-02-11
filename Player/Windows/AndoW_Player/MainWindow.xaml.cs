@@ -96,6 +96,7 @@ namespace HyOnPlayer
         private DateTime lastScheduleEval = DateTime.MinValue;
         private string pendingSchedulePlaylist = string.Empty;
         private string pendingScheduleId = string.Empty;
+        private string lastScheduleEvalStateKey = string.Empty;
         private string lastMissingScheduleLogged = string.Empty;
         private string lastLocalFallbackPlaylist = string.Empty;
         private bool isScheduleSwitching;
@@ -1034,6 +1035,7 @@ namespace HyOnPlayer
             {
                 pendingSchedulePlaylist = string.Empty;
                 pendingScheduleId = string.Empty;
+                lastScheduleEvalStateKey = "NONE";
                 lastMissingScheduleLogged = string.Empty;
                 return;
             }
@@ -1044,14 +1046,24 @@ namespace HyOnPlayer
                 pendingSchedulePlaylist = string.Empty;
                 pendingScheduleId = decision.ScheduleId ?? string.Empty;
                 lastMissingScheduleLogged = string.Empty;
-                Logger.WriteLog($"스케줄 평가: 현재 플레이리스트 유지 ({decision.PlaylistName})", Logger.GetLogFileName());
+                string stateKey = $"KEEP|{pendingScheduleId}|{decision.PlaylistName}";
+                if (!string.Equals(lastScheduleEvalStateKey, stateKey, StringComparison.Ordinal))
+                {
+                    Logger.WriteLog($"스케줄 평가: 현재 플레이리스트 유지 ({decision.PlaylistName})", Logger.GetLogFileName());
+                    lastScheduleEvalStateKey = stateKey;
+                }
                 return;
             }
 
             pendingSchedulePlaylist = decision.PlaylistName;
             pendingScheduleId = decision.ScheduleId ?? string.Empty;
             lastMissingScheduleLogged = string.Empty;
-            Logger.WriteLog($"스케줄 평가: 전환 예약 -> {pendingSchedulePlaylist}", Logger.GetLogFileName());
+            string pendingStateKey = $"PENDING|{pendingScheduleId}|{pendingSchedulePlaylist}";
+            if (!string.Equals(lastScheduleEvalStateKey, pendingStateKey, StringComparison.Ordinal))
+            {
+                Logger.WriteLog($"스케줄 평가: 전환 예약 -> {pendingSchedulePlaylist}", Logger.GetLogFileName());
+                lastScheduleEvalStateKey = pendingStateKey;
+            }
         }
 
         private bool TryApplyScheduledSwitch(bool isPageBoundary, bool isContentBoundary)
