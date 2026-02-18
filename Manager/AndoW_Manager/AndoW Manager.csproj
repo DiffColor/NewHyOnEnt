@@ -448,6 +448,9 @@
     <Compile Include="SubWindow\ContentsPreviewWindow.xaml.cs">
       <DependentUpon>ContentsPreviewWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="SubWindow\ContentDownloadWindow.xaml.cs">
+      <DependentUpon>ContentDownloadWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="SubWindow\EditPlayListNameWindow.xaml.cs">
       <DependentUpon>EditPlayListNameWindow.xaml</DependentUpon>
     </Compile>
@@ -716,6 +719,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="SubWindow\ContentsPreviewWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="SubWindow\ContentDownloadWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
