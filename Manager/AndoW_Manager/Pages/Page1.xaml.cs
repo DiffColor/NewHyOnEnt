@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -50,6 +52,8 @@ namespace AndoW_Manager
         private const double BasePortraitHeight = 1920d;
         private bool _suppressFontSettingChanges = false;
         private readonly EditFontInfoClass _lastScrollTextFontStyle = new EditFontInfoClass();
+        private List<ContentDownloadItem> _pendingContentDownloads;
+        private HashSet<string> _pendingContentDownloadKeys;
 
 
         //////////////////////////////////////////////////////////////////
@@ -385,6 +389,156 @@ namespace AndoW_Manager
                 }
                 return;
             }
+        }
+
+        private sealed class ContentDownloadItem
+        {
+            public string FileName { get; set; } = string.Empty;
+            public string LocalPath { get; set; } = string.Empty;
+            public string RemoteRelativePath { get; set; } = string.Empty;
+        }
+
+        private static bool IsFileBasedContent(ContentsInfoClass content)
+        {
+            if (content == null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(content.CIF_ContentType))
+            {
+                return true;
+            }
+
+            return content.CIF_ContentType.Equals(ContentType.WebSiteURL.ToString(), StringComparison.OrdinalIgnoreCase) == false
+                && content.CIF_ContentType.Equals(ContentType.Browser.ToString(), StringComparison.OrdinalIgnoreCase) == false;
+        }
+
+        private void QueueContentDownload(string fileName, string targetPath)
+        {
+            if (_pendingContentDownloads == null || _pendingContentDownloadKeys == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(fileName) || string.IsNullOrWhiteSpace(targetPath))
+            {
+                return;
+            }
+
+            if (!_pendingContentDownloadKeys.Add(fileName))
+            {
+                return;
+            }
+
+            string remoteRelativePath = FtpTransferTools.BuildContentsRelativePath(fileName);
+            if (string.IsNullOrWhiteSpace(remoteRelativePath))
+            {
+                return;
+            }
+
+            _pendingContentDownloads.Add(new ContentDownloadItem
+            {
+                FileName = fileName,
+                LocalPath = targetPath,
+                RemoteRelativePath = remoteRelativePath
+            });
+        }
+
+        private void BeginContentDownloadsIfNeeded(string pageName)
+        {
+            if (_pendingContentDownloads == null || _pendingContentDownloads.Count == 0)
+            {
+                _pendingContentDownloads = null;
+                _pendingContentDownloadKeys = null;
+                return;
+            }
+
+            List<ContentDownloadItem> items = _pendingContentDownloads;
+            _pendingContentDownloads = null;
+            _pendingContentDownloadKeys = null;
+
+            var window = new ContentDownloadWindow();
+            window.Owner = Window.GetWindow(this) ?? Application.Current?.MainWindow;
+            if (string.IsNullOrWhiteSpace(pageName) == false)
+            {
+                window.SetTitle($"Downloading contents for {pageName}...");
+            }
+            window.Show();
+
+            _ = DownloadMissingContentsAsync(items, window);
+        }
+
+        private async Task DownloadMissingContentsAsync(List<ContentDownloadItem> items, ContentDownloadWindow window)
+        {
+            if (items == null || items.Count == 0)
+            {
+                window?.RequestClose();
+                return;
+            }
+
+            string error = null;
+            bool canConnect = await Task.Run(() => FtpTransferTools.TryTestConnection(out error));
+            if (!canConnect)
+            {
+                Logger.WriteErrorLog($"FTP connection failed: {error}", Logger.GetLogFileName());
+                if (window != null)
+                {
+                    window.Dispatcher.Invoke(() =>
+                    {
+                        MessageTools.ShowMessageBox("FTP connection failed. Check settings.", "OK");
+                        window.RequestClose();
+                    });
+                }
+                return;
+            }
+
+            int total = items.Count;
+            int completed = 0;
+            List<string> errors = new List<string>();
+
+            window?.UpdateProgress(completed, total, string.Empty);
+
+            foreach (ContentDownloadItem item in items)
+            {
+                if (window != null && window.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                if (File.Exists(item.LocalPath))
+                {
+                    completed++;
+                    window?.UpdateProgress(completed, total, item.FileName);
+                    continue;
+                }
+
+                window?.UpdateProgress(completed, total, item.FileName);
+
+                string downloadError = await FtpTransferTools.DownloadFileAsync(
+                    item.RemoteRelativePath,
+                    item.LocalPath,
+                    window?.CancellationToken ?? CancellationToken.None);
+
+                if (!string.IsNullOrWhiteSpace(downloadError))
+                {
+                    errors.Add(item.FileName);
+                    Logger.WriteErrorLog($"FTP download failed: {item.FileName} / {downloadError}", Logger.GetLogFileName());
+                }
+
+                completed++;
+                window?.UpdateProgress(completed, total, item.FileName);
+            }
+
+            if (errors.Count > 0 && window != null)
+            {
+                window.Dispatcher.Invoke(() =>
+                {
+                    MessageTools.ShowMessageBox($"FTP download failed for {errors.Count} file(s). Check log.", "OK");
+                });
+            }
+
+            window?.RequestClose();
         }
 
         public void InitExtentionSet()
@@ -1504,10 +1658,14 @@ namespace AndoW_Manager
             //HDTVChannelStackPannel.Children.Clear();
             ScrollTextStackPanel.Children.Clear();
             //ListBoxForScrollTest.Items.Clear();
+            _pendingContentDownloads = new List<ContentDownloadItem>();
+            _pendingContentDownloadKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             PageInfoClass definition = DataShop.Instance.g_PageInfoManager.GetPageDefinition(pageName);
             if (definition == null)
             {
                 MessageTools.ShowMessageBox("저장된 화면구성을 찾을 수 없습니다.", "확인");
+                _pendingContentDownloads = null;
+                _pendingContentDownloadKeys = null;
                 return;
             }
 
@@ -1573,6 +1731,8 @@ namespace AndoW_Manager
 
                 HideAllListGrid();
             }
+
+            BeginContentDownloadsIfNeeded(pageName);
         }
 
         private void EnsureContentFileInContents(ContentsInfoClass content)
@@ -1582,10 +1742,21 @@ namespace AndoW_Manager
                 return;
             }
 
+            if (!IsFileBasedContent(content))
+            {
+                return;
+            }
+
             string fileName = content.CIF_FileName;
             if (string.IsNullOrWhiteSpace(fileName) && string.IsNullOrWhiteSpace(content.CIF_FileFullPath) == false)
             {
                 fileName = Path.GetFileName(content.CIF_FileFullPath);
+                content.CIF_FileName = fileName;
+            }
+
+            if (string.IsNullOrWhiteSpace(fileName) == false)
+            {
+                fileName = fileName.Trim().Trim('\"');
                 content.CIF_FileName = fileName;
             }
 
@@ -1603,6 +1774,7 @@ namespace AndoW_Manager
             string sourcePath = content.CIF_FileFullPath;
             if (string.IsNullOrWhiteSpace(sourcePath) || File.Exists(sourcePath) == false)
             {
+                QueueContentDownload(fileName, targetPath);
                 return;
             }
 
@@ -4499,6 +4671,12 @@ namespace AndoW_Manager
                 textInfo.CIF_BGImageFileName = fileName;
             }
 
+            if (string.IsNullOrWhiteSpace(fileName) == false)
+            {
+                fileName = fileName.Trim().Trim('\"');
+                textInfo.CIF_BGImageFileName = fileName;
+            }
+
             if (string.IsNullOrWhiteSpace(fileName))
             {
                 return;
@@ -4513,7 +4691,7 @@ namespace AndoW_Manager
             string sourcePath = ResolveWelcomeBoardBackgroundPath(textInfo);
             if (string.IsNullOrWhiteSpace(sourcePath) || File.Exists(sourcePath) == false)
             {
-                textInfo.CIF_IsBGImageExist = false;
+                QueueContentDownload(fileName, targetPath);
                 return;
             }
 

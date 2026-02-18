@@ -1,0 +1,50 @@
+<Window x:Class="AndoW_Manager.ContentDownloadWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Content Download"
+        Width="420"
+        Height="160"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="TitleText"
+                   Grid.Row="0"
+                   Text="Downloading contents..."
+                   FontFamily="Malgun Gothic"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Foreground="#FF1E2A44"/>
+
+        <ProgressBar x:Name="ProgressBar"
+                     Grid.Row="1"
+                     Height="16"
+                     Margin="0,8,0,0"
+                     Minimum="0"
+                     Maximum="100"/>
+
+        <TextBlock x:Name="ProgressText"
+                   Grid.Row="2"
+                   Margin="0,6,0,0"
+                   Text="0 / 0 (0%)"
+                   FontFamily="Malgun Gothic"
+                   FontSize="11"
+                   Foreground="#FF5B6B86"/>
+
+        <TextBlock x:Name="FileText"
+                   Grid.Row="3"
+                   Margin="0,4,0,0"
+                   Text=""
+                   FontFamily="Malgun Gothic"
+                   FontSize="11"
+                   Foreground="#FF3B4B6A"
+                   TextTrimming="CharacterEllipsis"/>
+    </Grid>
+</Window>

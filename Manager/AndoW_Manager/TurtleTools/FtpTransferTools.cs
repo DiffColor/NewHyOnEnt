@@ -140,6 +140,70 @@ namespace TurtleTools
             }
         }
 
+        public static async Task<string> DownloadFileAsync(string remoteRelativePath, string localPath, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(remoteRelativePath))
+            {
+                return "Remote path is empty.";
+            }
+
+            if (string.IsNullOrWhiteSpace(localPath))
+            {
+                return "Local path is empty.";
+            }
+
+            if (!TryGetValidatedSettings(out var settings, out string error))
+            {
+                return error;
+            }
+
+            string remotePath = CombineRemotePath(settings.RootPath, remoteRelativePath);
+
+            try
+            {
+                string localDir = Path.GetDirectoryName(localPath);
+                if (string.IsNullOrWhiteSpace(localDir) == false)
+                {
+                    Directory.CreateDirectory(localDir);
+                }
+
+                using (var client = new AsyncFtpClient(settings.Host, settings.User, settings.Password, settings.Port))
+                {
+                    ApplyTimeouts(client.Config);
+                    client.Config.RetryAttempts = 2;
+                    await client.Connect();
+                    await client.DownloadFile(localPath, remotePath, FtpLocalExists.Overwrite, FtpVerify.Retry, null, cancellationToken);
+                    await client.Disconnect();
+                }
+
+                return null;
+            }
+            catch (OperationCanceledException)
+            {
+                return "FTP download canceled.";
+            }
+            catch (Exception ex)
+            {
+                return $"FTP download failed: {ex.Message}";
+            }
+        }
+
+        public static string BuildContentsRelativePath(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return string.Empty;
+            }
+
+            string normalized = fileName.Replace("\\", "/").TrimStart('/');
+            if (normalized.StartsWith("Contents/", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalized;
+            }
+
+            return $"Contents/{normalized}";
+        }
+
         public static async Task<HashSet<string>> GetRemoteFileNameSetAsync(string remoteRelativeDir, CancellationToken cancellationToken)
         {
             if (!TryGetValidatedSettings(out var settings, out _))
