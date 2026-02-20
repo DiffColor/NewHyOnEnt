@@ -337,6 +337,10 @@ namespace HyOnPlayer
                 {
                     if (prevType == ContentType.Video)
                     {
+                        if (string.Equals(TransImgCtrl.DirectSource, contentPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            TransImgCtrl.DirectSource = string.Empty;
+                        }
                         TransImgCtrl.DirectSource = contentPath;
                         StopVideo();
                         TransImgCtrl.Visibility = Visibility.Visible;
@@ -344,6 +348,10 @@ namespace HyOnPlayer
                     }
                     else
                     {
+                        if (string.Equals(TransImgCtrl.ChangeNowSource, contentPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            TransImgCtrl.ChangeNowSource = string.Empty;
+                        }
                         TransImgCtrl.ChangeNowSource = contentPath;
                         if(!TransImgCtrl.IsVisible)
                             TransImgCtrl.Visibility = Visibility.Visible;
@@ -364,6 +372,7 @@ namespace HyOnPlayer
                 video_duration = (long)MediaTools.GetVideoDuration(contentPath).TotalSeconds;
                 needLoop = (playTime > video_duration || g_ContentListCount < 2);
 
+                MPVPlayer.Visibility = Visibility.Hidden;
                 if (angle > 0)
                     MPVPlayer.LayoutTransform = new RotateTransform(angle);
 
@@ -450,6 +459,15 @@ namespace HyOnPlayer
 
         public void UpdateElementInfoClass(ElementInfoClass paramCls)
         {
+            StopVisibleContents();
+            prevType = ContentType.None;
+            needLoop = false;
+            isBusy = true;
+            tickNum = 0;
+            playTime = 0;
+            g_CurrentMediaIndex = 0;
+            current_fpath = string.Empty;
+
             this.g_ElementInfoClass.CopyData(paramCls);
             g_ContentListCount = g_ElementInfoClass.EIF_ContentsInfoClassList.Count;
             int playableCount = 0;

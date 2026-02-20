@@ -366,6 +366,9 @@ namespace TurtleMediaControl
 
         private void DirectSourceChanged(string source)
         {
+            if (string.IsNullOrWhiteSpace(source))
+                return;
+
             if(Path.GetExtension(source).Equals(".png", StringComparison.CurrentCultureIgnoreCase))
                 RootGrid.Background = new SolidColorBrush(Colors.Transparent);
             else

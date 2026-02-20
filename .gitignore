@@ -348,3 +348,7 @@ FodyWeavers.xsd
 
 # Misc backups
 *.bak
+.DS_Store
+Player/Windows/AndoW_Player/.DS_Store
+Player/Windows/.DS_Store
+Player/Android/.DS_Store
