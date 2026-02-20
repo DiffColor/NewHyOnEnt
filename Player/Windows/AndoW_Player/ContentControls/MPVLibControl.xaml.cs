@@ -320,7 +320,6 @@ namespace HyOnPlayer
 
         public void Play()
         {
-            this.Visibility = Visibility.Visible;
             sPlayer.Resume();
         }
 
@@ -334,9 +333,12 @@ namespace HyOnPlayer
 
         public void Stop()
         {
-            Pause(true);
-            if (IsMediaLoaded())
-                Position = new TimeSpan(0);
+            if (sPlayer == null)
+                return;
+            sPlayer.KeepOpen = KeepOpen.No;
+            sPlayer.Stop();
+            sPlayer.KeepOpen = KeepOpen.Always;
+            this.Visibility = Visibility.Collapsed;
         }
 
         public void Close()
