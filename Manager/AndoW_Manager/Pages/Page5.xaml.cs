@@ -1213,10 +1213,11 @@ namespace AndoW_Manager
             }
 
             return viewItems
-                .OrderBy(x => x.GroupName, StringComparer.CurrentCultureIgnoreCase)
-                .ThenBy(x => x.StartDate ?? DateTime.MinValue)
+                .OrderBy(x => x.StartDate ?? DateTime.MinValue)
                 .ThenBy(x => x.StartTime ?? TimeSpan.Zero)
-                .ThenBy(x => x.Playlist, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(x => x.EndDate ?? DateTime.MinValue)
+                .ThenBy(x => x.EndTime ?? TimeSpan.Zero)
+                .ThenBy(x => x.GroupName, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
         }
 
