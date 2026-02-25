@@ -357,52 +357,59 @@ namespace AndoW_Manager
 
         public bool CheckIsDateOverlapped(int thisStartDate, int thisEndDate, int newSchStartDate, int newSchEndDate)
         {
-            List<int> tmpIntegetList = new List<int>();
-            tmpIntegetList.Clear();
+            //List<int> tmpIntegetList = new List<int>();
+            //tmpIntegetList.Clear();
 
-            if (tmpIntegetList.Contains(thisStartDate) == false)
-                tmpIntegetList.Add(thisStartDate);
+            //if (tmpIntegetList.Contains(thisStartDate) == false)
+            //    tmpIntegetList.Add(thisStartDate);
 
-            if (tmpIntegetList.Contains(thisEndDate) == false)
-                tmpIntegetList.Add(thisEndDate);
+            //if (tmpIntegetList.Contains(thisEndDate) == false)
+            //    tmpIntegetList.Add(thisEndDate);
 
-            if (tmpIntegetList.Contains(newSchStartDate) == false)
-                tmpIntegetList.Add(newSchStartDate);
+            //if (tmpIntegetList.Contains(newSchStartDate) == false)
+            //    tmpIntegetList.Add(newSchStartDate);
 
-            if (tmpIntegetList.Contains(newSchEndDate) == false)
-                tmpIntegetList.Add(newSchEndDate);
-
-
-            if (tmpIntegetList.Count != 4)  // 하나라도 겹치는게 있으면 시간이 겹친다고 판단한다.
-            {
-                return true;
-            }
+            //if (tmpIntegetList.Contains(newSchEndDate) == false)
+            //    tmpIntegetList.Add(newSchEndDate);
 
 
-            tmpIntegetList.Sort();
+            //if (tmpIntegetList.Count != 4)  // 하나라도 겹치는게 있으면 시간이 겹친다고 판단한다.
+            //{
+            //    return true;
+            //}
 
 
-            /////////////////////////////////////////////////////////////////////////////////////////////
-            //  시간겹치는걸 판단하는것은 결국은 순서다. A1, A2, B1, B2 아니면 B1, B2, A1, A2    2는 절대 1앞에 올수 없다. 
+            //tmpIntegetList.Sort();
 
-            if (tmpIntegetList[0] == thisStartDate &&
-                tmpIntegetList[1] == thisEndDate &&
-                tmpIntegetList[2] == newSchStartDate &&
-                tmpIntegetList[3] == newSchEndDate)
-            {
-                return false;
-            }
-            else if (tmpIntegetList[0] == thisStartDate &&
-                tmpIntegetList[1] == thisEndDate &&
-                tmpIntegetList[2] == newSchStartDate &&
-                tmpIntegetList[3] == newSchEndDate)
-            {
-                return false;
-            }
-            else
-            {
-                return true;
-            }           
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////
+            ////  시간겹치는걸 판단하는것은 결국은 순서다. A1, A2, B1, B2 아니면 B1, B2, A1, A2    2는 절대 1앞에 올수 없다. 
+
+            //if (tmpIntegetList[0] == thisStartDate &&
+            //    tmpIntegetList[1] == thisEndDate &&
+            //    tmpIntegetList[2] == newSchStartDate &&
+            //    tmpIntegetList[3] == newSchEndDate)
+            //{
+            //    return false;
+            //}
+            //else if (tmpIntegetList[0] == thisStartDate &&
+            //    tmpIntegetList[1] == thisEndDate &&
+            //    tmpIntegetList[2] == newSchStartDate &&
+            //    tmpIntegetList[3] == newSchEndDate)
+            //{
+            //    return false;
+            //}
+            //else
+            //{
+            //    return true;
+            //}
+
+            int thisStart = Math.Min(thisStartDate, thisEndDate);
+            int thisEnd = Math.Max(thisStartDate, thisEndDate);
+            int newStart = Math.Min(newSchStartDate, newSchEndDate);
+            int newEnd = Math.Max(newSchStartDate, newSchEndDate);
+
+            return thisStart <= newEnd && newStart <= thisEnd;
         }
 
 
