@@ -6,6 +6,7 @@ on:
       - 'manager-windows-v*'
       - 'player-windows-v*'
       - 'player-android-v*'
+      - '!v*'
 
 permissions:
   contents: write
