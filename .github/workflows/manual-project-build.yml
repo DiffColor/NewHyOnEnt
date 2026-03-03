@@ -54,6 +54,31 @@ jobs:
         with:
           msbuild-architecture: x86
 
+      - name: Resolve release metadata
+        id: release_meta
+        shell: pwsh
+        run: |
+          $tagInput = "${{ inputs.release_tag }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($tagInput)) {
+            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
+            $artifactSuffix = "run-${{ github.run_number }}"
+          } else {
+            $tag = $tagInput
+            $artifactSuffix = ($tagInput -replace '[^0-9A-Za-z._-]+','-')
+            if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
+              $artifactSuffix = "run-${{ github.run_number }}"
+            }
+          }
+
+          $name = "${{ inputs.release_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($name)) {
+            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
+
       - name: Restore NuGet packages
         run: nuget restore "Manager/AndoW_Manager/AndoW_Manager.sln" -PackagesDirectory "Manager/packages" -NonInteractive
 
@@ -82,30 +107,15 @@ jobs:
       - name: Upload Manager artifact
         uses: actions/upload-artifact@v4
         with:
-          name: manager-windows-manual-${{ github.run_number }}
+          name: manager-windows-manual-${{ steps.release_meta.outputs.artifact_suffix }}
           path: Manager/AndoW_Manager/**/bin/**/Release/**
           if-no-files-found: warn
-
-      - name: Resolve release metadata
-        id: release_meta
-        shell: pwsh
-        run: |
-          $tag = "${{ inputs.release_tag }}"
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
-          }
-          $name = "${{ inputs.release_name }}"
-          if ([string]::IsNullOrWhiteSpace($name)) {
-            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
-          }
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "name=$name" >> $env:GITHUB_OUTPUT
 
       - name: Package Manager binaries for release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          tar -a -c -f "release-assets/manager-windows-manual-${{ github.run_number }}.zip" "Manager/AndoW_Manager/bin"
+          tar -a -c -f "release-assets/manager-windows-manual-${{ steps.release_meta.outputs.artifact_suffix }}.zip" "Manager/AndoW_Manager/bin"
 
       - name: Attach Manager binaries to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -114,7 +124,7 @@ jobs:
           name: ${{ steps.release_meta.outputs.name }}
           target_commitish: ${{ inputs.source_ref }}
           prerelease: ${{ inputs.prerelease }}
-          files: release-assets/manager-windows-manual-${{ github.run_number }}.zip
+          files: release-assets/manager-windows-manual-${{ steps.release_meta.outputs.artifact_suffix }}.zip
           overwrite_files: true
 
   build-player-windows:
@@ -134,6 +144,31 @@ jobs:
         uses: microsoft/setup-msbuild@v2
         with:
           msbuild-architecture: x86
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: pwsh
+        run: |
+          $tagInput = "${{ inputs.release_tag }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($tagInput)) {
+            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
+            $artifactSuffix = "run-${{ github.run_number }}"
+          } else {
+            $tag = $tagInput
+            $artifactSuffix = ($tagInput -replace '[^0-9A-Za-z._-]+','-')
+            if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
+              $artifactSuffix = "run-${{ github.run_number }}"
+            }
+          }
+
+          $name = "${{ inputs.release_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($name)) {
+            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
 
       - name: Restore NuGet packages
         run: nuget restore "Player/Windows/AndoW Player.sln" -PackagesDirectory "Player/Windows/packages" -NonInteractive
@@ -162,30 +197,15 @@ jobs:
       - name: Upload Player Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: player-windows-manual-${{ github.run_number }}
+          name: player-windows-manual-${{ steps.release_meta.outputs.artifact_suffix }}
           path: Player/Windows/**/bin/**/Release/**
           if-no-files-found: warn
-
-      - name: Resolve release metadata
-        id: release_meta
-        shell: pwsh
-        run: |
-          $tag = "${{ inputs.release_tag }}"
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
-          }
-          $name = "${{ inputs.release_name }}"
-          if ([string]::IsNullOrWhiteSpace($name)) {
-            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
-          }
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "name=$name" >> $env:GITHUB_OUTPUT
 
       - name: Package Player Windows binaries for release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          tar -a -c -f "release-assets/player-windows-manual-${{ github.run_number }}.zip" "Player/Windows/AndoW_Player/bin" "Player/Windows/ConfigPlayer/bin"
+          tar -a -c -f "release-assets/player-windows-manual-${{ steps.release_meta.outputs.artifact_suffix }}.zip" "Player/Windows/AndoW_Player/bin" "Player/Windows/ConfigPlayer/bin"
 
       - name: Attach Player Windows binaries to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -194,7 +214,7 @@ jobs:
           name: ${{ steps.release_meta.outputs.name }}
           target_commitish: ${{ inputs.source_ref }}
           prerelease: ${{ inputs.prerelease }}
-          files: release-assets/player-windows-manual-${{ github.run_number }}.zip
+          files: release-assets/player-windows-manual-${{ steps.release_meta.outputs.artifact_suffix }}.zip
           overwrite_files: true
 
   build-player-android:
@@ -213,6 +233,31 @@ jobs:
           distribution: temurin
           java-version: '11'
 
+      - name: Resolve release metadata
+        id: release_meta
+        shell: pwsh
+        run: |
+          $tagInput = "${{ inputs.release_tag }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($tagInput)) {
+            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
+            $artifactSuffix = "run-${{ github.run_number }}"
+          } else {
+            $tag = $tagInput
+            $artifactSuffix = ($tagInput -replace '[^0-9A-Za-z._-]+','-')
+            if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
+              $artifactSuffix = "run-${{ github.run_number }}"
+            }
+          }
+
+          $name = "${{ inputs.release_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($name)) {
+            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -229,24 +274,9 @@ jobs:
       - name: Upload Player Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: player-android-manual-${{ github.run_number }}
+          name: player-android-manual-${{ steps.release_meta.outputs.artifact_suffix }}
           path: Player/Android/app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
-
-      - name: Resolve release metadata
-        id: release_meta
-        shell: pwsh
-        run: |
-          $tag = "${{ inputs.release_tag }}"
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
-          }
-          $name = "${{ inputs.release_name }}"
-          if ([string]::IsNullOrWhiteSpace($name)) {
-            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
-          }
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "name=$name" >> $env:GITHUB_OUTPUT
 
       - name: Attach Player Android APK to GitHub Release
         uses: softprops/action-gh-release@v2
