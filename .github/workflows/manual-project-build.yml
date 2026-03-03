@@ -17,7 +17,12 @@ on:
         default: main
         type: string
       release_tag:
-        description: Release tag (비우면 프로젝트 최신 버전에서 +1 자동 생성)
+        description: Release tag (비우면 최신 vX.Y.Z에서 patch +1 자동 생성)
+        required: false
+        default: ""
+        type: string
+      release_name:
+        description: Release name (비우면 저장소 이름 사용)
         required: false
         default: ""
         type: string
@@ -53,20 +58,13 @@ jobs:
         id: release_meta
         shell: pwsh
         run: |
-          $project = "${{ inputs.project }}".Trim()
-          switch ($project) {
-            "manager-windows" { $prefix = "manager-windows-v" }
-            "player-windows" { $prefix = "player-windows-v" }
-            "player-android" { $prefix = "player-android-v" }
-            default { throw "Unknown project: $project" }
-          }
-
           $tagInput = "${{ inputs.release_tag }}".Trim()
           if ([string]::IsNullOrWhiteSpace($tagInput)) {
-            git fetch --force --tags origin | Out-Null
-            $latest = git tag -l "$prefix*" |
-              ForEach-Object { $_.Substring($prefix.Length) } |
-              Where-Object { $_ -match '^\d+\.\d+\.\d+$' } |
+            $latest = git ls-remote --tags --refs origin "v*" |
+              ForEach-Object { ($_ -split '\s+')[1] } |
+              ForEach-Object { $_ -replace '^refs/tags/', '' } |
+              Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+              ForEach-Object { $_.Substring(1) } |
               ForEach-Object { [version]$_ } |
               Sort-Object |
               Select-Object -Last 1
@@ -76,7 +74,7 @@ jobs:
             } else {
               $next = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
             }
-            $tag = "$prefix$next"
+            $tag = "v$next"
           } else {
             $tag = $tagInput
           }
@@ -86,7 +84,13 @@ jobs:
             $artifactSuffix = "run-${{ github.run_number }}"
           }
 
-          $name = $project
+          $repoName = "${{ github.repository }}".Split('/')[1]
+          $nameInput = "${{ inputs.release_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($nameInput)) {
+            $name = $repoName
+          } else {
+            $name = $nameInput
+          }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "name=$name" >> $env:GITHUB_OUTPUT
           "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
@@ -161,20 +165,13 @@ jobs:
         id: release_meta
         shell: pwsh
         run: |
-          $project = "${{ inputs.project }}".Trim()
-          switch ($project) {
-            "manager-windows" { $prefix = "manager-windows-v" }
-            "player-windows" { $prefix = "player-windows-v" }
-            "player-android" { $prefix = "player-android-v" }
-            default { throw "Unknown project: $project" }
-          }
-
           $tagInput = "${{ inputs.release_tag }}".Trim()
           if ([string]::IsNullOrWhiteSpace($tagInput)) {
-            git fetch --force --tags origin | Out-Null
-            $latest = git tag -l "$prefix*" |
-              ForEach-Object { $_.Substring($prefix.Length) } |
-              Where-Object { $_ -match '^\d+\.\d+\.\d+$' } |
+            $latest = git ls-remote --tags --refs origin "v*" |
+              ForEach-Object { ($_ -split '\s+')[1] } |
+              ForEach-Object { $_ -replace '^refs/tags/', '' } |
+              Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+              ForEach-Object { $_.Substring(1) } |
               ForEach-Object { [version]$_ } |
               Sort-Object |
               Select-Object -Last 1
@@ -184,7 +181,7 @@ jobs:
             } else {
               $next = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
             }
-            $tag = "$prefix$next"
+            $tag = "v$next"
           } else {
             $tag = $tagInput
           }
@@ -194,7 +191,13 @@ jobs:
             $artifactSuffix = "run-${{ github.run_number }}"
           }
 
-          $name = $project
+          $repoName = "${{ github.repository }}".Split('/')[1]
+          $nameInput = "${{ inputs.release_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($nameInput)) {
+            $name = $repoName
+          } else {
+            $name = $nameInput
+          }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "name=$name" >> $env:GITHUB_OUTPUT
           "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
@@ -266,20 +269,13 @@ jobs:
         id: release_meta
         shell: pwsh
         run: |
-          $project = "${{ inputs.project }}".Trim()
-          switch ($project) {
-            "manager-windows" { $prefix = "manager-windows-v" }
-            "player-windows" { $prefix = "player-windows-v" }
-            "player-android" { $prefix = "player-android-v" }
-            default { throw "Unknown project: $project" }
-          }
-
           $tagInput = "${{ inputs.release_tag }}".Trim()
           if ([string]::IsNullOrWhiteSpace($tagInput)) {
-            git fetch --force --tags origin | Out-Null
-            $latest = git tag -l "$prefix*" |
-              ForEach-Object { $_.Substring($prefix.Length) } |
-              Where-Object { $_ -match '^\d+\.\d+\.\d+$' } |
+            $latest = git ls-remote --tags --refs origin "v*" |
+              ForEach-Object { ($_ -split '\s+')[1] } |
+              ForEach-Object { $_ -replace '^refs/tags/', '' } |
+              Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+              ForEach-Object { $_.Substring(1) } |
               ForEach-Object { [version]$_ } |
               Sort-Object |
               Select-Object -Last 1
@@ -289,7 +285,7 @@ jobs:
             } else {
               $next = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
             }
-            $tag = "$prefix$next"
+            $tag = "v$next"
           } else {
             $tag = $tagInput
           }
@@ -299,7 +295,13 @@ jobs:
             $artifactSuffix = "run-${{ github.run_number }}"
           }
 
-          $name = $project
+          $repoName = "${{ github.repository }}".Split('/')[1]
+          $nameInput = "${{ inputs.release_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($nameInput)) {
+            $name = $repoName
+          } else {
+            $name = $nameInput
+          }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "name=$name" >> $env:GITHUB_OUTPUT
           "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
