@@ -315,7 +315,7 @@ jobs:
         run: |
           sdkmanager --version
           yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-22" "build-tools;29.0.2"
+          sdkmanager "platform-tools" "platforms;android-22" "build-tools;29.0.2" "ndk;26.1.10909125"
 
       - name: Setup JDK 11 for Gradle
         uses: actions/setup-java@v4
