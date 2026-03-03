@@ -93,7 +93,7 @@ jobs:
           msbuild-architecture: x86
 
       - name: Restore NuGet packages
-        run: nuget restore "Player/Windows/AndoW Player.sln"
+        run: nuget restore "Player/Windows/AndoW Player.sln" -PackagesDirectory "Player/Windows/packages" -NonInteractive
 
       - name: Prepare Player dependencies in build directories
         shell: pwsh
