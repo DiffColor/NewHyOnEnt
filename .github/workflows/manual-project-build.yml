@@ -17,12 +17,7 @@ on:
         default: main
         type: string
       release_tag:
-        description: Release tag (비우면 자동 생성)
-        required: false
-        default: ""
-        type: string
-      release_name:
-        description: Release name (비우면 자동 생성)
+        description: Release tag (비우면 프로젝트 최신 버전에서 +1 자동 생성)
         required: false
         default: ""
         type: string
@@ -58,23 +53,40 @@ jobs:
         id: release_meta
         shell: pwsh
         run: |
+          $project = "${{ inputs.project }}".Trim()
+          switch ($project) {
+            "manager-windows" { $prefix = "manager-windows-v" }
+            "player-windows" { $prefix = "player-windows-v" }
+            "player-android" { $prefix = "player-android-v" }
+            default { throw "Unknown project: $project" }
+          }
+
           $tagInput = "${{ inputs.release_tag }}".Trim()
           if ([string]::IsNullOrWhiteSpace($tagInput)) {
-            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
-            $artifactSuffix = "run-${{ github.run_number }}"
+            git fetch --force --tags origin | Out-Null
+            $latest = git tag -l "$prefix*" |
+              ForEach-Object { $_.Substring($prefix.Length) } |
+              Where-Object { $_ -match '^\d+\.\d+\.\d+$' } |
+              ForEach-Object { [version]$_ } |
+              Sort-Object |
+              Select-Object -Last 1
+
+            if ($null -eq $latest) {
+              $next = [version]"1.0.0"
+            } else {
+              $next = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
+            }
+            $tag = "$prefix$next"
           } else {
             $tag = $tagInput
-            $artifactSuffix = ($tagInput -replace '[^0-9A-Za-z._-]+','-')
-            if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
-              $artifactSuffix = "run-${{ github.run_number }}"
-            }
           }
 
-          $name = "${{ inputs.release_name }}".Trim()
-          if ([string]::IsNullOrWhiteSpace($name)) {
-            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
+          $artifactSuffix = ($tag -replace '[^0-9A-Za-z._-]+', '-')
+          if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
+            $artifactSuffix = "run-${{ github.run_number }}"
           }
 
+          $name = $project
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "name=$name" >> $env:GITHUB_OUTPUT
           "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
@@ -149,23 +161,40 @@ jobs:
         id: release_meta
         shell: pwsh
         run: |
+          $project = "${{ inputs.project }}".Trim()
+          switch ($project) {
+            "manager-windows" { $prefix = "manager-windows-v" }
+            "player-windows" { $prefix = "player-windows-v" }
+            "player-android" { $prefix = "player-android-v" }
+            default { throw "Unknown project: $project" }
+          }
+
           $tagInput = "${{ inputs.release_tag }}".Trim()
           if ([string]::IsNullOrWhiteSpace($tagInput)) {
-            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
-            $artifactSuffix = "run-${{ github.run_number }}"
+            git fetch --force --tags origin | Out-Null
+            $latest = git tag -l "$prefix*" |
+              ForEach-Object { $_.Substring($prefix.Length) } |
+              Where-Object { $_ -match '^\d+\.\d+\.\d+$' } |
+              ForEach-Object { [version]$_ } |
+              Sort-Object |
+              Select-Object -Last 1
+
+            if ($null -eq $latest) {
+              $next = [version]"1.0.0"
+            } else {
+              $next = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
+            }
+            $tag = "$prefix$next"
           } else {
             $tag = $tagInput
-            $artifactSuffix = ($tagInput -replace '[^0-9A-Za-z._-]+','-')
-            if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
-              $artifactSuffix = "run-${{ github.run_number }}"
-            }
           }
 
-          $name = "${{ inputs.release_name }}".Trim()
-          if ([string]::IsNullOrWhiteSpace($name)) {
-            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
+          $artifactSuffix = ($tag -replace '[^0-9A-Za-z._-]+', '-')
+          if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
+            $artifactSuffix = "run-${{ github.run_number }}"
           }
 
+          $name = $project
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "name=$name" >> $env:GITHUB_OUTPUT
           "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
@@ -237,23 +266,40 @@ jobs:
         id: release_meta
         shell: pwsh
         run: |
+          $project = "${{ inputs.project }}".Trim()
+          switch ($project) {
+            "manager-windows" { $prefix = "manager-windows-v" }
+            "player-windows" { $prefix = "player-windows-v" }
+            "player-android" { $prefix = "player-android-v" }
+            default { throw "Unknown project: $project" }
+          }
+
           $tagInput = "${{ inputs.release_tag }}".Trim()
           if ([string]::IsNullOrWhiteSpace($tagInput)) {
-            $tag = "manual-${{ inputs.project }}-run-${{ github.run_number }}"
-            $artifactSuffix = "run-${{ github.run_number }}"
+            git fetch --force --tags origin | Out-Null
+            $latest = git tag -l "$prefix*" |
+              ForEach-Object { $_.Substring($prefix.Length) } |
+              Where-Object { $_ -match '^\d+\.\d+\.\d+$' } |
+              ForEach-Object { [version]$_ } |
+              Sort-Object |
+              Select-Object -Last 1
+
+            if ($null -eq $latest) {
+              $next = [version]"1.0.0"
+            } else {
+              $next = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
+            }
+            $tag = "$prefix$next"
           } else {
             $tag = $tagInput
-            $artifactSuffix = ($tagInput -replace '[^0-9A-Za-z._-]+','-')
-            if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
-              $artifactSuffix = "run-${{ github.run_number }}"
-            }
           }
 
-          $name = "${{ inputs.release_name }}".Trim()
-          if ([string]::IsNullOrWhiteSpace($name)) {
-            $name = "Manual ${{ inputs.project }} build #${{ github.run_number }}"
+          $artifactSuffix = ($tag -replace '[^0-9A-Za-z._-]+', '-')
+          if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
+            $artifactSuffix = "run-${{ github.run_number }}"
           }
 
+          $name = $project
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "name=$name" >> $env:GITHUB_OUTPUT
           "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
