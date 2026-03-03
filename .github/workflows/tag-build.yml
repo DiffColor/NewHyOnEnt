@@ -25,7 +25,7 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Restore NuGet packages
-        run: nuget restore "Manager/AndoW_Manager/AndoW_Manager.sln"
+        run: nuget restore "Manager/AndoW_Manager/AndoW_Manager.sln" -PackagesDirectory "Manager/packages" -NonInteractive
 
       - name: Prepare Manager dependencies in build directory
         shell: pwsh
