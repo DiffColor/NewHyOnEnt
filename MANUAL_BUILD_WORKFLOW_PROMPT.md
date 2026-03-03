@@ -1,124 +1,87 @@
-# Manual Build Workflow 생성 프롬프트 (현재 기준)
+# Manual Build Workflow 생성 프롬프트 (범용)
 
-아래 요구사항을 **정확히 반영해서** GitHub Actions 워크플로우 파일 `.github/workflows/manual-project-build.yml`을 작성해 주세요.
+아래 요구사항을 **정확히 반영해서** GitHub Actions 워크플로우 파일을 작성해 주세요.
 
-## 목적
-- `workflow_dispatch`로 수동 실행한다.
-- 프로젝트별(`manager-windows`, `player-windows`, `player-android`)로 빌드한다.
-- 빌드 결과를 Actions Artifact로 업로드하고, 동시에 GitHub Release 자산으로 자동 첨부한다.
-- Windows 빌드 시 dependencies DLL을 사전에 올바른 빌드 경로로 복사해서 참조 오류를 방지한다.
-- 저장소의 `*.dll`이 LFS 대상이므로 체크아웃 시 반드시 LFS를 활성화한다.
+## 목표
+- `workflow_dispatch` 기반 수동 빌드 워크플로우를 만든다.
+- 여러 빌드 타깃(예: 백엔드, 윈도우 앱, 모바일 앱)을 선택적으로 빌드한다.
+- 빌드 결과를 Actions Artifact로 업로드한다.
+- 옵션으로 GitHub Release 자산 자동 첨부를 지원한다.
+- 필요 시 dependencies 파일(예: DLL/so/dylib)을 빌드 전에 지정 경로로 복사한다.
+- 저장소가 Git LFS를 사용하면 체크아웃 시 LFS를 활성화한다.
 
-## 필수 조건
-- 파일명: `.github/workflows/manual-project-build.yml`
-- workflow 이름: `Manual Build by Project`
-- 트리거: `workflow_dispatch`
-- `permissions`: `contents: write`
+## 출력 규칙
+- 결과는 설명 없이 **완성된 YAML 코드만** 출력한다.
+- 문법 오류 없는 단일 워크플로우 파일로 작성한다.
+- 파일 경로는 `.github/workflows/manual-build.yml`로 가정한다.
 
-### workflow_dispatch inputs
-- `project` (choice, required)
-  - options: `manager-windows`, `player-windows`, `player-android`
-- `source_ref` (string, required, default: `main`)
+## 필수 구조
+
+### 1) 트리거/권한
+- `on: workflow_dispatch`
+- `permissions`는 Release 첨부를 위해 `contents: write`
+
+### 2) 입력값(inputs)
+- `target` (choice, required): 빌드 타깃 선택
+- `source_ref` (string, required, default: `main`): 브랜치/태그/커밋
 - `release_tag` (string, optional, default: `""`)
 - `release_name` (string, optional, default: `""`)
 - `prerelease` (boolean, optional, default: `false`)
 
-## Job 1: build-manager-windows
-- 조건: `${{ inputs.project == 'manager-windows' }}`
-- 러너: `windows-latest`
-- 체크아웃:
-  - `actions/checkout@v4`
-  - `ref: ${{ inputs.source_ref }}`
-  - `lfs: true`
-- NuGet: `NuGet/setup-nuget@v2`
-- MSBuild: `microsoft/setup-msbuild@v2` with `msbuild-architecture: x86`
-- NuGet restore:
-  - `nuget restore "Manager/AndoW_Manager/AndoW_Manager.sln" -PackagesDirectory "Manager/packages" -NonInteractive`
-- Dependencies 사전 복사 (PowerShell):
-  - source: `Manager/Dependencies`
-  - destinations:
-    - `Manager/dll`
-    - `Manager/AndoW_Manager/bin/Release`
-    - `Manager/AndoW_Manager/bin/x64/Release`
-  - 각 destination 디렉토리 생성 후 `"$src/*.dll"`만 복사 (`-Force`)
-- Build:
-  - x86 MSBuild 경로를 `vswhere`로 찾고(amd64 제외),
-  - `AndoW_Manager.sln`을 `Release|x64`로 빌드
-- Artifact 업로드:
-  - `actions/upload-artifact@v4`
-  - name: `manager-windows-manual-${{ github.run_number }}`
-  - path: `Manager/AndoW_Manager/**/bin/**/Release/**`
-- Release 메타데이터 step (`id: release_meta`):
-  - `release_tag` 비어있으면: `manual-${{ inputs.project }}-run-${{ github.run_number }}`
-  - `release_name` 비어있으면: `Manual ${{ inputs.project }} build #${{ github.run_number }}`
+### 3) 잡 분기 방식
+- `if: ${{ inputs.target == '...' }}` 형태로 타깃별 잡 분리
+- 각 잡은 필요한 OS 러너를 사용
+  - Windows: `windows-latest`
+  - Linux: `ubuntu-latest`
+  - macOS 필요 시: `macos-latest`
+
+### 4) 공통 체크아웃
+- `actions/checkout@v4`
+- `with.ref: ${{ inputs.source_ref }}`
+- LFS 사용 저장소라면 `with.lfs: true`
+
+### 5) 빌드 전 준비
+- 각 타깃별 패키지 복원 단계 추가
+  - .NET: `nuget restore` 또는 `dotnet restore`
+  - Node: `npm ci` 또는 `pnpm install --frozen-lockfile`
+  - Android: JDK/SDK 설치
+- dependencies 사전 복사가 필요하면 다음 규칙 적용
+  - source 디렉토리와 destination 목록을 변수로 분리
+  - destination 디렉토리 생성 후 필요한 확장자만 복사
+  - 예시 확장자: `*.dll`, `*.so`, `*.dylib`
+
+### 6) 빌드 실행
+- 타깃별 빌드 명령을 명시적으로 작성
+- 플랫폼/구성값(예: `Release`, `x64`)을 파라미터로 고정
+- 툴 경로 탐색이 필요하면(예: MSBuild) 안전한 방식으로 경로 탐색 후 실행
+
+### 7) Artifact 업로드
+- `actions/upload-artifact@v4`
+- 아티팩트 이름에 타깃명과 `github.run_number` 포함
+- 경로는 타깃별 빌드 산출물 위치를 사용
+- `if-no-files-found: warn`
+
+### 8) Release 자동 첨부(옵션이지만 기본 포함)
+- release 메타데이터 step(`id: release_meta`) 추가
+  - `release_tag`가 비어 있으면 자동 생성
+  - `release_name`이 비어 있으면 자동 생성
   - `GITHUB_OUTPUT`에 `tag`, `name` 기록
-- Release용 zip 패키징:
-  - `release-assets/manager-windows-manual-${{ github.run_number }}.zip`
-  - 대상: `Manager/AndoW_Manager/bin`
-- GitHub Release 첨부:
-  - `softprops/action-gh-release@v2`
-  - `tag_name`, `name`은 `release_meta` 출력 사용
-  - `target_commitish: ${{ inputs.source_ref }}`
-  - `prerelease: ${{ inputs.prerelease }}`
-  - files: 위 zip
-  - `overwrite_files: true`
+- 필요 시 산출물 zip 패키징 후 `softprops/action-gh-release@v2`로 첨부
+- `target_commitish: ${{ inputs.source_ref }}`
+- `prerelease: ${{ inputs.prerelease }}`
+- `overwrite_files: true`
 
-## Job 2: build-player-windows
-- 조건: `${{ inputs.project == 'player-windows' }}`
-- 러너: `windows-latest`
-- 체크아웃:
-  - `actions/checkout@v4`
-  - `ref: ${{ inputs.source_ref }}`
-  - `lfs: true`
-- NuGet: `NuGet/setup-nuget@v2`
-- MSBuild: `microsoft/setup-msbuild@v2` with `msbuild-architecture: x86`
-- NuGet restore:
-  - `nuget restore "Player/Windows/AndoW Player.sln" -PackagesDirectory "Player/Windows/packages" -NonInteractive`
-- Dependencies 사전 복사 (PowerShell):
-  - source: `Player/Windows/Dependencies`
-  - destinations:
-    - `Player/Windows/AndoW_Player/bin/x64/Release`
-    - `Player/Windows/ConfigPlayer/bin/x64/Release`
-  - destination 디렉토리 생성 후 `"$src/*.dll"`만 복사 (`-Force`)
-- Build:
-  - x86 MSBuild 경로를 `vswhere`로 찾고(amd64 제외),
-  - `AndoW Player.sln`을 `Release|x64`로 빌드
-- Artifact 업로드:
-  - name: `player-windows-manual-${{ github.run_number }}`
-  - path: `Player/Windows/**/bin/**/Release/**`
-- Release 메타데이터 step (`id: release_meta`)는 Job 1과 동일 규칙
-- Release용 zip 패키징:
-  - `release-assets/player-windows-manual-${{ github.run_number }}.zip`
-  - 대상: `Player/Windows/AndoW_Player/bin`, `Player/Windows/ConfigPlayer/bin`
-- GitHub Release 첨부:
-  - `softprops/action-gh-release@v2`
-  - `target_commitish`, `prerelease`, `overwrite_files: true` 동일
+## 자리표시자(반드시 교체)
+- `<TARGET_OPTIONS>`: 예) `api`, `windows-client`, `android-app`
+- `<RESTORE_COMMAND>`
+- `<BUILD_COMMAND>`
+- `<DEPENDENCY_SOURCE_DIR>`
+- `<DEPENDENCY_DEST_DIRS>`
+- `<ARTIFACT_PATH>`
+- `<RELEASE_FILE_PATH>`
 
-## Job 3: build-player-android
-- 조건: `${{ inputs.project == 'player-android' }}`
-- 러너: `ubuntu-latest`
-- 체크아웃:
-  - `actions/checkout@v4`
-  - `ref: ${{ inputs.source_ref }}`
-  - `lfs: true`
-- Java: `actions/setup-java@v4` (`distribution: temurin`, `java-version: '11'`)
-- Android SDK: `android-actions/setup-android@v3`
-- SDK 설치:
-  - `yes | sdkmanager --licenses || true`
-  - `sdkmanager "platform-tools" "platforms;android-22" "build-tools;29.0.2"`
-- 빌드:
-  - working-directory: `Player/Android`
-  - `chmod +x ./gradlew`
-  - `./gradlew --no-daemon clean :app:assembleRelease`
-- Artifact 업로드:
-  - name: `player-android-manual-${{ github.run_number }}`
-  - path: `Player/Android/app/build/outputs/apk/release/*.apk`
-- Release 메타데이터 step (`id: release_meta`)는 동일 규칙
-- GitHub Release 첨부:
-  - files: `Player/Android/app/build/outputs/apk/release/*.apk`
-  - 나머지 옵션 동일
-
-## 제약/주의
-- 삭제된 `SignalR_Net472` 프로젝트는 워크플로우 대상에서 제외한다.
-- 들여쓰기/문법이 GitHub Actions YAML에서 바로 동작하도록 작성한다.
-- 결과물은 설명 없이 **완성된 YAML 코드만** 출력한다.
+## 품질 기준
+- 잡 이름/스텝 이름이 역할을 설명해야 한다.
+- 동일 로직은 스텝 구조를 일관되게 유지한다.
+- 경로/파일명은 하드코딩하되, 타깃마다 명확히 분리한다.
+- 실패 지점 파악이 쉽도록 단계 이름을 세분화한다.
