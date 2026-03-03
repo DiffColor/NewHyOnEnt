@@ -1,0 +1,307 @@
+name: Manual Build All Projects
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch / tag / commit to build
+        required: true
+        default: main
+        type: string
+      release_tag:
+        description: Release tag (비우면 최신 vX.Y.Z에서 patch +1 자동 생성)
+        required: false
+        default: ""
+        type: string
+      release_name:
+        description: Release name (비우면 저장소 이름 사용)
+        required: false
+        default: ""
+        type: string
+      prerelease:
+        description: GitHub Release prerelease 여부
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      name: ${{ steps.meta.outputs.name }}
+      artifact_suffix: ${{ steps.meta.outputs.artifact_suffix }}
+    steps:
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag_input="${{ inputs.release_tag }}"
+          if [[ -z "$tag_input" ]]; then
+            latest=$(git ls-remote --tags --refs "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "v*" \
+              | awk '{print $2}' \
+              | sed 's#refs/tags/##' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sed 's/^v//' \
+              | sort -V \
+              | tail -n 1 || true)
+
+            if [[ -z "$latest" ]]; then
+              next="1.0.0"
+            else
+              IFS='.' read -r major minor patch <<< "$latest"
+              patch=$((patch + 1))
+              next="${major}.${minor}.${patch}"
+            fi
+            tag="v${next}"
+          else
+            tag="$tag_input"
+          fi
+
+          artifact_suffix=$(echo "$tag" | sed -E 's/[^0-9A-Za-z._-]+/-/g')
+          if [[ -z "$artifact_suffix" ]]; then
+            artifact_suffix="run-${{ github.run_number }}"
+          fi
+
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          name_input="${{ inputs.release_name }}"
+          if [[ -z "$name_input" ]]; then
+            name="$repo_name"
+          else
+            name="$name_input"
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "artifact_suffix=$artifact_suffix" >> "$GITHUB_OUTPUT"
+
+  build-manager-windows:
+    needs: prepare-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          lfs: true
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x86
+
+      - name: Restore NuGet packages
+        run: nuget restore "Manager/AndoW_Manager/AndoW_Manager.sln" -PackagesDirectory "Manager/packages" -NonInteractive
+
+      - name: Prepare Manager dependencies in build directory
+        shell: pwsh
+        run: |
+          $src = "Manager/Dependencies"
+          $destinations = @(
+            "Manager/dll",
+            "Manager/AndoW_Manager/bin/Release",
+            "Manager/AndoW_Manager/bin/x64/Release"
+          )
+          foreach ($dst in $destinations) {
+            New-Item -ItemType Directory -Force -Path $dst | Out-Null
+            Copy-Item -Path "$src/*.dll" -Destination $dst -Force
+          }
+
+      - name: Build Manager (Release x64)
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Where-Object { $_ -notmatch "amd64" } | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($msbuild)) { throw "x86 MSBuild not found." }
+          & $msbuild "Manager/AndoW_Manager/AndoW_Manager.sln" /t:Build /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Upload Manager artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-windows-all-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: Manager/AndoW_Manager/**/bin/**/Release/**
+          if-no-files-found: warn
+
+      - name: Package Manager binaries for release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $zip = "release-assets/manager-windows-${{ needs.prepare-release.outputs.artifact_suffix }}.zip"
+          Compress-Archive -Path "Manager/AndoW_Manager/bin/*" -DestinationPath $zip -Force
+
+      - name: Upload Manager release asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-manager-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: release-assets/manager-windows-${{ needs.prepare-release.outputs.artifact_suffix }}.zip
+          if-no-files-found: error
+
+  build-player-windows:
+    needs: prepare-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          lfs: true
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x86
+
+      - name: Restore NuGet packages
+        run: nuget restore "Player/Windows/AndoW Player.sln" -PackagesDirectory "Player/Windows/packages" -NonInteractive
+
+      - name: Prepare Player dependencies in build directories
+        shell: pwsh
+        run: |
+          $src = "Player/Windows/Dependencies"
+          $destinations = @(
+            "Player/Windows/AndoW_Player/bin/x64/Release",
+            "Player/Windows/ConfigPlayer/bin/x64/Release"
+          )
+          foreach ($dst in $destinations) {
+            New-Item -ItemType Directory -Force -Path $dst | Out-Null
+            Copy-Item -Path "$src/*.dll" -Destination $dst -Force
+          }
+
+      - name: Build Player Windows (Release x64)
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Where-Object { $_ -notmatch "amd64" } | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($msbuild)) { throw "x86 MSBuild not found." }
+          & $msbuild "Player/Windows/AndoW Player.sln" /t:Build /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Upload Player Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-windows-all-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: Player/Windows/**/bin/**/Release/**
+          if-no-files-found: warn
+
+      - name: Package Player Windows binaries for release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $zip = "release-assets/player-windows-${{ needs.prepare-release.outputs.artifact_suffix }}.zip"
+          Compress-Archive -Path "Player/Windows/AndoW_Player/bin/*", "Player/Windows/ConfigPlayer/bin/*" -DestinationPath $zip -Force
+
+      - name: Upload Player Windows release asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-player-windows-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: release-assets/player-windows-${{ needs.prepare-release.outputs.artifact_suffix }}.zip
+          if-no-files-found: error
+
+  build-player-android:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          lfs: true
+
+      - name: Setup JDK 17 for sdkmanager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK environment
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --version
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-22" "build-tools;29.0.2" "ndk;26.1.10909125"
+
+      - name: Setup JDK 11 for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Build Player Android (Release APK)
+        working-directory: Player/Android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon clean :app:assembleRelease -x lintVitalRelease -x lint
+
+      - name: Upload Player Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-android-all-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: Player/Android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
+
+      - name: Collect Android APK as release asset
+        run: |
+          mkdir -p release-assets
+          cp Player/Android/app/build/outputs/apk/release/*.apk "release-assets/player-android-${{ needs.prepare-release.outputs.artifact_suffix }}.apk"
+
+      - name: Upload Player Android release asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-player-android-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: release-assets/player-android-${{ needs.prepare-release.outputs.artifact_suffix }}.apk
+          if-no-files-found: error
+
+  publish-release:
+    needs:
+      - prepare-release
+      - build-manager-windows
+      - build-player-windows
+      - build-player-android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Manager release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset-manager-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: release-assets/manager
+
+      - name: Download Player Windows release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset-player-windows-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: release-assets/player-windows
+
+      - name: Download Player Android release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset-player-android-${{ needs.prepare-release.outputs.artifact_suffix }}
+          path: release-assets/player-android
+
+      - name: Attach all build outputs to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          name: ${{ needs.prepare-release.outputs.name }}
+          target_commitish: ${{ inputs.source_ref }}
+          prerelease: ${{ inputs.prerelease }}
+          files: |
+            release-assets/manager/*.zip
+            release-assets/player-windows/*.zip
+            release-assets/player-android/*.apk
+          overwrite_files: true
