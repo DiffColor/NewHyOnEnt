@@ -44,8 +44,6 @@ namespace AndoWSettings
                     sData.MessageServerIp = "127.0.0.1";
                 }
 
-                sData.FTP_RootPath = NormalizeFtpRootPath(sData.FTP_RootPath);
-
                 collection.Upsert(sData);
             }
 
@@ -58,9 +56,6 @@ namespace AndoWSettings
             {
                 return;
             }
-
-            settings.Id = 0;
-            settings.FTP_RootPath = NormalizeFtpRootPath(settings.FTP_RootPath);
 
             using (var db = LocalDbContext.OpenDatabase())
             {
@@ -122,23 +117,6 @@ namespace AndoWSettings
                 Logger.WriteErrorLog($"RethinkDB upsert failed: {ex}", Logger.GetLogFileName());
             }
         }
-
-        private static string NormalizeFtpRootPath(string rootPath)
-        {
-            if (string.IsNullOrWhiteSpace(rootPath))
-            {
-                return "/NewHyOnEnt";
-            }
-
-            string normalized = rootPath.Replace("\\", "/").Trim();
-            if (!normalized.StartsWith("/"))
-            {
-                normalized = "/" + normalized;
-            }
-
-            normalized = normalized.TrimEnd('/');
-            return string.IsNullOrWhiteSpace(normalized) ? "/" : normalized;
-        }
     }
 
     public class ServerSettings
@@ -149,7 +127,6 @@ namespace AndoWSettings
         public int FTP_Port { get; set; } = NetworkTools.FTP_PORT;
         public int FTP_PasvMinPort { get; set; } = NetworkTools.FTP_PASV_MIN_PORT;
         public int FTP_PasvMaxPort { get; set; } = NetworkTools.FTP_PASV_MAX_PORT;
-        public string FTP_RootPath { get; set; } = "/NewHyOnEnt";
         public bool PreserveAspectRatio { get; set; } = false;
         public string DataServerIp { get; set; } = "127.0.0.1";
         public string MessageServerIp { get; set; } = "127.0.0.1";

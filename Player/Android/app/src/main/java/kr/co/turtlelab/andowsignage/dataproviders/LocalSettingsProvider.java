@@ -21,15 +21,7 @@ public class LocalSettingsProvider {
     public static final String KEY_SWITCH_ON_CONTENT_END = "switch_on_content_end";
     public static final String KEY_PLAYER_ID = "player_ip";
     public static final String KEY_MANAGER_IP = "manager_ip";
-    public static final String KEY_DATA_SERVER_IP = "data_server_ip";
-    public static final String KEY_MESSAGE_SERVER_IP = "message_server_ip";
     public static final String KEY_MANUAL_IP = "manual_ip";
-    public static final String KEY_FTP_PORT = "ftp_port";
-    public static final String KEY_FTP_PASV_MIN_PORT = "ftp_pasv_min_port";
-    public static final String KEY_FTP_PASV_MAX_PORT = "ftp_pasv_max_port";
-    public static final String KEY_FTP_ROOT_PATH = "ftp_root_path";
-    public static final String KEY_SIGNALR_PORT = "signalr_port";
-    public static final String KEY_SIGNALR_HUB_PATH = "signalr_hub_path";
 
     private LocalSettingsProvider() {
     }
@@ -64,15 +56,7 @@ public class LocalSettingsProvider {
                 model.setUsbAuthKey(settings.getUsbAuthKey());
                 model.setPlayerId(settings.getPlayerId());
                 model.setManagerIp(settings.getManagerIp());
-                model.setDataServerIp(settings.getDataServerIp());
-                model.setMessageServerIp(settings.getMessageServerIp());
                 model.setManualIp(settings.getManualIp());
-                model.setFtpPort(settings.getFtpPort());
-                model.setFtpPasvMinPort(settings.getFtpPasvMinPort());
-                model.setFtpPasvMaxPort(settings.getFtpPasvMaxPort());
-                model.setFtpRootPath(normalizeFtpRootPath(settings.getFtpRootPath()));
-                model.setSignalrPort(settings.getSignalrPort());
-                model.setSignalrHubPath(settings.getSignalrHubPath());
             }
         } finally {
             if (realm != null && !realm.isClosed()) {
@@ -103,10 +87,7 @@ public class LocalSettingsProvider {
         }
         final String playerId = resolvedPlayerId;
         final String managerIp = resolvedManagerIp;
-        final String dataServerIp = resolvedManagerIp;
-        final String messageServerIp = resolvedManagerIp;
         final String manualIp = resolvedManualIp;
-        final int ftpPort = AndoWSignageApp.FTP_PORT;
 
         Realm realm = Realm.getDefaultInstance();
         realm.executeTransaction(r -> {
@@ -122,15 +103,7 @@ public class LocalSettingsProvider {
             settings.setUsbAuthKey("");
             settings.setPlayerId(playerId == null ? "" : playerId);
             settings.setManagerIp(managerIp == null ? "" : managerIp);
-            settings.setDataServerIp(dataServerIp == null ? "" : dataServerIp);
-            settings.setMessageServerIp(messageServerIp == null ? "" : messageServerIp);
             settings.setManualIp(manualIp == null ? "" : manualIp);
-            settings.setFtpPort(ftpPort > 0 ? ftpPort : 21);
-            settings.setFtpPasvMinPort(55536);
-            settings.setFtpPasvMaxPort(55636);
-            settings.setFtpRootPath("/NewHyOnEnt");
-            settings.setSignalrPort(5000);
-            settings.setSignalrHubPath("/Data");
         });
         realm.close();
     }
@@ -214,37 +187,7 @@ public class LocalSettingsProvider {
             if (settings == null) {
                 settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
             }
-            String normalized = managerIp == null ? "" : managerIp;
-            settings.setManagerIp(normalized);
-            settings.setDataServerIp(normalized);
-        });
-        realm.close();
-    }
-
-    public static void updateDataServerIp(String dataServerIp) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            settings.setDataServerIp(dataServerIp == null ? "" : dataServerIp);
-        });
-        realm.close();
-    }
-
-    public static void updateMessageServerIp(String messageServerIp) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            settings.setMessageServerIp(messageServerIp == null ? "" : messageServerIp);
+            settings.setManagerIp(managerIp == null ? "" : managerIp);
         });
         realm.close();
     }
@@ -263,224 +206,6 @@ public class LocalSettingsProvider {
         realm.close();
     }
 
-    public static void updateFtpPort(int ftpPort) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            settings.setFtpPort(ftpPort);
-        });
-        realm.close();
-    }
-
-    public static void updateFtpPasvMinPort(int ftpPasvMinPort) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            settings.setFtpPasvMinPort(ftpPasvMinPort);
-        });
-        realm.close();
-    }
-
-    public static void updateFtpPasvMaxPort(int ftpPasvMaxPort) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            settings.setFtpPasvMaxPort(ftpPasvMaxPort);
-        });
-        realm.close();
-    }
-
-    public static void updateFtpRootPath(String ftpRootPath) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            settings.setFtpRootPath(normalizeFtpRootPath(ftpRootPath));
-        });
-        realm.close();
-    }
-
-    public static void updateSignalrPort(int port) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            settings.setSignalrPort(port);
-        });
-        realm.close();
-    }
-
-    public static void updateSignalrHubPath(String hubPath) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            settings.setSignalrHubPath(hubPath == null ? "" : hubPath);
-        });
-        realm.close();
-    }
-
-    public static void applyServerSettings(String dataServerIp,
-                                           String messageServerIp,
-                                           int ftpPort,
-                                           int ftpPasvMinPort,
-                                           int ftpPasvMaxPort,
-                                           String ftpRootPath) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
-            if (!TextUtils.isEmpty(dataServerIp)) {
-                settings.setDataServerIp(dataServerIp.trim());
-                settings.setManagerIp(dataServerIp.trim());
-            }
-            if (!TextUtils.isEmpty(messageServerIp)) {
-                settings.setMessageServerIp(messageServerIp.trim());
-            }
-            if (ftpPort > 0) {
-                settings.setFtpPort(ftpPort);
-            }
-            if (ftpPasvMinPort > 0) {
-                settings.setFtpPasvMinPort(ftpPasvMinPort);
-            }
-            if (ftpPasvMaxPort > 0) {
-                settings.setFtpPasvMaxPort(ftpPasvMaxPort);
-            }
-            if (!TextUtils.isEmpty(ftpRootPath)) {
-                settings.setFtpRootPath(normalizeFtpRootPath(ftpRootPath));
-            }
-        });
-        realm.close();
-    }
-
-    public static String getDataServerIp() {
-        Realm realm = Realm.getDefaultInstance();
-        try {
-            RealmLocalSettings settings = rWhere(realm);
-            if (settings == null) {
-                return "";
-            }
-            String host = settings.getDataServerIp();
-            if (TextUtils.isEmpty(host)) {
-                host = settings.getManagerIp();
-            }
-            return host == null ? "" : host;
-        } finally {
-            realm.close();
-        }
-    }
-
-    public static String getMessageServerIp() {
-        Realm realm = Realm.getDefaultInstance();
-        try {
-            RealmLocalSettings settings = rWhere(realm);
-            if (settings == null) {
-                return "";
-            }
-            String host = settings.getMessageServerIp();
-            if (TextUtils.isEmpty(host)) {
-                host = settings.getManagerIp();
-            }
-            return host == null ? "" : host;
-        } finally {
-            realm.close();
-        }
-    }
-
-    public static int getFtpPort() {
-        Realm realm = Realm.getDefaultInstance();
-        try {
-            RealmLocalSettings settings = rWhere(realm);
-            return settings != null ? settings.getFtpPort() : 0;
-        } finally {
-            realm.close();
-        }
-    }
-
-    public static int getFtpPasvMinPort() {
-        Realm realm = Realm.getDefaultInstance();
-        try {
-            RealmLocalSettings settings = rWhere(realm);
-            return settings != null ? settings.getFtpPasvMinPort() : 0;
-        } finally {
-            realm.close();
-        }
-    }
-
-    public static int getFtpPasvMaxPort() {
-        Realm realm = Realm.getDefaultInstance();
-        try {
-            RealmLocalSettings settings = rWhere(realm);
-            return settings != null ? settings.getFtpPasvMaxPort() : 0;
-        } finally {
-            realm.close();
-        }
-    }
-
-    public static String getFtpRootPath() {
-        Realm realm = Realm.getDefaultInstance();
-        try {
-            RealmLocalSettings settings = rWhere(realm);
-            if (settings == null) {
-                return "/NewHyOnEnt";
-            }
-            return normalizeFtpRootPath(settings.getFtpRootPath());
-        } finally {
-            realm.close();
-        }
-    }
-
-    public static int getSignalrPort() {
-        Realm realm = Realm.getDefaultInstance();
-        try {
-            RealmLocalSettings settings = rWhere(realm);
-            return settings != null ? settings.getSignalrPort() : 0;
-        } finally {
-            realm.close();
-        }
-    }
-
-    public static String getSignalrHubPath() {
-        Realm realm = Realm.getDefaultInstance();
-        try {
-            RealmLocalSettings settings = rWhere(realm);
-            return settings != null ? settings.getSignalrHubPath() : "";
-        } finally {
-            realm.close();
-        }
-    }
-
     public static String getUsbAuthKey() {
         Realm realm = Realm.getDefaultInstance();
         try {
@@ -495,18 +220,6 @@ public class LocalSettingsProvider {
         return realm.where(RealmLocalSettings.class)
                 .equalTo("id", LOCAL_SETTINGS_ID)
                 .findFirst();
-    }
-
-    private static String normalizeFtpRootPath(String rootPath) {
-        if (TextUtils.isEmpty(rootPath)) {
-            return "/NewHyOnEnt";
-        }
-        String normalized = rootPath.replace("\\", "/").trim();
-        if (!normalized.startsWith("/")) {
-            normalized = "/" + normalized;
-        }
-        normalized = normalized.replaceAll("/+$", "");
-        return TextUtils.isEmpty(normalized) ? "/" : normalized;
     }
 
     public static boolean hasStoredUsbKeyForDevice() {

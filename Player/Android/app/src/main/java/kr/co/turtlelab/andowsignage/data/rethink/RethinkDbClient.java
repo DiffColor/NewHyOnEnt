@@ -2,7 +2,6 @@ package kr.co.turtlelab.andowsignage.data.rethink;
 
 import android.os.Build;
 import android.text.TextUtils;
-import android.util.Log;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -37,7 +36,6 @@ import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.DataSyncManager;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPlayer;
 import kr.co.turtlelab.andowsignage.data.update.UpdateQueueContract;
-import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
 
 /**
@@ -46,14 +44,12 @@ import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
  */
 public class RethinkDbClient {
 
-    private static final String TAG = "RethinkDbClient";
     private static final String DATABASE = "NewHyOn";
     private static final String TABLE_PLAYER = "PlayerInfoManager";
     private static final String TABLE_PAGE_LIST = "PageListInfoManager";
     private static final String TABLE_PAGE = "PageInfoManager";
     private static final String TABLE_TEXT_INFO = "TextInfoManager";
     private static final String TABLE_WEEKLY = "WeeklyInfoManagerClass";
-    private static final String TABLE_SERVER_SETTINGS = "ServerSettings";
     private static final String TABLE_HEARTBEAT = "ClientHeartbeat";
     private static final String TABLE_UPDATE_QUEUE = "UpdateQueue";
     private static final String TABLE_COMMAND_HISTORY = "CommandHistory";
@@ -81,7 +77,6 @@ public class RethinkDbClient {
     private volatile boolean updateQueueTableReady = false;
     private final Object commandHistoryTableLock = new Object();
     private volatile boolean commandHistoryTableReady = false;
-    private volatile long lastConnectionErrorLoggedAt = 0L;
 
     public static RethinkDbClient getInstance() {
         if (sInstance == null) {
@@ -108,24 +103,10 @@ public class RethinkDbClient {
                     lastSyncedPlayerGuid = null;
                 }
                 guidVerified = false;
-                refreshServerSettings();
                 updateDeviceInfoIfNeeded();
                 fetchInitialWeeklySchedule();
             }
             return connection;
-        }
-    }
-
-    public boolean canAccessDatabase() {
-        Object probe = null;
-        try {
-            probe = R.now().run(getConnection());
-            return true;
-        } catch (Exception ex) {
-            logConnectionError("canAccessDatabase", ex);
-            return false;
-        } finally {
-            closeIfNeeded(probe);
         }
     }
 
@@ -143,39 +124,6 @@ public class RethinkDbClient {
                 connection = null;
             }
         }
-    }
-
-    private void refreshServerSettings() {
-        try {
-            RethinkModels.ServerSettingsRecord settings = fetchServerSettings();
-            if (settings == null) {
-                return;
-            }
-            LocalSettingsProvider.applyServerSettings(
-                    settings.getDataServerIp(),
-                    settings.getMessageServerIp(),
-                    settings.getFtpPort(),
-                    settings.getFtpPasvMinPort(),
-                    settings.getFtpPasvMaxPort(),
-                    settings.getFtpRootPath());
-        } catch (Exception ignored) {
-        }
-    }
-
-    public RethinkModels.ServerSettingsRecord fetchServerSettings() {
-        Map settingsMap = runSingle(R.db(DATABASE)
-                .table(TABLE_SERVER_SETTINGS)
-                .get(0));
-        if (settingsMap == null || settingsMap.isEmpty()) {
-            List<Map> rows = runList(R.db(DATABASE)
-                    .table(TABLE_SERVER_SETTINGS)
-                    .limit(1));
-            if (rows.isEmpty()) {
-                return null;
-            }
-            settingsMap = rows.get(0);
-        }
-        return convert(settingsMap, RethinkModels.ServerSettingsRecord.class);
     }
 
     private RethinkModels.PlayerInfoRecord fetchPlayerByNameOrGuid(String playerKey) {
@@ -367,14 +315,13 @@ public class RethinkDbClient {
             return;
         }
         ensureHeartbeatTable();
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("id", clientId);
-        payload.put("status", TextUtils.isEmpty(status) ? "" : status);
-        payload.put("process", process);
-        payload.put("version", TextUtils.isEmpty(version) ? "" : version);
-        payload.put("currentPage", TextUtils.isEmpty(currentPage) ? "" : currentPage);
-        payload.put("hdmiState", TextUtils.isEmpty(hdmiState) ? "" : hdmiState);
-        payload.put("heartbeatTs", getCurrentTimestamp());
+        MapObject<Object, Object> payload = R.hashMap("id", clientId)
+                .with("status", TextUtils.isEmpty(status) ? "" : status)
+                .with("process", process)
+                .with("version", TextUtils.isEmpty(version) ? "" : version)
+                .with("currentPage", TextUtils.isEmpty(currentPage) ? "" : currentPage)
+                .with("hdmiState", TextUtils.isEmpty(hdmiState) ? "" : hdmiState)
+                .with("heartbeatTs", R.now());
         try {
             R.db(DATABASE)
                     .table(TABLE_HEARTBEAT)
@@ -389,14 +336,13 @@ public class RethinkDbClient {
             return;
         }
         ensureHeartbeatTable();
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("id", clientId);
-        payload.put("status", "stopped");
-        payload.put("process", 0);
-        payload.put("version", TextUtils.isEmpty(version) ? "" : version);
-        payload.put("currentPage", "");
-        payload.put("hdmiState", false);
-        payload.put("heartbeatTs", getCurrentTimestamp());
+        MapObject<Object, Object> payload = R.hashMap("id", clientId)
+                .with("status", "stopped")
+                .with("process", 0)
+                .with("version", TextUtils.isEmpty(version) ? "" : version)
+                .with("currentPage", "")
+                .with("hdmiState", false)
+                .with("heartbeatTs", R.now());
         try {
             R.db(DATABASE)
                     .table(TABLE_HEARTBEAT)
@@ -832,8 +778,7 @@ public class RethinkDbClient {
                 return null;
             }
             return asMap(obj);
-        } catch (Exception ex) {
-            logConnectionError("runSingle", ex);
+        } catch (Exception ignored) {
             return null;
         } finally {
             closeIfNeeded(obj);
@@ -856,22 +801,11 @@ public class RethinkDbClient {
             } else if (obj != null) {
                 list.add(asMap(obj));
             }
-        } catch (Exception ex) {
-            logConnectionError("runList", ex);
+        } catch (Exception ignored) {
         } finally {
             closeIfNeeded(obj);
         }
         return list;
-    }
-
-    private void logConnectionError(String operation, Exception ex) {
-        long now = System.currentTimeMillis();
-        if (now - lastConnectionErrorLoggedAt < 10000L) {
-            return;
-        }
-        lastConnectionErrorLoggedAt = now;
-        String message = ex == null ? "" : ex.getMessage();
-        Log.w(TAG, operation + " failed. host=" + host + ":" + port + ", message=" + message);
     }
 
     private <T> T convert(Object obj, Class<T> clazz) {
