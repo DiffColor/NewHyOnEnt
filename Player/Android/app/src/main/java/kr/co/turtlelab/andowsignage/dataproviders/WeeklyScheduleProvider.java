@@ -163,7 +163,7 @@ public class WeeklyScheduleProvider {
             }
         }
 
-        return realm.where(RealmWeeklySchedule.class).findFirst();
+        return null;
     }
 
     private static String resolvePreferredScheduleKey() {
