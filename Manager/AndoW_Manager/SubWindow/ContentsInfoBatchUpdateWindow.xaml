@@ -49,15 +49,22 @@
                 <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
+                        <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
-                    <Rectangle Fill="#FFB5B8CE"/>
-                    <StackPanel Orientation="Horizontal" Grid.ColumnSpan="3" HorizontalAlignment="Left"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,15,0">
-                        <TextBlock x:Name="TextAngleGrade5_Copy7" TextWrapping="Wrap" Text="재생 시간 :" Foreground="Black" VerticalAlignment="Center" HorizontalAlignment="Center" FontFamily="Malgun Gothic" FontSize="13.333" Margin="12,0,0,0"/>
-                        <ComboBox DropDownClosed="MinCombo_DropDownClosed" x:Name="MinCombo" VerticalAlignment="Center" Height="24" Width="52" HorizontalAlignment="Right" Margin="7,0,0,0" FontFamily="Malgun Gothic" FontSize="14.667" FontWeight="Bold"/>
-                        <ComboBox DropDownOpened="SecCombo_DropDownOpened" x:Name="SecCombo" VerticalAlignment="Center" Height="24" Width="52" HorizontalAlignment="Right" Margin="7,0,0,0" FontFamily="Malgun Gothic" FontSize="14.667" FontWeight="Bold"/>
-                        <Button x:Name="ChangeTimeBtn" Style="{DynamicResource ButtonStyle2}" Height="27" Width="92" Margin="8,0,2,0">
-                            <TextBlock x:Name="TextAngleGrade3" TextWrapping="Wrap" Text="시간 변경" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" FontFamily="Malgun Gothic" FontWeight="Bold"/>
+                    <Rectangle Fill="#FFB5B8CE" Grid.ColumnSpan="2"/>
+                    <StackPanel Orientation="Horizontal" Grid.Column="0" HorizontalAlignment="Left" Margin="12,0,0,0">
+                        <TextBlock TextWrapping="Wrap" Text="기간 :" Foreground="Black" VerticalAlignment="Center" FontFamily="Malgun Gothic" FontSize="13.333" Margin="0,0,6,0"/>
+                        <DatePicker x:Name="StartDatePicker" Width="120" VerticalAlignment="Center" SelectedDateChanged="StartDatePicker_SelectedDateChanged" CalendarOpened="StartDate_CalendarOpened"/>
+                        <TextBlock Text="~" VerticalAlignment="Center" Margin="6,0,6,0" FontFamily="Malgun Gothic" Foreground="Black"/>
+                        <DatePicker x:Name="EndDatePicker" Width="120" VerticalAlignment="Center" SelectedDateChanged="EndDatePicker_SelectedDateChanged" CalendarOpened="EndDate_CalendarOpened"/>
+                        <Button x:Name="ClearDateBtn" Content="초기화" Width="60" Height="24" Margin="8,0,0,0" Click="ClearDateBtn_Click"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,15,0">
+                        <CheckBox x:Name="PlayTimeChangeCheckBox" Content="재생시간 변경" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox DropDownClosed="MinCombo_DropDownClosed" x:Name="MinCombo" VerticalAlignment="Center" Height="24" Width="52" HorizontalAlignment="Right" Margin="0,0,6,0" FontFamily="Malgun Gothic" FontSize="14.667" FontWeight="Bold"/>
+                        <ComboBox DropDownOpened="SecCombo_DropDownOpened" x:Name="SecCombo" VerticalAlignment="Center" Height="24" Width="52" HorizontalAlignment="Right" Margin="0,0,6,0" FontFamily="Malgun Gothic" FontSize="14.667" FontWeight="Bold"/>
+                        <Button x:Name="ChangeBtn" Style="{DynamicResource ButtonStyle2}" Height="27" Width="92" Margin="4,0,2,0" Click="ChangeBtn_Click">
+                            <TextBlock TextWrapping="Wrap" Text="일괄 적용" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" FontFamily="Malgun Gothic" FontWeight="Bold"/>
                         </Button>
                     </StackPanel>
                 </Grid>

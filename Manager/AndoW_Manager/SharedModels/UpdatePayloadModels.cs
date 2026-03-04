@@ -16,6 +16,8 @@ namespace AndoW.Shared
         public ContractPlaylistPayload Contract { get; set; }
 
         public ScheduleUpdatePayload Schedule { get; set; }
+
+        public List<ContentPeriodPayload> ContentPeriods { get; set; } = new List<ContentPeriodPayload>();
     }
 
     public sealed class ScheduleUpdatePayload
@@ -42,6 +44,19 @@ namespace AndoW.Shared
         public List<PageInfoClass> Pages { get; set; } = new List<PageInfoClass>();
 
         public ContractPlaylistPayload Contract { get; set; }
+
+        public List<ContentPeriodPayload> ContentPeriods { get; set; } = new List<ContentPeriodPayload>();
+    }
+
+    public sealed class ContentPeriodPayload
+    {
+        public string ContentGuid { get; set; } = string.Empty;
+
+        public string FileName { get; set; } = string.Empty;
+
+        public string StartDate { get; set; } = string.Empty;
+
+        public string EndDate { get; set; } = string.Empty;
     }
 
     public sealed class SpecialSchedulePayload

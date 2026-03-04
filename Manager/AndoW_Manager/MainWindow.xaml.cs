@@ -429,13 +429,15 @@ namespace AndoW_Manager
                     pageManager.LoadPagesForList(pageList.PLI_PageListName);
                     var pages = pageManager.g_PageInfoClassList?.ToList() ?? new List<PageInfoClass>();
                     var contract = builder.BuildContractPayload(player, pageList, pages);
+                    var contentPeriods = builder.BuildContentPeriodsForPages(pages);
 
                     playlistPayloads.Add(new SchedulePlaylistPayload
                     {
                         PlaylistName = pageList.PLI_PageListName,
                         PageList = pageList,
                         Pages = pages,
-                        Contract = contract
+                        Contract = contract,
+                        ContentPeriods = contentPeriods
                     });
                 }
             }
@@ -455,10 +457,30 @@ namespace AndoW_Manager
 
             var payload = new UpdatePayload
             {
-                Schedule = schedulePayload
+                Schedule = schedulePayload,
+                ContentPeriods = MergeContentPeriods(playlistPayloads)
             };
 
             return UpdatePayloadCodec.Encode(payload);
+        }
+
+        private static List<ContentPeriodPayload> MergeContentPeriods(IEnumerable<SchedulePlaylistPayload> playlists)
+        {
+            var map = new Dictionary<string, ContentPeriodPayload>(StringComparer.OrdinalIgnoreCase);
+            foreach (var playlist in playlists ?? Enumerable.Empty<SchedulePlaylistPayload>())
+            {
+                foreach (var period in playlist.ContentPeriods ?? Enumerable.Empty<ContentPeriodPayload>())
+                {
+                    if (period == null || string.IsNullOrWhiteSpace(period.ContentGuid))
+                    {
+                        continue;
+                    }
+
+                    map[period.ContentGuid] = period;
+                }
+            }
+
+            return map.Values.ToList();
         }
 
         private static SpecialSchedulePayload MapSpecialSchedule(SpecialScheduleInfoClass schedule)

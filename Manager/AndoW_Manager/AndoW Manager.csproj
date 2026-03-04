@@ -282,12 +282,16 @@
     <Compile Include="DataClass\DataShop.cs" />
     <Compile Include="DataClass\SpecialScheduleViewData.cs" />
     <Compile Include="Controls\PageTransition.cs" />
+    <Compile Include="DataManager\ContentPeriodManager.cs" />
     <Compile Include="Pages\Page5.xaml.cs">
       <DependentUpon>Page5.xaml</DependentUpon>
     </Compile>
     <Compile Include="SharedModels\WeeklyModels.cs" />
     <Compile Include="SubWindow\EditSpecialWindow.xaml.cs">
       <DependentUpon>EditSpecialWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="SubWindow\EditPeriodWindow.xaml.cs">
+      <DependentUpon>EditPeriodWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="TurtleTools\GridValueConverter.cs" />
     <Compile Include="TurtleTools\ModernScrollViewerBehavior.cs" />
@@ -651,6 +655,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="SubWindow\EditSpecialWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="SubWindow\EditPeriodWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

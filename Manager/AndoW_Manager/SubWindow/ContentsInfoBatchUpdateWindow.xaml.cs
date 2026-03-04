@@ -40,13 +40,26 @@ namespace AndoW_Manager
 
             MinCombo.SelectedIndex = 0;
             SecCombo.SelectedIndex = 10;
+
+            if (PlayTimeChangeCheckBox.IsChecked == true)
+            {
+                MinCombo.IsEnabled = true;
+                SecCombo.IsEnabled = true;
+                MinCombo.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Black);
+                SecCombo.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Black);
+            }
+            else
+            {
+                MinCombo.IsEnabled = false;
+                SecCombo.IsEnabled = false;
+                MinCombo.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gray);
+                SecCombo.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gray);
+            }
         }
 
         public void InitEventHandler()
         {
             this.Loaded += WindowLoaded;
-
-            ChangeTimeBtn.Click += ChangeTimeBtn_Click;   //시간 변경
 
             DeleteBtn.Click += DeleteBtn_Click;
             SelectAllBtn.Click += BTN0DO_Copy1_Click;   // 전체 선택
@@ -54,26 +67,19 @@ namespace AndoW_Manager
 
             PreviewKeyDown += ContentsInfoBatchUpdateWindow_KeyDown;
 
+            PlayTimeChangeCheckBox.Checked += PlayTimeChangeCheckBox_ChangeCheck;
+            PlayTimeChangeCheckBox.Unchecked += PlayTimeChangeCheckBox_ChangeCheck;
+
             this.Closing += Window_Closing;
         }
 
-        private void ChangeTimeBtn_Click(object sender, RoutedEventArgs e)
+        private void PlayTimeChangeCheckBox_ChangeCheck(object sender, RoutedEventArgs e)
         {
-            List<ContentsInfoClass> datalist = new List<ContentsInfoClass>();
-
-            foreach (ContentInfoElement item in ContentListBox.Items)
-            {
-                if (ContentListBox.SelectedItems.Contains(item))
-                {
-                    item.g_ContentsInfoClass.CIF_PlayMinute = MinCombo.SelectedValue.ToString();
-                    item.g_ContentsInfoClass.CIF_PlaySec = SecCombo.SelectedValue.ToString();
-                    item.DisplayThisElementInfo();
-                }
-
-                datalist.Add(item.g_ContentsInfoClass);
-            }
-
-            Page1.Instance.UpdateContentsListByEditWindow(datalist);
+            bool enabled = PlayTimeChangeCheckBox.IsChecked == true;
+            MinCombo.IsEnabled = enabled;
+            SecCombo.IsEnabled = enabled;
+            MinCombo.Foreground = new System.Windows.Media.SolidColorBrush(enabled ? System.Windows.Media.Colors.Black : System.Windows.Media.Colors.Gray);
+            SecCombo.Foreground = new System.Windows.Media.SolidColorBrush(enabled ? System.Windows.Media.Colors.Black : System.Windows.Media.Colors.Gray);
         }
 
         bool altF4Pressed = false;
@@ -130,6 +136,11 @@ namespace AndoW_Manager
 
         private void BtnWin_close_Click(object sender, System.Windows.RoutedEventArgs e)
         {
+            StartDatePicker.SelectedDate = null;
+            EndDatePicker.SelectedDate = null;
+            StartDatePicker.Text = string.Empty;
+            EndDatePicker.Text = string.Empty;
+            PlayTimeChangeCheckBox.IsChecked = false;
             this.Hide();  
         }
 
@@ -215,6 +226,94 @@ namespace AndoW_Manager
             SecCombo.SelectedItem = selectedString;
         }
 
+        private void ClearDateBtn_Click(object sender, RoutedEventArgs e)
+        {
+            StartDatePicker.SelectedDate = null;
+            EndDatePicker.SelectedDate = null;
+            StartDatePicker.Text = string.Empty;
+            EndDatePicker.Text = string.Empty;
+        }
+
+        private void ChangeBtn_Click(object sender, RoutedEventArgs e)
+        {
+            List<ContentsInfoClass> datalist = new List<ContentsInfoClass>();
+
+            string min = MinCombo.SelectedValue?.ToString() ?? "00";
+            string sec = SecCombo.SelectedValue?.ToString() ?? "10";
+
+            string startDate = StartDatePicker.Text;
+            string endDate = EndDatePicker.Text;
+            bool hasPeriodInput = !string.IsNullOrWhiteSpace(startDate) || !string.IsNullOrWhiteSpace(endDate);
+
+            foreach (ContentInfoElement item in ContentListBox.Items)
+            {
+                if (ContentListBox.SelectedItems.Contains(item))
+                {
+                    if (PlayTimeChangeCheckBox.IsChecked == true)
+                    {
+                        item.g_ContentsInfoClass.CIF_PlayMinute = min;
+                        item.g_ContentsInfoClass.CIF_PlaySec = sec;
+                    }
+
+                    if (hasPeriodInput)
+                    {
+                        Page1.Instance.SetPeriodData(item.g_ContentsInfoClass, startDate, endDate);
+                    }
+                    item.DisplayThisElementInfo();
+                }
+
+                datalist.Add(item.g_ContentsInfoClass);
+            }
+
+            Page1.Instance.UpdateContentsListByEditWindow(datalist);
+        }
+
+        private void StartDatePicker_SelectedDateChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (EndDatePicker.SelectedDate == null || StartDatePicker.SelectedDate == null)
+            {
+                return;
+            }
+
+            DateTime start = StartDatePicker.SelectedDate.Value.Date;
+            DateTime end = EndDatePicker.SelectedDate.Value.Date;
+            if (start > end)
+            {
+                EndDatePicker.SelectedDate = start;
+            }
+        }
+
+        private void EndDatePicker_SelectedDateChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (StartDatePicker.SelectedDate == null || EndDatePicker.SelectedDate == null)
+            {
+                return;
+            }
+
+            DateTime start = StartDatePicker.SelectedDate.Value.Date;
+            DateTime end = EndDatePicker.SelectedDate.Value.Date;
+            if (end < start)
+            {
+                StartDatePicker.SelectedDate = end;
+            }
+        }
+
+        private void StartDate_CalendarOpened(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(StartDatePicker.Text))
+            {
+                StartDatePicker.SelectedDate = DateTime.Today;
+            }
+        }
+
+        private void EndDate_CalendarOpened(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(EndDatePicker.Text))
+            {
+                EndDatePicker.SelectedDate = DateTime.Today;
+            }
+        }
+
 
         ContentInfoElement leadCtrl;
         private void ContentListBox_LayoutUpdated(object sender, EventArgs e)
@@ -259,7 +358,51 @@ namespace AndoW_Manager
                 ContentInfoElement _cie = ContentListBox.SelectedItem as ContentInfoElement;
                 MinCombo.SelectedItem = _cie.g_ContentsInfoClass.CIF_PlayMinute;
                 SecCombo.SelectedItem = _cie.g_ContentsInfoClass.CIF_PlaySec;
+
+                if (_cie == null || _cie.sPD == null)
+                {
+                    ClearPeriodInputs();
+                }
+                else
+                {
+                    UpdatePeriodInputs(_cie.sPD);
+                }
             }
+        }
+
+        private void UpdatePeriodInputs(PeriodData pd)
+        {
+            if (pd == null)
+            {
+                ClearPeriodInputs();
+                return;
+            }
+
+            if (DateTime.TryParse(pd.StartDate, out var start))
+            {
+                StartDatePicker.SelectedDate = start;
+            }
+            else
+            {
+                StartDatePicker.Text = pd.StartDate ?? string.Empty;
+            }
+
+            if (DateTime.TryParse(pd.EndDate, out var end))
+            {
+                EndDatePicker.SelectedDate = end;
+            }
+            else
+            {
+                EndDatePicker.Text = pd.EndDate ?? string.Empty;
+            }
+        }
+
+        private void ClearPeriodInputs()
+        {
+            StartDatePicker.SelectedDate = null;
+            EndDatePicker.SelectedDate = null;
+            StartDatePicker.Text = string.Empty;
+            EndDatePicker.Text = string.Empty;
         }
     }
 }

@@ -111,6 +111,8 @@ namespace HyOnPlayer
         private int lastCommitFromIndex = -1;
         private bool hasReceivedSyncMessage;
         private int commStarted;
+        private readonly object periodLock = new object();
+        private Dictionary<string, ContentPeriodPayload> contentPeriodMap = new Dictionary<string, ContentPeriodPayload>(StringComparer.OrdinalIgnoreCase);
 
         //public ulong memorylimit = 3000;   // 3GB
 
@@ -378,6 +380,7 @@ namespace HyOnPlayer
             InitTickTimer();
 
             this.g_PageInfoManager.LoadData(this.g_PlayerInfoManager.g_PlayerInfo.PIF_DefaultPlayList);
+			LoadContentPeriodCache();
             EnsureLocalPlaybackReady();
 
             g_PageIndex = 0;
@@ -411,6 +414,102 @@ namespace HyOnPlayer
                 HandleWeeklyScheduleUpdated();
             };
             onAirService.Start();
+        }
+
+        private void LoadContentPeriodCache()
+        {
+            try
+            {
+                using (var repo = new ContentPeriodRepository())
+                {
+                    var list = repo.LoadAll();
+                    var map = new Dictionary<string, ContentPeriodPayload>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var period in list ?? new List<ContentPeriodPayload>())
+                    {
+                        if (period == null || string.IsNullOrWhiteSpace(period.ContentGuid))
+                        {
+                            continue;
+                        }
+
+                        NormalizePeriod(period);
+                        map[period.ContentGuid] = period;
+                    }
+
+                    lock (periodLock)
+                    {
+                        contentPeriodMap = map;
+                    }
+                }
+            }
+            catch
+            {
+                lock (periodLock)
+                {
+                    contentPeriodMap = new Dictionary<string, ContentPeriodPayload>(StringComparer.OrdinalIgnoreCase);
+                }
+            }
+        }
+
+        public void RefreshContentPeriodCache(IEnumerable<ContentPeriodPayload> periods)
+        {
+            if (periods == null)
+            {
+                return;
+            }
+
+            lock (periodLock)
+            {
+                foreach (var period in periods)
+                {
+                    if (period == null || string.IsNullOrWhiteSpace(period.ContentGuid))
+                    {
+                        continue;
+                    }
+
+                    NormalizePeriod(period);
+                    contentPeriodMap[period.ContentGuid] = period;
+                }
+            }
+        }
+
+        public bool TryGetContentPeriod(string contentGuid, out ContentPeriodPayload period)
+        {
+            period = null;
+            if (string.IsNullOrWhiteSpace(contentGuid))
+            {
+                return false;
+            }
+
+            lock (periodLock)
+            {
+                return contentPeriodMap.TryGetValue(contentGuid, out period);
+            }
+        }
+
+        private static void NormalizePeriod(ContentPeriodPayload period)
+        {
+            if (period == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(period.StartDate))
+            {
+                period.StartDate = DateTime.Today.ToString("yyyy-MM-dd");
+            }
+
+            if (string.IsNullOrWhiteSpace(period.EndDate))
+            {
+                period.EndDate = "2099-12-31";
+            }
+
+            if (DateTime.TryParse(period.StartDate, out var start) && DateTime.TryParse(period.EndDate, out var end))
+            {
+                if (end.Date < start.Date)
+                {
+                    period.EndDate = start.ToString("yyyy-MM-dd");
+                }
+            }
         }
 
         private void StartSyncService()
