@@ -25,6 +25,7 @@ import microsoft.aspnet.signalr.client.hubs.HubConnection;
 import microsoft.aspnet.signalr.client.hubs.HubProxy;
 import microsoft.aspnet.signalr.client.hubs.SubscriptionHandler1;
 import microsoft.aspnet.signalr.client.http.android.AndroidPlatformComponent;
+import microsoft.aspnet.signalr.client.transport.LongPollingTransport;
 
 public class SignalRClientService {
 
@@ -135,7 +136,7 @@ public class SignalRClientService {
         }
 
         try {
-            SignalRFuture<Void> future = local.start();
+            SignalRFuture<Void> future = local.start(new LongPollingTransport(new NullLogger()));
             future.get();
         } catch (Exception ex) {
             scheduleReconnect();
@@ -179,7 +180,7 @@ public class SignalRClientService {
                         return;
                     }
                     try {
-                        SignalRFuture<Void> future = local.start();
+                        SignalRFuture<Void> future = local.start(new LongPollingTransport(new NullLogger()));
                         future.get();
                         return;
                     } catch (Exception ignore) {
