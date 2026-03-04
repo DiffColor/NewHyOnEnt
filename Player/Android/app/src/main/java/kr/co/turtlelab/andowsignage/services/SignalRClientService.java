@@ -18,6 +18,7 @@ import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkModels;
 import microsoft.aspnet.signalr.client.ConnectionState;
+import microsoft.aspnet.signalr.client.NullLogger;
 import microsoft.aspnet.signalr.client.Platform;
 import microsoft.aspnet.signalr.client.SignalRFuture;
 import microsoft.aspnet.signalr.client.hubs.HubConnection;
@@ -142,7 +143,7 @@ public class SignalRClientService {
     }
 
     private HubConnection buildConnection(String url) {
-        HubConnection hubConnection = new HubConnection(url, buildQueryString(), true, null);
+        HubConnection hubConnection = new HubConnection(url, buildQueryString(), true, new NullLogger());
         HubProxy proxy = hubConnection.createHubProxy(HUB_NAME);
         proxy.on("ReceiveMessage", new SubscriptionHandler1<SignalRMessage>() {
             @Override
