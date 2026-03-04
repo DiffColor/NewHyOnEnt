@@ -3,12 +3,19 @@ apply plugin: 'realm-android'
 
 android {
     ndkVersion "26.1.10909125"
+    def localKeystore = file("$projectDir/libs/platform.jks")
     signingConfigs {
         debug {
             storePassword 'zbqj2636'
             keyAlias = 'quber'
             keyPassword 'zbqj2636'
-            storeFile file('/Users/jazzlife/Documents/Workspaces/Android_PlatformKeys/QUBER_QR1G_M110S/platform.jks')
+            storeFile localKeystore
+        }
+        release {
+            storePassword 'zbqj2636'
+            keyAlias = 'quber'
+            keyPassword 'zbqj2636'
+            storeFile localKeystore
         }
     }
     compileSdkVersion 22
@@ -22,6 +29,7 @@ android {
 
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
         }
