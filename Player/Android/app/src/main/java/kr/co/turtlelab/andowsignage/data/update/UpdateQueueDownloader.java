@@ -11,7 +11,6 @@ import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
-import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.tools.FTP4JUtil;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 import io.realm.Realm;
@@ -113,15 +112,13 @@ public class UpdateQueueDownloader {
         entry.downloadedBytes = resumeFrom;
         entry.lastUpdatedAt = System.currentTimeMillis();
 
-        String ftpHost = resolveDataServerHost();
-        int ftpPort = resolveFtpPort();
         FTP4JUtil ftp = new FTP4JUtil(ctx,
-                ftpHost,
-                ftpPort,
+                AndoWSignageApp.MANAGER_IP,
+                AndoWSignageApp.FTP_PORT,
                 AndoWSignageApp.FTP_LOGIN_ID,
                 AndoWSignageApp.FTP_LOGIN_PW);
-        String remotePath = buildRemotePath(resolveFtpRootPath(), entry.remotePath);
-        UpdateQueueLogger.log("Downloading " + entry.fileName + " from " + remotePath + " via FTP " + ftpHost + ":" + ftpPort);
+        String remotePath = entry.remotePath;
+        UpdateQueueLogger.log("Downloading " + entry.fileName + " from " + remotePath + " via FTP " + AndoWSignageApp.MANAGER_IP + ":" + AndoWSignageApp.FTP_PORT);
         FTP4JUtil.DownloadResult result = ftp.downloadWithResume(remotePath, stagingFile, resumeFrom);
         if (result.missing) {
             entry.status = UpdateQueueContract.DownloadStatus.FAILED;
@@ -217,56 +214,6 @@ public class UpdateQueueDownloader {
             }
         } catch (Exception ignore) {
         }
-    }
-
-    private String resolveDataServerHost() {
-        if (AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(AndoWSignageApp.MANUAL_IP)) {
-            return AndoWSignageApp.MANUAL_IP;
-        }
-        String host = LocalSettingsProvider.getDataServerIp();
-        if (TextUtils.isEmpty(host)) {
-            host = AndoWSignageApp.MANAGER_IP;
-        }
-        return TextUtils.isEmpty(host) ? "127.0.0.1" : host;
-    }
-
-    private int resolveFtpPort() {
-        int port = LocalSettingsProvider.getFtpPort();
-        if (port > 0) {
-            return port;
-        }
-        return AndoWSignageApp.FTP_PORT;
-    }
-
-    private String resolveFtpRootPath() {
-        return LocalSettingsProvider.getFtpRootPath();
-    }
-
-    private String buildRemotePath(String rootPath, String relativePath) {
-        String normalizedRoot = normalizeRemotePath(rootPath, "/NewHyOnEnt");
-        String normalizedRelative = normalizeRemotePath(relativePath, "/");
-        if (TextUtils.isEmpty(normalizedRelative) || "/".equals(normalizedRelative)) {
-            return normalizedRoot;
-        }
-        if (normalizedRelative.equalsIgnoreCase(normalizedRoot)
-                || normalizedRelative.toLowerCase(Locale.US).startsWith((normalizedRoot + "/").toLowerCase(Locale.US))) {
-            return normalizedRelative;
-        }
-        return normalizedRoot + "/" + normalizedRelative.substring(1);
-    }
-
-    private String normalizeRemotePath(String path, String fallback) {
-        if (TextUtils.isEmpty(path)) {
-            return fallback;
-        }
-        String normalized = path.replace("\\", "/").trim();
-        if (!normalized.startsWith("/")) {
-            normalized = "/" + normalized;
-        }
-        while (normalized.length() > 1 && normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
     }
 
     private void cleanupTempFile(String relativeFilePath) {

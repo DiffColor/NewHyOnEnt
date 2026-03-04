@@ -14,7 +14,6 @@ import kr.co.turtlelab.andowsignage.data.DataSyncManager;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkModels;
 import kr.co.turtlelab.andowsignage.data.update.UpdateQueueHelper;
-import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.tools.LightestTimer;
 import kr.co.turtlelab.andowsignage.tools.PowerApi;
 import kr.co.turtlelab.andowsignage.tools.SystemUtils;
@@ -47,13 +46,7 @@ public class UpdateManagerService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String host = AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(AndoWSignageApp.MANUAL_IP)
-                ? AndoWSignageApp.MANUAL_IP
-                : LocalSettingsProvider.getDataServerIp();
-        if (TextUtils.isEmpty(host)) {
-            host = AndoWSignageApp.MANAGER_IP;
-        }
-        syncManager.updateEndpoint(host);
+        syncManager.updateEndpoint(AndoWSignageApp.MANAGER_IP);
         syncManager.resumePendingQueues();
         if (loaded) {
             if (updateTimer == null) {

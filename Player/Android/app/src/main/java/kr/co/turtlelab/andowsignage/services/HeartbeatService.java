@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
 import android.text.TextUtils;
-import android.util.Log;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -13,40 +12,30 @@ import java.util.concurrent.Executors;
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
-import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.tools.LightestTimer;
 import kr.co.turtlelab.andowsignage.tools.PowerApi;
 
 public class HeartbeatService extends Service {
 
-    private static final String TAG = "HeartbeatService";
     public static final String EXTRA_INTERVAL_MS = "kr.co.turtlelab.andowsignage.services.EXTRA_HEARTBEAT_INTERVAL";
     public static final String ACTION_SEND_STOPPED = "kr.co.turtlelab.andowsignage.services.action.SEND_HEARTBEAT_STOPPED";
     private static final long DEFAULT_INTERVAL_MS = 5000L;
     private static final long MIN_INTERVAL_MS = 1000L;
-    private static final long DB_CHECK_INTERVAL_MS = 10000L;
 
     private final IBinder binder = new LocalBinder();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private LightestTimer heartbeatTimer;
     private long intervalMs = DEFAULT_INTERVAL_MS;
-    private SignalRClientService signalRClient;
-    private long lastDbCheckAt = 0L;
-    private boolean lastDbReachable = false;
 
     @Override
     public void onCreate() {
         super.onCreate();
         heartbeatTimer = new LightestTimer((int) intervalMs, this::scheduleHeartbeat);
-        signalRClient = SignalRClientService.getShared(null);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         updateEndpointFromSettings();
-        if (signalRClient != null) {
-            signalRClient.start();
-        }
         if (intent != null && ACTION_SEND_STOPPED.equals(intent.getAction())) {
             triggerHeartbeatStopNow();
             return START_STICKY;
@@ -111,17 +100,13 @@ public class HeartbeatService extends Service {
     private void updateEndpointFromSettings() {
         String host = AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(AndoWSignageApp.MANUAL_IP)
                 ? AndoWSignageApp.MANUAL_IP
-                : LocalSettingsProvider.getDataServerIp();
-        if (TextUtils.isEmpty(host)) {
-            host = AndoWSignageApp.MANAGER_IP;
-        }
+                : AndoWSignageApp.MANAGER_IP;
         if (!TextUtils.isEmpty(host)) {
             RethinkDbClient.getInstance().updateHost(host);
         }
     }
 
     public void publishHeartbeat() {
-        checkDbConnection();
         String clientId = resolveClientGuid();
         if (TextUtils.isEmpty(clientId)) {
             return;
@@ -146,16 +131,13 @@ public class HeartbeatService extends Service {
                 ? Boolean.toString(quberHdmi)
                 : Boolean.toString(!AndoWSignageApp.isSlept);
 
-        if (signalRClient != null) {
-            SignalRClientService.HeartbeatPayload payload = SignalRClientService.HeartbeatPayload.create(
-                    clientId,
-                    status,
-                    process,
-                    version,
-                    currentPage,
-                    Boolean.parseBoolean(hdmiState));
-            signalRClient.sendHeartbeat(payload);
-        }
+        RethinkDbClient.getInstance().sendHeartbeat(
+                clientId,
+                status,
+                process,
+                version,
+                currentPage,
+                hdmiState);
     }
 
     private void triggerHeartbeatStopNow() {
@@ -167,16 +149,23 @@ public class HeartbeatService extends Service {
         if (TextUtils.isEmpty(clientId)) {
             return;
         }
-        if (signalRClient != null) {
-            SignalRClientService.HeartbeatPayload payload = SignalRClientService.HeartbeatPayload.create(
-                    clientId,
-                    "stopped",
-                    0,
-                    AndoWSignageApp.version,
-                    "",
-                    false);
-            signalRClient.sendHeartbeat(payload);
+
+        RethinkDbClient.getInstance().sendHeartbeatStopped(clientId, AndoWSignageApp.version);
+    }
+
+    private String resolveClientGuid() {
+        RethinkDbClient client = RethinkDbClient.getInstance();
+        String clientId = client.getCachedPlayerGuid();
+        if (TextUtils.isEmpty(clientId)) {
+            String storedPlayerName = client.getStoredPlayerName();
+            if (!TextUtils.isEmpty(storedPlayerName)) {
+                clientId = client.ensurePlayerGuid(storedPlayerName);
+            }
         }
+        if (TextUtils.isEmpty(clientId)) {
+            clientId = client.ensurePlayerGuid();
+        }
+        return clientId;
     }
 
 
@@ -189,33 +178,6 @@ public class HeartbeatService extends Service {
         } catch (NumberFormatException ignore) {
             return 0;
         }
-    }
-
-    private boolean checkDbConnection() {
-        long now = System.currentTimeMillis();
-        if (now - lastDbCheckAt < DB_CHECK_INTERVAL_MS) {
-            return lastDbReachable;
-        }
-        lastDbCheckAt = now;
-        lastDbReachable = RethinkDbClient.getInstance().canAccessDatabase();
-        if (!lastDbReachable) {
-            Log.w(TAG, "RethinkDB connection unavailable. heartbeat send skipped.");
-        }
-        return lastDbReachable;
-    }
-
-    private String resolveClientGuid() {
-        RethinkDbClient client = RethinkDbClient.getInstance();
-        String guid = client.ensurePlayerGuid(AndoWSignageApp.PLAYER_ID);
-        if (!TextUtils.isEmpty(guid)) {
-            return guid;
-        }
-        updateEndpointFromSettings();
-        guid = client.ensurePlayerGuid();
-        if (TextUtils.isEmpty(guid)) {
-            Log.w(TAG, "Player GUID lookup failed. playerName=" + AndoWSignageApp.PLAYER_ID);
-        }
-        return guid;
     }
 
     public class LocalBinder extends Binder {

@@ -545,15 +545,8 @@ public class AndoWSignage extends Activity {
 		if(localSettings != null) {
 			if(!TextUtils.isEmpty(localSettings.getPlayerId()))
 				AndoWSignageApp.PLAYER_ID = localSettings.getPlayerId();
-			String dataServerIp = localSettings.getDataServerIp();
-			if (TextUtils.isEmpty(dataServerIp)) {
-				dataServerIp = localSettings.getManagerIp();
-			}
-			if(!TextUtils.isEmpty(dataServerIp))
-				AndoWSignageApp.MANAGER_IP = dataServerIp;
-			if (localSettings.getFtpPort() > 0) {
-				AndoWSignageApp.FTP_PORT = localSettings.getFtpPort();
-			}
+			if(!TextUtils.isEmpty(localSettings.getManagerIp()))
+				AndoWSignageApp.MANAGER_IP = localSettings.getManagerIp();
 			AndoWSignageApp.IS_MANUAL = localSettings.getManualIPState();
 			AndoWSignageApp.SWITCH_ON_CONTENT_END = localSettings.getSwitchOnContentEnd();
 			if(AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(localSettings.getManualIp())) {
