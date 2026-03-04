@@ -183,7 +183,7 @@ namespace TurtleTools
                 PasvMaxPort = serverSettings?.FTP_PasvMaxPort > 0 ? serverSettings.FTP_PasvMaxPort : NetworkTools.FTP_PASV_MAX_PORT,
                 User = "asdf",
                 Password = "Emfndhk!",
-                RootPath = "/"
+                RootPath = "/NewHyOnEnt"
             };
         }
 
