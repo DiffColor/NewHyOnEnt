@@ -708,6 +708,7 @@ namespace HyOnPlayer
             try
             {
                 ApplyToLiteDb(localPageList, localPages);
+                SaveContentPeriods(payload.ContentPeriods);
             }
             catch (Exception ex)
             {
@@ -770,6 +771,55 @@ namespace HyOnPlayer
             Logger.WriteLog("UpdateService: update applied successfully.", Logger.GetLogFileName());
             LogStatus(queue, "Apply succeeded");
             queueRepository.DeleteById(queue.Id);
+        }
+
+        private void SaveContentPeriods(IEnumerable<ContentPeriodPayload> periods)
+        {
+            if (periods == null)
+            {
+                return;
+            }
+
+            var list = new List<ContentPeriodPayload>();
+            foreach (var period in periods)
+            {
+                if (period == null || string.IsNullOrWhiteSpace(period.ContentGuid))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(period.StartDate))
+                {
+                    period.StartDate = DateTime.Today.ToString("yyyy-MM-dd");
+                }
+
+                if (string.IsNullOrWhiteSpace(period.EndDate))
+                {
+                    period.EndDate = "2099-12-31";
+                }
+
+                if (DateTime.TryParse(period.StartDate, out var start) && DateTime.TryParse(period.EndDate, out var end))
+                {
+                    if (end.Date < start.Date)
+                    {
+                        period.EndDate = start.ToString("yyyy-MM-dd");
+                    }
+                }
+
+                list.Add(period);
+            }
+
+            if (list.Count == 0)
+            {
+                return;
+            }
+
+            using (var repo = new ContentPeriodRepository())
+            {
+                repo.UpsertMany(list);
+            }
+
+            owner?.RefreshContentPeriodCache(list);
         }
 
         private TimeSpan RetryPolicy(int retryCount)

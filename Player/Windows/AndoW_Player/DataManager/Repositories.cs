@@ -35,6 +35,13 @@ namespace HyOnPlayer
         public void Dispose() { }
     }
 
+    public sealed class ContentPeriodRepository : LiteDbRepository<ContentPeriodPayload>, IDisposable
+    {
+        public ContentPeriodRepository() : base("PeriodData", "ContentGuid") { }
+
+        public void Dispose() { }
+    }
+
     public sealed class TextRepository : LiteDbRepository<TextInfoClass>, IDisposable
     {
         // TextInfoClass PK는 CIF_Id

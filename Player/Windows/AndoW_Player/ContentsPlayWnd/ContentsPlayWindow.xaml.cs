@@ -131,7 +131,17 @@ namespace HyOnPlayer
                 return;
             }
 
+            int attempts = 0;
+
             hereWeGo:
+
+                if (attempts >= g_ContentListCount)
+                {
+                    isBusy = false;
+                    return;
+                }
+
+                attempts++;
 
                 if (g_CurrentMediaIndex == 1 && g_ContentListCount == 1)
                     return;
@@ -144,7 +154,8 @@ namespace HyOnPlayer
 
                 content = this.g_ElementInfoClass.EIF_ContentsInfoClassList[g_CurrentMediaIndex];
 
-                if (CheckContentsInfoIsValid(this.g_ElementInfoClass.EIF_ContentsInfoClassList[g_CurrentMediaIndex]) == false)
+                if (CheckContentsInfoIsValid(this.g_ElementInfoClass.EIF_ContentsInfoClassList[g_CurrentMediaIndex]) == false
+                    || IsContentPeriodValid(content) == false)
                 {
                     g_CurrentMediaIndex++;
                     goto hereWeGo;
@@ -188,6 +199,40 @@ namespace HyOnPlayer
 
                 isBusy = false;
                 g_CurrentMediaIndex++;
+        }
+
+        private bool IsContentPeriodValid(SharedContentsInfoClass content)
+        {
+            if (content == null)
+            {
+                return false;
+            }
+
+            var main = MainWindow.Instance;
+            if (main == null)
+            {
+                return true;
+            }
+
+            if (!main.TryGetContentPeriod(content.CIF_StrGUID, out var period) || period == null)
+            {
+                return true;
+            }
+
+            DateTime start;
+            DateTime end;
+            if (!DateTime.TryParse(period.StartDate, out start))
+            {
+                start = DateTime.MinValue;
+            }
+
+            if (!DateTime.TryParse(period.EndDate, out end))
+            {
+                end = DateTime.MaxValue;
+            }
+
+            DateTime today = DateTime.Today;
+            return today >= start.Date && today <= end.Date;
         }
 
         //public ContentsInfoClass GetValidPeriodContentInfo(IEnumerable<ContentsInfoClass> list)

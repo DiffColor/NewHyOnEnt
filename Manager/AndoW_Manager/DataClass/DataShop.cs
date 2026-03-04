@@ -45,6 +45,7 @@ namespace AndoW_Manager
         public UpdateThrottleSettingsManager g_UpdateThrottleSettingsManager = new UpdateThrottleSettingsManager();
         public UpdatePayloadBuilder g_UpdatePayloadBuilder = new UpdatePayloadBuilder();
         public ContentDetailsManager g_ContentDetailsManager = new ContentDetailsManager();
+        public ContentPeriodManager g_ContentPeriodManager = new ContentPeriodManager();
 
         private DataShop()
         {

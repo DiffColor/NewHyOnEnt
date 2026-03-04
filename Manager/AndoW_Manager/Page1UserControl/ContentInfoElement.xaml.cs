@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -21,6 +22,8 @@ namespace AndoW_Manager
        public ContentsInfoClass g_ContentsInfoClass = new ContentsInfoClass();
 
         bool g_IsExtended = false;
+        public PeriodData sPD = null;
+        public bool ShowPeriodInfo { get; set; } = false;
         public bool Selected
         {
             get { return g_IsSelected; }
@@ -74,6 +77,31 @@ namespace AndoW_Manager
             else
             {
                 TextBlockPageName.Foreground = ColorTools.GetSolidBrushByColorString("#FF005245"); 
+            }
+
+            sPD = null;
+            PeriodTBlock.Visibility = Visibility.Collapsed;
+            if (ShowPeriodInfo && Page1.Instance != null && IsFileBasedContent(g_ContentsInfoClass))
+            {
+                sPD = Page1.Instance.GetPeriodData(g_ContentsInfoClass.CIF_StrGUID);
+            }
+
+            if (sPD != null)
+            {
+                string start = string.IsNullOrWhiteSpace(sPD.StartDate) ? DateTime.Today.ToString("yyyy-MM-dd") : sPD.StartDate;
+                string end = string.IsNullOrWhiteSpace(sPD.EndDate) ? "2099-12-31" : sPD.EndDate;
+
+                PeriodTBlock.Text = string.Format("({0} ~ {1})", start, end);
+                PeriodTBlock.Visibility = Visibility.Visible;
+
+                if (DateTime.TryParse(end, out var endDate) && endDate.Date < DateTime.Today)
+                {
+                    PeriodTBlock.Foreground = ColorTools.GetSolidBrushByColorString("#FFE75A5A");
+                }
+                else
+                {
+                    PeriodTBlock.Foreground = ColorTools.GetSolidBrushByColorString("#FF2B6CB0");
+                }
             }
         }
 
@@ -162,7 +190,8 @@ namespace AndoW_Manager
             g_IsExtended = false;
             this.g_ContentsInfoClass.CIF_PlayMinute = scrollSpeedComboBox_Copy1.SelectedItem.ToString();
             this.g_ContentsInfoClass.CIF_PlaySec = scrollSpeedComboBox_Copy.SelectedItem.ToString();
-            this.Height = 30;
+            this.Height = double.NaN;
+            this.MinHeight = 30;
 
             Page1.Instance.EditContentsPlayTime(g_ContentsInfoClass);
             DisplayThisElementInfo();
@@ -171,23 +200,38 @@ namespace AndoW_Manager
 
         void BorderBTN_Copy1_Click(object sender, RoutedEventArgs e)
         {
-            if (g_IsExtended == false)
+            EditPeriodWindow editWindow = new EditPeriodWindow(g_ContentsInfoClass);
+            editWindow.Owner = Window.GetWindow(this);
+            bool? result = editWindow.ShowDialog();
+            if (result == true)
             {
-                this.Height = 60;
-                g_IsExtended = true;
-                BackRectangle.Fill = ColorTools.GetSolidBrushByColorString("#4C04E2FF");
-                SelectOnColor.Visibility = Visibility.Visible;
+                SetPlayTime(editWindow.TargetContent.CIF_PlayMinute, editWindow.TargetContent.CIF_PlaySec);
+            }
+        }
 
-                scrollSpeedComboBox_Copy1.SelectedItem = this.g_ContentsInfoClass.CIF_PlayMinute;
-                scrollSpeedComboBox_Copy.SelectedItem = this.g_ContentsInfoClass.CIF_PlaySec;
-            }
-            else
+        private void SetPlayTime(string minute, string sec)
+        {
+            if (string.IsNullOrWhiteSpace(minute))
             {
-                this.Height = 30;
-                g_IsExtended = false;
-                BackRectangle.Fill = ColorTools.GetSolidBrushByColorString("#4CFFFFFF");
-                SelectOnColor.Visibility = Visibility.Collapsed;
+                minute = "00";
             }
+
+            if (string.IsNullOrWhiteSpace(sec))
+            {
+                sec = "00";
+            }
+
+            string minuteValue = minute.PadLeft(2, '0');
+            string secValue = sec.PadLeft(2, '0');
+
+            g_ContentsInfoClass.CIF_PlayMinute = minuteValue;
+            g_ContentsInfoClass.CIF_PlaySec = secValue;
+
+            scrollSpeedComboBox_Copy1.SelectedItem = minuteValue;
+            scrollSpeedComboBox_Copy.SelectedItem = secValue;
+
+            Page1.Instance.EditContentsPlayTime(g_ContentsInfoClass);
+            DisplayThisElementInfo();
         }
 
         void DeletContents_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -249,5 +293,21 @@ namespace AndoW_Manager
                 }
             }
         }    
+
+        private static bool IsFileBasedContent(ContentsInfoClass content)
+        {
+            if (content == null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(content.CIF_ContentType))
+            {
+                return true;
+            }
+
+            return !content.CIF_ContentType.Equals(ContentType.WebSiteURL.ToString(), System.StringComparison.OrdinalIgnoreCase)
+                && !content.CIF_ContentType.Equals(ContentType.Browser.ToString(), System.StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

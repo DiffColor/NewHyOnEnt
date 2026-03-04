@@ -734,7 +734,8 @@ namespace HyOnPlayer
                 {
                     PageList = playlist.PageList,
                     Pages = playlist.Pages,
-                    Contract = playlist.Contract
+                    Contract = playlist.Contract,
+                    ContentPeriods = playlist.ContentPeriods
                 };
 
                 Logger.WriteLog($"스케줄 수신: 플레이리스트 다운로드 예약 -> {payload.PageList?.PLI_PageListName}", Logger.GetLogFileName());

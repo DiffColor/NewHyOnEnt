@@ -169,6 +169,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -192,7 +193,7 @@
                         </Grid>
                     </Button>
                 </Grid>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Grid.Row="1">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Grid.Row="1" Visibility="Collapsed">
                     <TextBlock x:Name="TextBlockPageName_Copy1" TextWrapping="NoWrap" Text="재생시간 :" Foreground="#FF1B1B1D" FontFamily="Malgun Gothic" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10.667" Height="15" Margin="5,0,0,0"/>
                     <ComboBox x:Name="scrollSpeedComboBox_Copy1" ItemsSource="{StaticResource TimeItems}" DropDownClosed="scrollSpeedComboBox_Copy1_DropDownClosed" VerticalAlignment="Top" Height="20" Width="45" HorizontalAlignment="Right" Margin="4,1,0,0"/>
                     <ComboBox x:Name="scrollSpeedComboBox_Copy" ItemsSource="{StaticResource TimeItems}" DropDownOpened="scrollSpeedComboBox_Copy_DropDownOpened" VerticalAlignment="Top" Height="20" Width="45" Margin="5,1,0,0"/>
@@ -200,6 +201,7 @@
                         <TextBlock x:Name="textBlock" TextWrapping="Wrap" Text="저장" d:LayoutOverrides="Height" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Button>
                 </StackPanel>
+                <TextBlock x:Name="PeriodTBlock" Grid.Row="2" TextWrapping="NoWrap" Text="(기간 없음)" Foreground="#FF1B1B1D" FontFamily="Malgun Gothic" FontSize="10.0" Margin="8,0,0,2" Visibility="Collapsed"/>
             </Grid>
             <Grid x:Name="DeletContents" VerticalAlignment="Top" Grid.Column="2" Margin="0,5,0,0">
                 <Path Data="M15,4L15,14C15,15.105,14.105,16,13,16L3,16C1.895,16,1,15.105,1,14L1,4C0.448,4 0,3.552 0,3 0,2.448 0.448,2 1,2L6,2C6,0.895 6.895,0 8,0 9.105,0 10,0.895 10,2L15,2C15.552,2 16,2.448 16,3 16,3.552 15.552,4 15,4z M13,4L3,4 3,14 13,14z M5,5C5.552,5,6,5.448,6,6L6,12C6,12.552 5.552,13 5,13 4.448,13 4,12.552 4,12L4,6C4,5.448,4.448,5,5,5z M8,5C8.552,5,9,5.448,9,6L9,12C9,12.552 8.552,13 8,13 7.448,13 7,12.552 7,12L7,6C7,5.448,7.448,5,8,5z M11,5C11.552,5,12,5.448,12,6L12,12C12,12.552 11.552,13 11,13 10.448,13 10,12.552 10,12L10,6C10,5.448,10.448,5,11,5z" Fill="#FF8A8A8A" Stretch="Fill" Stroke="Black" StrokeThickness="0" UseLayoutRounding="False" Width="12" Height="13" Margin="2,4,2,4"/>

@@ -345,6 +345,127 @@ namespace AndoW_Manager
             SwitchSelectedMediaContent(paramCls);
         }
 
+        public PeriodData GetPeriodData(string contentGuid)
+        {
+            if (string.IsNullOrWhiteSpace(contentGuid))
+            {
+                return null;
+            }
+
+            return DataShop.Instance?.g_ContentPeriodManager?.FindByContentGuid(contentGuid);
+        }
+
+        public void SetPeriodData(ContentsInfoClass content, string startDate, string endDate)
+        {
+            if (content == null || !IsFileBasedContent(content))
+            {
+                return;
+            }
+
+            string contentGuid = content.CIF_StrGUID;
+            if (string.IsNullOrWhiteSpace(contentGuid))
+            {
+                return;
+            }
+
+            bool startEmpty = string.IsNullOrWhiteSpace(startDate);
+            bool endEmpty = string.IsNullOrWhiteSpace(endDate);
+
+            if (startEmpty)
+            {
+                startDate = DateTime.Today.ToString("yyyy-MM-dd");
+            }
+
+            if (endEmpty)
+            {
+                endDate = "2099-12-31";
+            }
+
+            DateTime start;
+            DateTime end;
+            if (DateTime.TryParse(startDate, out start))
+            {
+                startDate = start.ToString("yyyy-MM-dd");
+            }
+
+            if (DateTime.TryParse(endDate, out end))
+            {
+                endDate = end.ToString("yyyy-MM-dd");
+            }
+
+            if (startDate != null && endDate != null && DateTime.TryParse(startDate, out start) && DateTime.TryParse(endDate, out end))
+            {
+                if (end.Date < start.Date)
+                {
+                    endDate = start.ToString("yyyy-MM-dd");
+                }
+            }
+
+            var data = new PeriodData
+            {
+                ContentGuid = contentGuid,
+                FileName = string.IsNullOrWhiteSpace(content.CIF_DisplayFileName) ? content.CIF_FileName : content.CIF_DisplayFileName,
+                StartDate = startDate ?? string.Empty,
+                EndDate = endDate ?? string.Empty
+            };
+
+            DataShop.Instance?.g_ContentPeriodManager?.Save(data);
+        }
+
+        public void DeletePeriodData(ContentsInfoClass content)
+        {
+            if (content == null || !IsFileBasedContent(content))
+            {
+                return;
+            }
+
+            string contentGuid = content.CIF_StrGUID;
+            if (string.IsNullOrWhiteSpace(contentGuid))
+            {
+                return;
+            }
+
+            DataShop.Instance?.g_ContentPeriodManager?.DeleteByContentGuid(contentGuid);
+        }
+
+        public void RefreshPeriodInfoForContent(string contentGuid)
+        {
+            if (string.IsNullOrWhiteSpace(contentGuid) || MediaListBox == null)
+            {
+                return;
+            }
+
+            foreach (ContentInfoElement item in MediaListBox.Items)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(item.g_ContentsInfoClass.CIF_StrGUID, contentGuid, StringComparison.OrdinalIgnoreCase))
+                {
+                    item.DisplayThisElementInfo();
+                    break;
+                }
+            }
+        }
+
+        private static bool IsFileBasedContent(ContentsInfoClass content)
+        {
+            if (content == null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(content.CIF_ContentType))
+            {
+                return true;
+            }
+
+            return !content.CIF_ContentType.Equals(ContentType.WebSiteURL.ToString(), StringComparison.OrdinalIgnoreCase)
+                && !content.CIF_ContentType.Equals(ContentType.Browser.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
 
         private void SwitchSelectedMediaContent(ContentsInfoClass paramCls)
         {
@@ -398,21 +519,7 @@ namespace AndoW_Manager
             public string RemoteRelativePath { get; set; } = string.Empty;
         }
 
-        private static bool IsFileBasedContent(ContentsInfoClass content)
-        {
-            if (content == null)
-            {
-                return false;
-            }
 
-            if (string.IsNullOrWhiteSpace(content.CIF_ContentType))
-            {
-                return true;
-            }
-
-            return content.CIF_ContentType.Equals(ContentType.WebSiteURL.ToString(), StringComparison.OrdinalIgnoreCase) == false
-                && content.CIF_ContentType.Equals(ContentType.Browser.ToString(), StringComparison.OrdinalIgnoreCase) == false;
-        }
 
         private void QueueContentDownload(string fileName, string targetPath)
         {
@@ -3629,7 +3736,10 @@ namespace AndoW_Manager
                 {
                     ContentInfoElement tmpElement = new ContentInfoElement(item);
                     tmpElement.Width = 360;
-                    tmpElement.Height = 30;
+                    tmpElement.Height = double.NaN;
+                    tmpElement.MinHeight = 30;
+                    tmpElement.ShowPeriodInfo = true;
+                    tmpElement.DisplayThisElementInfo();
                     tmpElement.TextBlockOrderingNumber.Text = string.Format("{0:D2}", idx);
                     tmpElement.Margin = new Thickness();
                     MediaListBox.Items.Add(tmpElement);

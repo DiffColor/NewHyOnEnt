@@ -33,7 +33,8 @@ namespace AndoW_Manager
             {
                 PageList = pageList,
                 Pages = pages,
-                Contract = contract
+                Contract = contract,
+                ContentPeriods = BuildContentPeriods(pages)
             };
         }
 
@@ -128,6 +129,121 @@ namespace AndoW_Manager
 
             payload.Pages = payload.Pages.OrderBy(p => p.OrderIndex).ToList();
             return payload;
+        }
+
+        public List<ContentPeriodPayload> BuildContentPeriodsForPages(List<PageInfoClass> pages)
+        {
+            return BuildContentPeriods(pages);
+        }
+
+        private List<ContentPeriodPayload> BuildContentPeriods(IEnumerable<PageInfoClass> pages)
+        {
+            var results = new List<ContentPeriodPayload>();
+            if (pages == null)
+            {
+                return results;
+            }
+
+            var contentMap = new Dictionary<string, ContentsInfoClass>(StringComparer.OrdinalIgnoreCase);
+            foreach (var page in pages)
+            {
+                if (page?.PIC_Elements == null)
+                {
+                    continue;
+                }
+
+                foreach (var element in page.PIC_Elements)
+                {
+                    if (element?.EIF_ContentsInfoClassList == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var content in element.EIF_ContentsInfoClassList)
+                    {
+                        if (content == null || string.IsNullOrWhiteSpace(content.CIF_StrGUID))
+                        {
+                            continue;
+                        }
+
+                        if (!IsFileBasedContent(content))
+                        {
+                            continue;
+                        }
+
+                        if (!contentMap.ContainsKey(content.CIF_StrGUID))
+                        {
+                            contentMap[content.CIF_StrGUID] = content;
+                        }
+                    }
+                }
+            }
+
+            if (contentMap.Count == 0)
+            {
+                return results;
+            }
+
+            var periodManager = DataShop.Instance?.g_ContentPeriodManager;
+            var periodList = periodManager?.FindByContentGuids(contentMap.Keys) ?? new List<PeriodData>();
+            var periodMap = periodList
+                .Where(p => p != null && !string.IsNullOrWhiteSpace(p.ContentGuid))
+                .GroupBy(p => p.ContentGuid, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            string defaultStart = DateTime.Today.ToString("yyyy-MM-dd");
+
+            foreach (var kv in contentMap)
+            {
+                string guid = kv.Key;
+                var content = kv.Value;
+                if (content == null)
+                {
+                    continue;
+                }
+
+                PeriodData pd = null;
+                periodMap.TryGetValue(guid, out pd);
+
+                string start = pd?.StartDate;
+                string end = pd?.EndDate;
+
+                if (string.IsNullOrWhiteSpace(start))
+                {
+                    start = defaultStart;
+                }
+
+                if (string.IsNullOrWhiteSpace(end))
+                {
+                    end = "2099-12-31";
+                }
+
+                results.Add(new ContentPeriodPayload
+                {
+                    ContentGuid = guid,
+                    FileName = content.CIF_DisplayFileName ?? content.CIF_FileName ?? string.Empty,
+                    StartDate = start,
+                    EndDate = end
+                });
+            }
+
+            return results;
+        }
+
+        private static bool IsFileBasedContent(ContentsInfoClass content)
+        {
+            if (content == null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(content.CIF_ContentType))
+            {
+                return true;
+            }
+
+            return !content.CIF_ContentType.Equals(ContentType.WebSiteURL.ToString(), StringComparison.OrdinalIgnoreCase)
+                && !content.CIF_ContentType.Equals(ContentType.Browser.ToString(), StringComparison.OrdinalIgnoreCase);
         }
 
         private void ApplyContentDetailsToPages(List<PageInfoClass> pages)
