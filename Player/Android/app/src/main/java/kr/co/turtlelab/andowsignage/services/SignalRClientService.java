@@ -1,6 +1,7 @@
 package kr.co.turtlelab.andowsignage.services;
 
 import android.text.TextUtils;
+import android.util.Log;
 
 import com.google.gson.Gson;
 
@@ -27,6 +28,7 @@ import microsoft.aspnet.signalr.client.hubs.SubscriptionHandler1;
 import microsoft.aspnet.signalr.client.http.android.AndroidPlatformComponent;
 
 public class SignalRClientService {
+    private static final String TAG = "SignalRClientService";
 
     public interface Listener {
         void onCommand(String command);
@@ -138,6 +140,7 @@ public class SignalRClientService {
             SignalRFuture<Void> future = local.start();
             future.get();
         } catch (Exception ex) {
+            Log.w(TAG, "SignalR start failed: " + ex.getMessage());
             scheduleReconnect();
         }
     }
@@ -181,8 +184,10 @@ public class SignalRClientService {
                     try {
                         SignalRFuture<Void> future = local.start();
                         future.get();
+                        Log.i(TAG, "SignalR reconnected.");
                         return;
                     } catch (Exception ignore) {
+                        Log.w(TAG, "SignalR reconnect failed: " + ignore.getMessage());
                     }
                 }
             } finally {
