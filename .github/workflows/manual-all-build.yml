@@ -248,17 +248,24 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon clean :app:assembleRelease -x lintVitalRelease -x lint
 
+      - name: Verify Player Android APK signature
+        working-directory: Player/Android
+        run: |
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK_PATH"
+          "$ANDROID_HOME/build-tools/29.0.2/apksigner" verify --verbose "$APK_PATH"
+
       - name: Upload Player Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: player-android-all-${{ needs.prepare-release.outputs.artifact_suffix }}
-          path: Player/Android/app/build/outputs/apk/release/*.apk
+          path: Player/Android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: warn
 
       - name: Collect Android APK as release asset
         run: |
           mkdir -p release-assets
-          cp Player/Android/app/build/outputs/apk/release/*.apk "release-assets/player-android-${{ needs.prepare-release.outputs.artifact_suffix }}.apk"
+          cp Player/Android/app/build/outputs/apk/release/app-release.apk "release-assets/player-android-${{ needs.prepare-release.outputs.artifact_suffix }}.apk"
 
       - name: Upload Player Android release asset artifact
         uses: actions/upload-artifact@v4

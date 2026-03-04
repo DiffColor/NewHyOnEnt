@@ -331,11 +331,18 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon clean :app:assembleRelease -x lintVitalRelease -x lint
 
+      - name: Verify Player Android APK signature
+        working-directory: Player/Android
+        run: |
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK_PATH"
+          "$ANDROID_HOME/build-tools/29.0.2/apksigner" verify --verbose "$APK_PATH"
+
       - name: Upload Player Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: player-android-manual-${{ steps.release_meta.outputs.artifact_suffix }}
-          path: Player/Android/app/build/outputs/apk/release/*.apk
+          path: Player/Android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: warn
 
       - name: Attach Player Android APK to GitHub Release
@@ -345,5 +352,5 @@ jobs:
           name: ${{ steps.release_meta.outputs.name }}
           target_commitish: ${{ inputs.source_ref }}
           prerelease: ${{ inputs.prerelease }}
-          files: Player/Android/app/build/outputs/apk/release/*.apk
+          files: Player/Android/app/build/outputs/apk/release/app-release.apk
           overwrite_files: true
