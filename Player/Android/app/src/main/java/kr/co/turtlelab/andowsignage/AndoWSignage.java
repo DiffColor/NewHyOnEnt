@@ -163,12 +163,6 @@ public class AndoWSignage extends Activity {
 	private static final String WATCHDOG_PACKAGE = "kr.co.turtlelab.startnow.watchdog";
 	private static final String WATCHDOG_PING_ACTION = "kr.co.turtlelab.watchdog.ping";
 	private static final int WATCHDOG_PING_INTERVAL_MS = 5000;
-	private static final String TURTLE_LAUNCHER_PACKAGE = "com.github.postapczuk.lalauncher";
-	private static final String TURTLE_LAUNCHER_MAIN_ACTIVITY = "com.github.postapczuk.lalauncher.FavoriteAppsActivity";
-	private static final String TURTLE_LAUNCHER_ACTION_LAUNCH_COMPONENT = "kr.co.turtlelab.turtlelauncher.action.LAUNCH_COMPONENT";
-	private static final String EXTRA_TARGET_PACKAGE = "target_package";
-	private static final String EXTRA_TARGET_CLASS = "target_class";
-	private static final String EXTRA_CLEAR_TASK = "clear_task";
 	private final Handler watchdogPingHandler = new Handler();
 	private final Runnable watchdogPingRunnable = new Runnable() {
 		@Override
@@ -1250,41 +1244,6 @@ public class AndoWSignage extends Activity {
 		try {
 			sendBroadcast(new Intent(action));
 		} catch (Exception e) {
-		}
-	}
-
-	private void launchTurtleLauncher() {
-		if (requestTurtleLauncherLaunch(TURTLE_LAUNCHER_PACKAGE, TURTLE_LAUNCHER_MAIN_ACTIVITY, true)) {
-			return;
-		}
-		try {
-			Intent launcherIntent = new Intent();
-			launcherIntent.setComponent(new ComponentName(TURTLE_LAUNCHER_PACKAGE, TURTLE_LAUNCHER_MAIN_ACTIVITY));
-			launcherIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-			launcherIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-			launcherIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
-			startActivity(launcherIntent);
-			return;
-		} catch (Exception ignored) {
-		}
-
-		Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-		homeIntent.addCategory(Intent.CATEGORY_HOME);
-		homeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-		startActivity(homeIntent);
-	}
-
-	private boolean requestTurtleLauncherLaunch(String packageName, String className, boolean clearTask) {
-		try {
-			Intent request = new Intent(TURTLE_LAUNCHER_ACTION_LAUNCH_COMPONENT);
-			request.setPackage(TURTLE_LAUNCHER_PACKAGE);
-			request.putExtra(EXTRA_TARGET_PACKAGE, packageName);
-			request.putExtra(EXTRA_TARGET_CLASS, className);
-			request.putExtra(EXTRA_CLEAR_TASK, clearTask);
-			sendBroadcast(request);
-			return true;
-		} catch (Exception e) {
-			return false;
 		}
 	}
 
