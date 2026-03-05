@@ -11,6 +11,8 @@ on:
           - manager-windows
           - player-windows
           - player-android
+          - player-launcher-android
+          - player-watchdog-android
       source_ref:
         description: Branch / tag / commit to build
         required: true
@@ -353,4 +355,228 @@ jobs:
           target_commitish: ${{ inputs.source_ref }}
           prerelease: ${{ inputs.prerelease }}
           files: Player/Android/app/build/outputs/apk/release/app-release.apk
+          overwrite_files: true
+
+  build-player-launcher-android:
+    if: ${{ inputs.project == 'player-launcher-android' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          lfs: true
+
+      - name: Setup JDK 17 for sdkmanager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: pwsh
+        run: |
+          $tagInput = "${{ inputs.release_tag }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($tagInput)) {
+            $latest = git ls-remote --tags --refs origin "v*" |
+              ForEach-Object { ($_ -split '\s+')[1] } |
+              ForEach-Object { $_ -replace '^refs/tags/', '' } |
+              Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+              ForEach-Object { $_.Substring(1) } |
+              ForEach-Object { [version]$_ } |
+              Sort-Object |
+              Select-Object -Last 1
+
+            if ($null -eq $latest) {
+              $next = [version]"1.0.0"
+            } else {
+              $next = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
+            }
+            $tag = "v$next"
+          } else {
+            $tag = $tagInput
+          }
+
+          $artifactSuffix = ($tag -replace '[^0-9A-Za-z._-]+', '-')
+          if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
+            $artifactSuffix = "run-${{ github.run_number }}"
+          }
+
+          $repoName = "${{ github.repository }}".Split('/')[1]
+          $nameInput = "${{ inputs.release_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($nameInput)) {
+            $name = $repoName
+          } else {
+            $name = $nameInput
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
+
+      - name: Setup Android SDK environment
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --version
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-22" "build-tools;29.0.2" "ndk;26.1.10909125"
+
+      - name: Setup JDK 11 for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Build TurtleLauncher Android (Release APK)
+        working-directory: Player/TurtleLauncher
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon clean :LaLauncher:assembleRelease -x lintVitalRelease -x lint
+
+      - name: Resolve TurtleLauncher APK path
+        id: launcher_apk
+        run: |
+          APK_PATH=$(find Player/TurtleLauncher/LaLauncher/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" | head -n 1)
+          test -n "$APK_PATH"
+          test -f "$APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload TurtleLauncher Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-launcher-android-manual-${{ steps.release_meta.outputs.artifact_suffix }}
+          path: ${{ steps.launcher_apk.outputs.apk_path }}
+          if-no-files-found: warn
+
+      - name: Collect TurtleLauncher APK as release asset
+        run: |
+          mkdir -p release-assets
+          cp "${{ steps.launcher_apk.outputs.apk_path }}" "release-assets/player-launcher-android-manual-${{ steps.release_meta.outputs.artifact_suffix }}.apk"
+
+      - name: Attach TurtleLauncher Android APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          name: ${{ steps.release_meta.outputs.name }}
+          target_commitish: ${{ inputs.source_ref }}
+          prerelease: ${{ inputs.prerelease }}
+          files: release-assets/player-launcher-android-manual-${{ steps.release_meta.outputs.artifact_suffix }}.apk
+          overwrite_files: true
+
+  build-player-watchdog-android:
+    if: ${{ inputs.project == 'player-watchdog-android' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          lfs: true
+
+      - name: Setup JDK 17 for sdkmanager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: pwsh
+        run: |
+          $tagInput = "${{ inputs.release_tag }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($tagInput)) {
+            $latest = git ls-remote --tags --refs origin "v*" |
+              ForEach-Object { ($_ -split '\s+')[1] } |
+              ForEach-Object { $_ -replace '^refs/tags/', '' } |
+              Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+              ForEach-Object { $_.Substring(1) } |
+              ForEach-Object { [version]$_ } |
+              Sort-Object |
+              Select-Object -Last 1
+
+            if ($null -eq $latest) {
+              $next = [version]"1.0.0"
+            } else {
+              $next = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
+            }
+            $tag = "v$next"
+          } else {
+            $tag = $tagInput
+          }
+
+          $artifactSuffix = ($tag -replace '[^0-9A-Za-z._-]+', '-')
+          if ([string]::IsNullOrWhiteSpace($artifactSuffix)) {
+            $artifactSuffix = "run-${{ github.run_number }}"
+          }
+
+          $repoName = "${{ github.repository }}".Split('/')[1]
+          $nameInput = "${{ inputs.release_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($nameInput)) {
+            $name = $repoName
+          } else {
+            $name = $nameInput
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "artifact_suffix=$artifactSuffix" >> $env:GITHUB_OUTPUT
+
+      - name: Setup Android SDK environment
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --version
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-22" "build-tools;29.0.2" "ndk;26.1.10909125"
+
+      - name: Setup JDK 11 for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Build WatchDog Android (Release APK)
+        working-directory: Player/WatchDog_4launcher
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon clean :app:assembleRelease -x lintVitalRelease -x lint
+
+      - name: Resolve WatchDog APK path
+        id: watchdog_apk
+        run: |
+          APK_PATH=$(find Player/WatchDog_4launcher/app/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" | head -n 1)
+          test -n "$APK_PATH"
+          test -f "$APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload WatchDog Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-watchdog-android-manual-${{ steps.release_meta.outputs.artifact_suffix }}
+          path: ${{ steps.watchdog_apk.outputs.apk_path }}
+          if-no-files-found: warn
+
+      - name: Collect WatchDog APK as release asset
+        run: |
+          mkdir -p release-assets
+          cp "${{ steps.watchdog_apk.outputs.apk_path }}" "release-assets/player-watchdog-android-manual-${{ steps.release_meta.outputs.artifact_suffix }}.apk"
+
+      - name: Attach WatchDog Android APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          name: ${{ steps.release_meta.outputs.name }}
+          target_commitish: ${{ inputs.source_ref }}
+          prerelease: ${{ inputs.prerelease }}
+          files: release-assets/player-watchdog-android-manual-${{ steps.release_meta.outputs.artifact_suffix }}.apk
           overwrite_files: true
