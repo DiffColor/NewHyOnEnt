@@ -44,21 +44,17 @@ public final class UpdateQueueContract {
     }
 
     public static final class RetryPolicy {
-        public static final int MAX_ATTEMPTS = 3;
-        private static final long FIRST_DELAY_MS = 15_000L;
-        private static final long SECOND_DELAY_MS = 30_000L;
-        private static final long THIRD_DELAY_MS = 45_000L;
+        // Windows UpdateService와 동일: 30s → 60s → 120s → 180s(상한)
+        public static final int MAX_ATTEMPTS = Integer.MAX_VALUE;
+        private static final long BASE_DELAY_MS = 30_000L;
+        private static final long MAX_DELAY_MS = 180_000L;
 
         private RetryPolicy() { }
 
         public static long getDelayMs(int attemptIndex) {
-            if (attemptIndex <= 1) {
-                return FIRST_DELAY_MS;
-            } else if (attemptIndex == 2) {
-                return SECOND_DELAY_MS;
-            } else {
-                return THIRD_DELAY_MS;
-            }
+            int idx = Math.max(1, attemptIndex);
+            double delay = BASE_DELAY_MS * Math.pow(2, Math.max(0, idx - 1));
+            return (long) Math.min(delay, MAX_DELAY_MS);
         }
     }
 
@@ -129,10 +125,41 @@ public final class UpdateQueueContract {
     }
 
     public static final class DownloadStatus {
+        public static final String QUEUED = "QUEUED";
+        public static final String DOWNLOADING = "DOWNLOADING";
+        public static final String DONE = "DONE";
+        public static final String FAILED = "FAILED";
+        private DownloadStatus() { }
+    }
+
+    /**
+     * Windows UpdateQueue 다운로드 JSON과 동일한 구조.
+     */
+    public static final class DownloadEntry {
+        public String FileName;
+        public String RemotePath;
+        public long SizeBytes;
+        public String Checksum;
+        public String Status = DownloadStatus.QUEUED;
+        public int Attempts;
+        public String LastError = "";
+        public List<DownloadChunk> Chunks = new ArrayList<>();
+    }
+
+    public static final class DownloadChunk {
+        public int Index;
+        public long Offset;
+        public long Length;
+        public String Status = ChunkStatus.PENDING;
+        public long DownloadedBytes;
+        public long LastUpdatedTicks;
+    }
+
+    public static final class ChunkStatus {
         public static final String PENDING = "pending";
         public static final String DOWNLOADING = "downloading";
         public static final String DONE = "done";
         public static final String FAILED = "failed";
-        private DownloadStatus() { }
+        private ChunkStatus() { }
     }
 }

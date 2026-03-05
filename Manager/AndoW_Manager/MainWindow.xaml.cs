@@ -261,23 +261,6 @@ namespace AndoW_Manager
         {
         }
 
-        public void SendMsgToAndroid(string playername, string msg)
-        {
-            if (string.IsNullOrWhiteSpace(playername) || string.IsNullOrWhiteSpace(msg))
-            {
-                return;
-            }
-            
-            try
-            {
-                DataShop.Instance.g_PlayerInfoManager.SetPendingCommand(playername, msg);
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog($"SendMsgToAndroid failed. player={playername}, msg={msg}, ex={ex}", Logger.GetLogFileName());
-            }
-        }
-
         public bool EnqueueCommandForPlayer(PlayerInfoClass player, string command, string payloadBase64 = "", bool pushSignalR = true)
         {
             if (player == null || string.IsNullOrWhiteSpace(player.PIF_GUID) || string.IsNullOrWhiteSpace(command))
@@ -291,12 +274,6 @@ namespace AndoW_Manager
                 && string.Equals(normalizedCommand, RP_ORDER.updateschedule.ToString(), StringComparison.OrdinalIgnoreCase))
             {
                 resolvedPayload = BuildSchedulePayloadBase64(player);
-            }
-
-            if (IsAndroidPlayer(player))
-            {
-                SendMsgToAndroid(player.PIF_PlayerName, normalizedCommand);
-                return true;
             }
 
             var queueManager = DataShop.Instance.g_CommandQueueManager;
@@ -335,12 +312,6 @@ namespace AndoW_Manager
                 return false;
             }
 
-            if (IsAndroidPlayer(player))
-            {
-                SendMsgToAndroid(player.PIF_PlayerName, RP_ORDER.updatelist.ToString());
-                return true;
-            }
-
             if (!SignalRClientTools.IsConnected())
             {
                 return false;
@@ -358,16 +329,6 @@ namespace AndoW_Manager
             };
 
             return SignalRClientTools.TrySendCommandToClient(player.PIF_GUID, envelope);
-        }
-
-        private static bool IsAndroidPlayer(PlayerInfoClass player)
-        {
-            if (player == null || string.IsNullOrWhiteSpace(player.PIF_OSName))
-            {
-                return false;
-            }
-
-            return player.PIF_OSName.IndexOf("android", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string BuildSchedulePayloadBase64(PlayerInfoClass player)

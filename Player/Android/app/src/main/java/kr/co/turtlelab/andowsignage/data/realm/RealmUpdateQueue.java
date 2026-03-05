@@ -27,6 +27,7 @@ public class RealmUpdateQueue extends RealmObject {
     private long expiresAt;
     private int retryCount;
     private long nextRetryAt;
+    private boolean scheduleQueue;
 
     public long getId() {
         return id;
@@ -158,5 +159,13 @@ public class RealmUpdateQueue extends RealmObject {
 
     public void setNextRetryAt(long nextRetryAt) {
         this.nextRetryAt = nextRetryAt;
+    }
+
+    public boolean isScheduleQueue() {
+        return scheduleQueue;
+    }
+
+    public void setScheduleQueue(boolean scheduleQueue) {
+        this.scheduleQueue = scheduleQueue;
     }
 }

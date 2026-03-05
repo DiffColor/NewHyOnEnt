@@ -45,8 +45,7 @@ namespace TurtleTools
             }
 
             bool isDisconnected = string.Equals(payload.Status, "disconnected", StringComparison.OrdinalIgnoreCase);
-            DateTime receivedAt = DateTime.Now;
-            DateTime? heartbeat = isDisconnected ? (DateTime?)null : receivedAt;
+            DateTime? heartbeat = isDisconnected ? (DateTime?)null : DateTime.Now;
             double progress = NormalizeHeartbeatProcess(payload.Process);
             var state = new PlayerHeartbeatState(
                 payload.ClientId.Trim(),
@@ -179,7 +178,7 @@ namespace TurtleTools
 
         private static Dictionary<string, PlayerHeartbeatState> NormalizeStates(Dictionary<string, PlayerHeartbeatState> latestStates)
         {
-            var now = DateTime.Now;
+            DateTime now = DateTime.Now;
             var normalized = new Dictionary<string, PlayerHeartbeatState>(latestStates.Count, StringComparer.OrdinalIgnoreCase);
             foreach (var kv in latestStates)
             {
@@ -194,6 +193,7 @@ namespace TurtleTools
             {
                 return null;
             }
+
             if (!state.LastHeartbeat.HasValue || now - state.LastHeartbeat.Value >= OfflineThreshold)
             {
                 return PlayerHeartbeatState.CreateOffline(state.ClientId, state.Version);

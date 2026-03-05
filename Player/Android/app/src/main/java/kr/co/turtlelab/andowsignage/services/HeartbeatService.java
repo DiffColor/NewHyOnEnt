@@ -5,41 +5,67 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
 import android.text.TextUtils;
+import android.util.Log;
 
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
+import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.tools.LightestTimer;
 import kr.co.turtlelab.andowsignage.tools.PowerApi;
 
 public class HeartbeatService extends Service {
+    private static final String TAG = "HeartbeatService";
+    private static final int RETHINK_PORT = 28015;
+    private static final int CONNECT_TIMEOUT_MS = 1000;
+    private static final long RECONNECT_SKIP_MS = 5000L;
 
     public static final String EXTRA_INTERVAL_MS = "kr.co.turtlelab.andowsignage.services.EXTRA_HEARTBEAT_INTERVAL";
     public static final String ACTION_SEND_STOPPED = "kr.co.turtlelab.andowsignage.services.action.SEND_HEARTBEAT_STOPPED";
+    public static final String ACTION_SEND_NOW = "kr.co.turtlelab.andowsignage.services.action.SEND_HEARTBEAT_NOW";
     private static final long DEFAULT_INTERVAL_MS = 5000L;
     private static final long MIN_INTERVAL_MS = 1000L;
+    private static final long CLIENT_ID_REFRESH_MS = 5000L;
 
     private final IBinder binder = new LocalBinder();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private LightestTimer heartbeatTimer;
     private long intervalMs = DEFAULT_INTERVAL_MS;
+    private SignalRClientService signalRClient;
+    private volatile String cachedClientId = "";
+    private volatile long lastClientIdResolveAt = 0L;
+    private volatile String activeRethinkHost = "";
+    private volatile long reconnectBlockedUntilMs = 0L;
 
     @Override
     public void onCreate() {
         super.onCreate();
         heartbeatTimer = new LightestTimer((int) intervalMs, this::scheduleHeartbeat);
+        signalRClient = SignalRClientService.getShared(null);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        updateEndpointFromSettings();
         if (intent != null && ACTION_SEND_STOPPED.equals(intent.getAction())) {
-            triggerHeartbeatStopNow();
-            return START_STICKY;
+            executor.execute(() -> {
+                ensureSignalRReady();
+                publishHeartbeatStopped();
+            });
+            return START_NOT_STICKY;
         }
+        if (intent != null && ACTION_SEND_NOW.equals(intent.getAction())) {
+            executor.execute(() -> {
+                ensureSignalRReady();
+                publishHeartbeat(true);
+            });
+            return START_NOT_STICKY;
+        }
+        executor.execute(this::ensureSignalRReady);
         if (intent != null && intent.hasExtra(EXTRA_INTERVAL_MS)) {
             long requested = intent.getLongExtra(EXTRA_INTERVAL_MS, intervalMs);
             updateIntervalInternal(requested);
@@ -94,23 +120,40 @@ public class HeartbeatService extends Service {
     }
 
     private void triggerHeartbeatNow() {
-        executor.execute(this::publishHeartbeat);
+        executor.execute(() -> publishHeartbeat(false));
+    }
+
+    private void ensureSignalRReady() {
+        updateEndpointFromSettings();
+        if (signalRClient != null) {
+            signalRClient.start();
+        }
     }
 
     private void updateEndpointFromSettings() {
-        String host = AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(AndoWSignageApp.MANUAL_IP)
-                ? AndoWSignageApp.MANUAL_IP
-                : AndoWSignageApp.MANAGER_IP;
+        String host;
+        if (AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(AndoWSignageApp.MANUAL_IP)) {
+            host = AndoWSignageApp.MANUAL_IP;
+        } else {
+            String dataServerIp = LocalSettingsProvider.getDataServerIp();
+            host = TextUtils.isEmpty(dataServerIp) ? AndoWSignageApp.MANAGER_IP : dataServerIp;
+        }
+        activeRethinkHost = host == null ? "" : host;
         if (!TextUtils.isEmpty(host)) {
             RethinkDbClient.getInstance().updateHost(host);
         }
     }
 
     public void publishHeartbeat() {
-        String clientId = resolveClientGuid();
+        publishHeartbeat(false);
+    }
+
+    private void publishHeartbeat(boolean forceGuidRefresh) {
+        String clientId = resolveClientId(forceGuidRefresh);
         if (TextUtils.isEmpty(clientId)) {
             return;
         }
+        String playerName = resolvePlayerName();
         String status = AndoWSignageApp.state;
         int process = parseProcess(AndoWSignageApp.process);
         // 업데이트 큐 진행 중이면 Heartbeat에도 반영
@@ -130,42 +173,36 @@ public class HeartbeatService extends Service {
         String hdmiState = quberHdmi != null
                 ? Boolean.toString(quberHdmi)
                 : Boolean.toString(!AndoWSignageApp.isSlept);
-
-        RethinkDbClient.getInstance().sendHeartbeat(
-                clientId,
-                status,
-                process,
-                version,
-                currentPage,
-                hdmiState);
-    }
-
-    private void triggerHeartbeatStopNow() {
-        executor.execute(this::publishHeartbeatStopped);
+        if (signalRClient != null) {
+            SignalRClientService.HeartbeatPayload payload = SignalRClientService.HeartbeatPayload.create(
+                    clientId,
+                    status,
+                    process,
+                    version,
+                    currentPage,
+                    Boolean.parseBoolean(hdmiState));
+            payload.PlayerName = playerName;
+            signalRClient.sendHeartbeat(payload);
+        }
     }
 
     public void publishHeartbeatStopped() {
-        String clientId = resolveClientGuid();
+        String clientId = resolveClientId(true);
         if (TextUtils.isEmpty(clientId)) {
             return;
         }
-
-        RethinkDbClient.getInstance().sendHeartbeatStopped(clientId, AndoWSignageApp.version);
-    }
-
-    private String resolveClientGuid() {
-        RethinkDbClient client = RethinkDbClient.getInstance();
-        String clientId = client.getCachedPlayerGuid();
-        if (TextUtils.isEmpty(clientId)) {
-            String storedPlayerName = client.getStoredPlayerName();
-            if (!TextUtils.isEmpty(storedPlayerName)) {
-                clientId = client.ensurePlayerGuid(storedPlayerName);
-            }
+        String playerName = resolvePlayerName();
+        if (signalRClient != null) {
+            SignalRClientService.HeartbeatPayload payload = SignalRClientService.HeartbeatPayload.create(
+                    clientId,
+                    "stopped",
+                    0,
+                    AndoWSignageApp.version,
+                    "",
+                    false);
+            payload.PlayerName = playerName;
+            signalRClient.sendHeartbeat(payload);
         }
-        if (TextUtils.isEmpty(clientId)) {
-            clientId = client.ensurePlayerGuid();
-        }
-        return clientId;
     }
 
 
@@ -175,9 +212,65 @@ public class HeartbeatService extends Service {
         }
         try {
             return Integer.parseInt(processValue);
-        } catch (NumberFormatException ignore) {
+        } catch (NumberFormatException ex) {
+            Log.w(TAG, "parseProcess: invalid process value=" + processValue, ex);
             return 0;
         }
+    }
+
+    private String resolveClientId(boolean forceRefresh) {
+        long now = System.currentTimeMillis();
+        if (!forceRefresh && !TextUtils.isEmpty(cachedClientId) && (now - lastClientIdResolveAt) < CLIENT_ID_REFRESH_MS) {
+            return cachedClientId;
+        }
+        String previousClientId = cachedClientId;
+        String resolved = RethinkDbClient.getInstance().getStoredPlayerGuid();
+        if (TextUtils.isEmpty(resolved) && canAttemptCommunicationNow() && canReachRethink(activeRethinkHost)) {
+            resolved = RethinkDbClient.getInstance().ensurePlayerGuid();
+        } else if (TextUtils.isEmpty(resolved)) {
+            blockReconnectTemporarily();
+        }
+        if (TextUtils.isEmpty(resolved)) {
+            resolved = previousClientId;
+        }
+        if (!TextUtils.isEmpty(resolved)) {
+            boolean guidChanged = !TextUtils.isEmpty(previousClientId)
+                    && !previousClientId.equalsIgnoreCase(resolved);
+            cachedClientId = resolved;
+            lastClientIdResolveAt = now;
+            if (guidChanged && signalRClient != null) {
+                signalRClient.reconnect();
+            }
+        }
+        return resolved;
+    }
+
+    private boolean canAttemptCommunicationNow() {
+        return System.currentTimeMillis() >= reconnectBlockedUntilMs;
+    }
+
+    private void blockReconnectTemporarily() {
+        reconnectBlockedUntilMs = System.currentTimeMillis() + RECONNECT_SKIP_MS;
+    }
+
+    private boolean canReachRethink(String host) {
+        if (TextUtils.isEmpty(host)) {
+            return false;
+        }
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(host, RETHINK_PORT), CONNECT_TIMEOUT_MS);
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    private String resolvePlayerName() {
+        String stored = RethinkDbClient.getInstance().getStoredPlayerName();
+        if (!TextUtils.isEmpty(stored)) {
+            return stored;
+        }
+        return TextUtils.isEmpty(AndoWSignageApp.PLAYER_ID) ? "" : AndoWSignageApp.PLAYER_ID;
     }
 
     public class LocalBinder extends Binder {

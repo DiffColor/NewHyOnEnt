@@ -195,7 +195,7 @@ namespace HyOnPlayer
                 }
                 catch (Exception ex)
                 {
-                    Logger.WriteErrorLog($"SignalR heartbeat send failed: {ex.Message}", Logger.GetLogFileName());
+                    Logger.WriteErrorLog($"SignalR heartbeat send failed: {ex}", Logger.GetLogFileName());
                     ScheduleReconnect(allowStartWhenDisconnected: true);
                 }
             });

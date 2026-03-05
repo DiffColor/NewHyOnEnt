@@ -9,6 +9,7 @@ namespace AndoWSettings
 {
     public class ServerSettingsManager
     {
+        private const string DefaultFtpRootPath = "/NewHyOnEnt";
         public ServerSettings sData { get; private set; }
         private const string CollectionName = "ServerSettings";
         private static readonly RethinkDB R = RethinkDB.R;
@@ -44,6 +45,7 @@ namespace AndoWSettings
                     sData.MessageServerIp = "127.0.0.1";
                 }
 
+                sData.FTP_RootPath = NormalizeFtpRootPath(sData.FTP_RootPath);
                 collection.Upsert(sData);
             }
 
@@ -56,6 +58,9 @@ namespace AndoWSettings
             {
                 return;
             }
+
+            settings.Id = 0;
+            settings.FTP_RootPath = NormalizeFtpRootPath(settings.FTP_RootPath);
 
             using (var db = LocalDbContext.OpenDatabase())
             {
@@ -116,6 +121,23 @@ namespace AndoWSettings
             {
                 Logger.WriteErrorLog($"RethinkDB upsert failed: {ex}", Logger.GetLogFileName());
             }
+        }
+
+        private static string NormalizeFtpRootPath(string rootPath)
+        {
+            if (string.IsNullOrWhiteSpace(rootPath))
+            {
+                return DefaultFtpRootPath;
+            }
+
+            string normalized = rootPath.Replace("\\", "/").Trim();
+            if (!normalized.StartsWith("/"))
+            {
+                normalized = "/" + normalized;
+            }
+
+            normalized = normalized.TrimEnd('/');
+            return string.IsNullOrWhiteSpace(normalized) ? "/" : normalized;
         }
     }
 

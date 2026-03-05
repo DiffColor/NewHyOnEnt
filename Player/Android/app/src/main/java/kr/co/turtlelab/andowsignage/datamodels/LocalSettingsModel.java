@@ -9,6 +9,14 @@ public class LocalSettingsModel {
     String playerId = "";
     String managerIp = "";
     String manualIp = "";
+    int signalrPort = 0;
+    String signalrHubPath = "";
+    String dataServerIp = "";
+    String messageServerIp = "";
+    int ftpPort = 0;
+    int ftpPasvMinPort = 0;
+    int ftpPasvMaxPort = 0;
+    String ftpRootPath = "";
 
 	
 	/*
@@ -41,6 +49,38 @@ public class LocalSettingsModel {
     public void setManualIp(String ip) {
         manualIp = ip == null ? "" : ip;
     }
+
+    public void setSignalrPort(int port) {
+        signalrPort = port;
+    }
+
+    public void setSignalrHubPath(String path) {
+        signalrHubPath = path == null ? "" : path;
+    }
+
+    public void setDataServerIp(String ip) {
+        dataServerIp = ip == null ? "" : ip;
+    }
+
+    public void setMessageServerIp(String ip) {
+        messageServerIp = ip == null ? "" : ip;
+    }
+
+    public void setFtpPort(int port) {
+        ftpPort = port;
+    }
+
+    public void setFtpPasvMinPort(int port) {
+        ftpPasvMinPort = port;
+    }
+
+    public void setFtpPasvMaxPort(int port) {
+        ftpPasvMaxPort = port;
+    }
+
+    public void setFtpRootPath(String path) {
+        ftpRootPath = path == null ? "" : path;
+    }
 		
 	/*
 	 * Getter Methods
@@ -72,5 +112,37 @@ public class LocalSettingsModel {
     public String getManualIp() {
         return manualIp;
     }
-	
+
+    public int getSignalrPort() {
+        return signalrPort;
+    }
+
+    public String getSignalrHubPath() {
+        return signalrHubPath;
+    }
+
+    public String getDataServerIp() {
+        return dataServerIp;
+    }
+
+    public String getMessageServerIp() {
+        return messageServerIp;
+    }
+
+    public int getFtpPort() {
+        return ftpPort;
+    }
+
+    public int getFtpPasvMinPort() {
+        return ftpPasvMinPort;
+    }
+
+    public int getFtpPasvMaxPort() {
+        return ftpPasvMaxPort;
+    }
+
+    public String getFtpRootPath() {
+        return ftpRootPath;
+    }
+
 }

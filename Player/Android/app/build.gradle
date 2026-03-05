@@ -1,21 +1,25 @@
 apply plugin: 'com.android.application'
 apply plugin: 'realm-android'
 
+def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: "${projectDir}/libs/platform.jks"
+def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "zbqj2636"
+def keyAliasValue = System.getenv("ANDROID_KEY_ALIAS") ?: "quber"
+def keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD") ?: "zbqj2636"
+
 android {
     ndkVersion "26.1.10909125"
-    def localKeystore = file("$projectDir/libs/platform.jks")
     signingConfigs {
         debug {
-            storePassword 'zbqj2636'
-            keyAlias = 'quber'
-            keyPassword 'zbqj2636'
-            storeFile localKeystore
+            storeFile file(keystorePath)
+            storePassword keystorePassword
+            keyAlias keyAliasValue
+            keyPassword keyPasswordValue
         }
         release {
-            storePassword 'zbqj2636'
-            keyAlias = 'quber'
-            keyPassword 'zbqj2636'
-            storeFile localKeystore
+            storeFile file(keystorePath)
+            storePassword keystorePassword
+            keyAlias keyAliasValue
+            keyPassword keyPasswordValue
         }
     }
     compileSdkVersion 22
@@ -40,6 +44,12 @@ android {
     }
 }
 
+repositories {
+    flatDir {
+        dirs 'libs'
+    }
+}
+
 dependencies {
     implementation 'com.android.support:support-v4:22.0.0'
     implementation 'com.google.code.gson:gson:2.2.4'
@@ -47,4 +57,7 @@ dependencies {
     implementation files('libs/universal-image-loader-1.9.3.jar')
     implementation files('libs/commons-io-2.6.jar')
     implementation 'com.rethinkdb:rethinkdb-driver:2.4.4'
+    // Legacy ASP.NET SignalR client (Windows와 동일 프로토콜)
+    implementation files('libs/signalr-client-sdk.jar')
+    implementation(name: 'signalr-client-sdk-android-debug', ext: 'aar')
 }

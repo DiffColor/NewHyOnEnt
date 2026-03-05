@@ -1,5 +1,6 @@
 package kr.co.turtlelab.andowsignage.dataproviders;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,6 +9,7 @@ import kr.co.turtlelab.andowsignage.data.realm.RealmContent;
 import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
 import kr.co.turtlelab.andowsignage.datamodels.MediaDataModel;
+import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 
 public class MediaDataProvider {
 
@@ -41,7 +43,12 @@ public class MediaDataProvider {
             for (RealmContent realmContent : target.getContents()) {
                 MediaDataModel mdm = new MediaDataModel();
                 if (realmContent.getFileFullPath() != null && !realmContent.getFileFullPath().isEmpty()) {
-                    mdm.setFilePath(realmContent.getFileFullPath());
+                    String path = realmContent.getFileFullPath();
+                    File file = new File(path);
+                    if (!file.exists() && realmContent.getFileName() != null && !realmContent.getFileName().isEmpty()) {
+                        path = LocalPathUtils.getContentPath(realmContent.getFileName());
+                    }
+                    mdm.setFilePath(path);
                 } else if (realmContent.getFileName() != null) {
                     mdm.setFileName(realmContent.getFileName());
                 }

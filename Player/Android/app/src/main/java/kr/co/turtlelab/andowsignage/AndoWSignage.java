@@ -553,6 +553,7 @@ public class AndoWSignage extends Activity {
 				AndoWSignageApp.MANUAL_IP = localSettings.getManualIp();
 			}
 		}
+		LocalSettingsProvider.applyStoredCommunicationSettings();
 	}
 
 	private void registerRcv() {
@@ -1378,14 +1379,14 @@ public class AndoWSignage extends Activity {
 			ContentDownloadJournal journal = ContentDownloadJournal.fromJson(queue.getDownloadContentsJson());
 			if (journal != null) {
 				journal.ensureDefaults();
-				List<UpdateQueueContract.DownloadContentEntry> entries = journal.getEntries();
+				List<UpdateQueueContract.DownloadEntry> entries = journal.getEntries();
 				int total = entries.size();
 				int completed = 0;
 				int active = 0;
 				int failed = 0;
-				for (UpdateQueueContract.DownloadContentEntry entry : entries) {
+				for (UpdateQueueContract.DownloadEntry entry : entries) {
 					if (entry == null) continue;
-					String status = entry.status == null ? "" : entry.status;
+					String status = entry.Status == null ? "" : entry.Status;
 					if (UpdateQueueContract.DownloadStatus.DONE.equalsIgnoreCase(status)) completed++;
 					else if (UpdateQueueContract.DownloadStatus.FAILED.equalsIgnoreCase(status)) failed++;
 					else if (UpdateQueueContract.DownloadStatus.DOWNLOADING.equalsIgnoreCase(status)) active++;

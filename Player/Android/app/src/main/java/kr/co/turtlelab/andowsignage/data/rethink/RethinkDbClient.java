@@ -2,6 +2,7 @@ package kr.co.turtlelab.andowsignage.data.rethink;
 
 import android.os.Build;
 import android.text.TextUtils;
+import android.util.Log;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -29,7 +30,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.realm.Realm;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
@@ -43,6 +46,7 @@ import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
  * 모든 호출은 UpdateManagerService 의 워커 스레드에서 수행되므로 별도 스레드 처리는 하지 않는다.
  */
 public class RethinkDbClient {
+    private static final String TAG = "RethinkDbClient";
 
     private static final String DATABASE = "NewHyOn";
     private static final String TABLE_PLAYER = "PlayerInfoManager";
@@ -53,6 +57,10 @@ public class RethinkDbClient {
     private static final String TABLE_HEARTBEAT = "ClientHeartbeat";
     private static final String TABLE_UPDATE_QUEUE = "UpdateQueue";
     private static final String TABLE_COMMAND_HISTORY = "CommandHistory";
+    private static final String TABLE_SERVER_SETTINGS = "ServerSettings";
+    private static final int QUERY_RETRY_COUNT_ON_RESTART = 1;
+    private static final long QUERY_RETRY_DELAY_MS = 100L;
+    private static final long CONNECTION_RETRY_DELAY_MS = 5000L;
 
     private static final RethinkDB R = RethinkDB.r;
 
@@ -71,6 +79,9 @@ public class RethinkDbClient {
     private boolean deviceInfoSyncInProgress = false;
     private String lastSyncedPlayerGuid = null;
     private boolean guidVerified = false;
+    private volatile long lastGuidVerificationEpochMs = 0L;
+    private static final long GUID_VERIFICATION_INTERVAL_MS = 5000L;
+    private final AtomicBoolean postConnectInitInProgress = new AtomicBoolean(false);
     private final Object heartbeatTableLock = new Object();
     private volatile boolean heartbeatTableReady = false;
     private final Object updateQueueTableLock = new Object();
@@ -90,54 +101,127 @@ public class RethinkDbClient {
     }
 
     private Connection getConnection() {
-        synchronized (connectionLock) {
-            if (connection == null || !connection.isOpen()) {
-                connection = R.connection()
-                        .hostname(host)
-                        .port(port)
-                        .user(username, password)
+        while (true) {
+            boolean shouldInitialize = false;
+            Connection current;
+            String targetHost;
+            int targetPort;
+            String targetUser;
+            String targetPassword;
+            synchronized (connectionLock) {
+                if (connection != null && connection.isOpen()) {
+                    return connection;
+                }
+                targetHost = host;
+                targetPort = port;
+                targetUser = username;
+                targetPassword = password;
+            }
+
+            Connection connected = null;
+            try {
+                connected = R.connection()
+                        .hostname(targetHost)
+                        .port(targetPort)
+                        .user(targetUser, targetPassword)
+                        .timeout(3000L)
                         .connect();
+            } catch (Exception ex) {
+                Log.w(TAG, "RethinkDbClient: connection failed. retrying in " + CONNECTION_RETRY_DELAY_MS + "ms", ex);
+                sleepQuietly(CONNECTION_RETRY_DELAY_MS);
+                continue;
+            }
+
+            synchronized (connectionLock) {
+                if (connection != null && connection.isOpen()) {
+                    closeConnectionQuietly(connected);
+                    return connection;
+                }
+
+                String latestHost = host == null ? "" : host.trim();
+                String connectedHost = targetHost == null ? "" : targetHost.trim();
+                if (!latestHost.equalsIgnoreCase(connectedHost)
+                        || port != targetPort
+                        || !safeEquals(username, targetUser)
+                        || !safeEquals(password, targetPassword)) {
+                    closeConnectionQuietly(connected);
+                    continue;
+                }
+
+                connection = connected;
                 synchronized (deviceInfoLock) {
                     deviceInfoSynced = false;
                     deviceInfoSyncInProgress = false;
                     lastSyncedPlayerGuid = null;
                 }
                 guidVerified = false;
-                updateDeviceInfoIfNeeded();
-                fetchInitialWeeklySchedule();
+                lastGuidVerificationEpochMs = 0L;
+                shouldInitialize = true;
+                current = connection;
             }
-            return connection;
+
+            if (shouldInitialize) {
+                runPostConnectInitializationAsync();
+            }
+            return current;
         }
+    }
+
+    private void runPostConnectInitializationAsync() {
+        if (postConnectInitInProgress.getAndSet(true)) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                try {
+                    updateDeviceInfoIfNeeded();
+                } catch (Exception ex) {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
+                }
+                try {
+                    fetchInitialWeeklySchedule();
+                } catch (Exception ex) {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
+                }
+            } finally {
+                postConnectInitInProgress.set(false);
+            }
+        }, "RethinkDbInit").start();
     }
 
     public void updateHost(String newHost) {
         if (newHost == null || newHost.isEmpty()) {
             return;
         }
+        String normalizedNewHost = newHost.trim();
+        if (normalizedNewHost.isEmpty()) {
+            return;
+        }
         synchronized (connectionLock) {
-            host = newHost;
+            String normalizedCurrentHost = host == null ? "" : host.trim();
+            if (!normalizedCurrentHost.isEmpty() &&
+                    normalizedCurrentHost.equalsIgnoreCase(normalizedNewHost)) {
+                return;
+            }
+            host = normalizedNewHost;
             if (connection != null) {
                 try {
                     connection.close();
-                } catch (Exception ignore) {
+                } catch (Exception ex) {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
                 }
                 connection = null;
             }
+            guidVerified = false;
+            lastGuidVerificationEpochMs = 0L;
         }
-    }
-
-    private RethinkModels.PlayerInfoRecord fetchPlayerByNameOrGuid(String playerKey) {
-        if (TextUtils.isEmpty(playerKey)) {
-            return null;
-        }
-        RethinkModels.PlayerInfoRecord record = fetchPlayer(playerKey);
-        if (record != null && !TextUtils.isEmpty(record.getGuid())) {
-            return record;
-        }
-        return fetchPlayerByGuid(playerKey);
     }
 
     public RethinkModels.PlayerInfoRecord fetchPlayer(String playerName) {
+        return fetchPlayerInternal(playerName, true);
+    }
+
+    private RethinkModels.PlayerInfoRecord fetchPlayerInternal(String playerName, boolean persistSkeleton) {
         if (playerName == null || playerName.isEmpty()) {
             return null;
         }
@@ -151,7 +235,9 @@ public class RethinkDbClient {
             return null;
         }
         RethinkModels.PlayerInfoRecord record = convert(result.get(0), RethinkModels.PlayerInfoRecord.class);
-        saveRealmPlayerSkeleton(record);
+        if (persistSkeleton) {
+            saveRealmPlayerSkeleton(record);
+        }
         return record;
     }
 
@@ -197,7 +283,8 @@ public class RethinkDbClient {
                     .get(playerGuid)
                     .update(R.hashMap("command", ""))
                     .runNoReply(getConnection());
-        } catch (Exception ignore) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
     }
 
@@ -274,11 +361,42 @@ public class RethinkDbClient {
         return convert(map, RethinkModels.WeeklyScheduleRecord.class);
     }
 
+    public RethinkModels.ServerSettingsRecord fetchServerSettings() {
+        Map map = runSingle(R.db(DATABASE)
+                .table(TABLE_SERVER_SETTINGS)
+                .get(0));
+        if (map == null || map.isEmpty()) {
+            map = runSingle(R.db(DATABASE)
+                    .table(TABLE_SERVER_SETTINGS)
+                    .get("0"));
+        }
+        if (map == null || map.isEmpty()) {
+            List<Map> fallbackRows = runList(R.db(DATABASE)
+                    .table(TABLE_SERVER_SETTINGS)
+                    .limit(1));
+            if (!fallbackRows.isEmpty()) {
+                map = fallbackRows.get(0);
+            }
+        }
+        if (map == null || map.isEmpty()) {
+            return null;
+        }
+        return convert(map, RethinkModels.ServerSettingsRecord.class);
+    }
+
     public void updatePlayerDeviceInfo(String playerId, String ip, String mac, String osName) {
         if (playerId == null || playerId.isEmpty()) {
             return;
         }
         Map<String, Object> values = new HashMap<>();
+        values.put("id", playerId);
+        String playerName = getStoredPlayerName();
+        if (TextUtils.isEmpty(playerName)) {
+            playerName = AndoWSignageApp.PLAYER_ID;
+        }
+        if (!TextUtils.isEmpty(playerName)) {
+            values.put("PIF_PlayerName", playerName.trim());
+        }
         if (!TextUtils.isEmpty(ip)) {
             values.put("PIF_IPAddress", ip);
         }
@@ -294,10 +412,11 @@ public class RethinkDbClient {
         try {
             R.db(DATABASE)
                     .table(TABLE_PLAYER)
-                    .get(playerId)
-                    .update(values)
+                    .insert(values)
+                    .optArg("conflict", "update")
                     .runNoReply(getConnection());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
     }
 
@@ -320,15 +439,16 @@ public class RethinkDbClient {
                 .with("process", process)
                 .with("version", TextUtils.isEmpty(version) ? "" : version)
                 .with("currentPage", TextUtils.isEmpty(currentPage) ? "" : currentPage)
-                .with("hdmiState", TextUtils.isEmpty(hdmiState) ? "" : hdmiState)
-                .with("heartbeatTs", R.now());
+                .with("hdmiState", TextUtils.isEmpty(hdmiState) ? "" : hdmiState);
         try {
             R.db(DATABASE)
                     .table(TABLE_HEARTBEAT)
                     .insert(payload)
                     .optArg("conflict", "replace")
                     .runNoReply(getConnection());
-        } catch (Exception ignored) { }
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
+        }
     }
 
     public void sendHeartbeatStopped(String clientId, String version) {
@@ -341,15 +461,15 @@ public class RethinkDbClient {
                 .with("process", 0)
                 .with("version", TextUtils.isEmpty(version) ? "" : version)
                 .with("currentPage", "")
-                .with("hdmiState", false)
-                .with("heartbeatTs", R.now());
+                .with("hdmiState", false);
         try {
             R.db(DATABASE)
                     .table(TABLE_HEARTBEAT)
                     .insert(payload)
                     .optArg("conflict", "replace")
                     .runNoReply(getConnection());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
     }
 
@@ -403,7 +523,8 @@ public class RethinkDbClient {
                         errorMessage,
                         playerId,
                         createdTicks);
-            } catch (Exception ignored) { }
+            } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex); }
             deleteQueueRecord(queueId, playerId);
             updatePlayerUpdateFields(playerId, statusText, Math.max(0f, Math.min(1f, percent / 100f)), errorMessage, retryCount, nextRetryAt);
             return;
@@ -433,8 +554,9 @@ public class RethinkDbClient {
         payload.put("downloadProgress", download01);
         payload.put("validateProgress", validate01);
         payload.put("retryCount", retryCount);
+        long nextAttemptTicks = toDotNetLocalTicks(nextRetryAt);
         String nextRetryLocal = formatLocalTimestamp(nextRetryAt);
-        payload.put("nextAttemptTicks", nextRetryLocal);
+        payload.put("nextAttemptTicks", nextAttemptTicks);
         payload.put("nextRetryAt", nextRetryLocal);
         payload.put("nextRetryEpochMillis", nextRetryAt);
         payload.put("createdTicks", createdTicks == null ? 0L : createdTicks);
@@ -451,7 +573,8 @@ public class RethinkDbClient {
                     .insert(payload)
                     .optArg("conflict", "replace")
                     .runNoReply(getConnection());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
 
         // Update player progress/status for parity with Windows player
@@ -486,7 +609,12 @@ public class RethinkDbClient {
                     R.db(DATABASE).tableCreate(TABLE_HEARTBEAT).run(getConnection());
                 }
                 heartbeatTableReady = true;
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                if (isTableAlreadyExists(ex)) {
+                    heartbeatTableReady = true;
+                } else {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
+                }
             } finally {
                 closeIfNeeded(tableListObj);
             }
@@ -519,7 +647,12 @@ public class RethinkDbClient {
                     R.db(DATABASE).tableCreate(TABLE_UPDATE_QUEUE).run(getConnection());
                 }
                 updateQueueTableReady = true;
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                if (isTableAlreadyExists(ex)) {
+                    updateQueueTableReady = true;
+                } else {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
+                }
             } finally {
                 closeIfNeeded(tableListObj);
             }
@@ -552,7 +685,12 @@ public class RethinkDbClient {
                     R.db(DATABASE).tableCreate(TABLE_COMMAND_HISTORY).run(getConnection());
                 }
                 commandHistoryTableReady = true;
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                if (isTableAlreadyExists(ex)) {
+                    commandHistoryTableReady = true;
+                } else {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
+                }
             } finally {
                 closeIfNeeded(tableListObj);
             }
@@ -565,7 +703,8 @@ public class RethinkDbClient {
         }
         try {
             return gson.fromJson(downloadJson, Object.class);
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
             return new ArrayList<>();
         }
     }
@@ -582,7 +721,8 @@ public class RethinkDbClient {
                     .get(documentId)
                     .delete()
                     .runNoReply(getConnection());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
     }
     public void deleteQueueRecord(String queueId) {
@@ -616,22 +756,26 @@ public class RethinkDbClient {
             }
             deviceInfoSyncInProgress = true;
         }
-        String syncedPlayerId = null;
-        String playerId = getStoredPlayerGuid();
-        if (TextUtils.isEmpty(playerId)) {
-            playerId = ensurePlayerGuid();
-        }
-        if (!TextUtils.isEmpty(playerId)) {
+        try {
+            String playerId = getStoredPlayerGuid();
+            if (TextUtils.isEmpty(playerId)) {
+                playerId = ensurePlayerGuid();
+            }
+            if (TextUtils.isEmpty(playerId)) {
+                return;
+            }
             String ip = resolveLocalIpAddress();
             String mac = NetworkUtils.getMACAddress();
             String os = "Android " + Build.VERSION.RELEASE;
             updatePlayerDeviceInfo(playerId, ip, mac, os);
-            syncedPlayerId = playerId;
-        }
-        synchronized (deviceInfoLock) {
-            deviceInfoSynced = !TextUtils.isEmpty(syncedPlayerId);
-            deviceInfoSyncInProgress = false;
-            lastSyncedPlayerGuid = syncedPlayerId;
+            synchronized (deviceInfoLock) {
+                deviceInfoSynced = true;
+                lastSyncedPlayerGuid = playerId;
+            }
+        } finally {
+            synchronized (deviceInfoLock) {
+                deviceInfoSyncInProgress = false;
+            }
         }
     }
     public boolean isDeviceInfoSynced() {
@@ -641,45 +785,84 @@ public class RethinkDbClient {
     }
 
     public String ensurePlayerGuid() {
-        return ensurePlayerGuid(resolvePlayerLookupKey());
-    }
-
-    private String resolvePlayerLookupKey() {
         String storedPlayerName = getStoredPlayerName();
         if (!TextUtils.isEmpty(storedPlayerName)) {
-            return storedPlayerName;
+            return ensurePlayerGuid(storedPlayerName);
         }
-        return AndoWSignageApp.PLAYER_ID;
+        return ensurePlayerGuid(AndoWSignageApp.PLAYER_ID);
     }
 
-    public String ensurePlayerGuid(String playerKey) {
-        String guid = getStoredPlayerGuid();
-        if (!guidVerified) {
-            RethinkModels.PlayerInfoRecord playerRecord = fetchPlayerByNameOrGuid(playerKey);
-            if (playerRecord != null) {
-                guid = playerRecord.getGuid();
-                guidVerified = true;
-            }
+    public String ensurePlayerGuid(String playerName) {
+        String normalizedPlayerName = playerName == null ? "" : playerName.trim();
+        String storedGuid = getStoredPlayerGuid();
+        String guid = storedGuid;
+        String storedPlayerName = getStoredPlayerName();
+        boolean isStoredNameMismatched = !TextUtils.isEmpty(normalizedPlayerName)
+                && !TextUtils.isEmpty(storedPlayerName)
+                && !normalizedPlayerName.equalsIgnoreCase(storedPlayerName.trim());
+        if (isStoredNameMismatched) {
+            guid = null;
+            guidVerified = false;
         }
-        if (TextUtils.isEmpty(guid)) {
-            RethinkModels.PlayerInfoRecord playerRecord = fetchPlayerByNameOrGuid(playerKey);
-            if (playerRecord == null) {
-                String storedName = getStoredPlayerName();
-                if (!TextUtils.isEmpty(storedName)) {
-                    playerRecord = fetchPlayer(storedName);
+
+        RethinkModels.PlayerInfoRecord playerRecord = null;
+        long now = System.currentTimeMillis();
+        boolean shouldVerifyRemotely = isStoredNameMismatched
+                || TextUtils.isEmpty(guid)
+                || !guidVerified
+                || (now - lastGuidVerificationEpochMs) >= GUID_VERIFICATION_INTERVAL_MS;
+
+        if (shouldVerifyRemotely) {
+            if (!TextUtils.isEmpty(normalizedPlayerName)) {
+                playerRecord = fetchPlayerInternal(normalizedPlayerName, false);
+                if (playerRecord != null && !TextUtils.isEmpty(playerRecord.getGuid())) {
+                    guid = playerRecord.getGuid();
+                    guidVerified = true;
                 }
             }
-            if (playerRecord != null) {
-                guid = playerRecord.getGuid();
-                guidVerified = true;
+
+            if (TextUtils.isEmpty(guid) && !TextUtils.isEmpty(storedGuid) && !isStoredNameMismatched) {
+                RethinkModels.PlayerInfoRecord byGuid = fetchPlayerByGuid(storedGuid);
+                if (byGuid != null && !TextUtils.isEmpty(byGuid.getGuid())) {
+                    guid = byGuid.getGuid();
+                    playerRecord = byGuid;
+                    guidVerified = true;
+                }
             }
-        }
-        synchronized (deviceInfoLock) {
-            if (lastSyncedPlayerGuid != null && !lastSyncedPlayerGuid.equals(guid)) {
-                deviceInfoSynced = false;
-                lastSyncedPlayerGuid = null;
+
+            if (TextUtils.isEmpty(guid)) {
+                String bootstrapGuid = !TextUtils.isEmpty(storedGuid) && !isStoredNameMismatched
+                        ? storedGuid
+                        : createNewGuidNotExists();
+                if (!TextUtils.isEmpty(bootstrapGuid)) {
+                    String upsertedGuid = upsertPlayerSkeleton(bootstrapGuid, normalizedPlayerName, storedPlayerName);
+                    if (!TextUtils.isEmpty(upsertedGuid)) {
+                        guid = upsertedGuid;
+                        guidVerified = true;
+                    }
+                }
             }
+
+            lastGuidVerificationEpochMs = now;
         }
+
+        if (TextUtils.isEmpty(guid) && !isStoredNameMismatched) {
+            guid = storedGuid;
+        }
+
+        boolean shouldPersistSkeleton = isStoredNameMismatched
+                || TextUtils.isEmpty(storedGuid)
+                || !TextUtils.equals(storedGuid, guid)
+                || !TextUtils.equals(storedPlayerName, normalizedPlayerName);
+        if (!TextUtils.isEmpty(guid) && playerRecord == null && shouldPersistSkeleton) {
+            String playerNameToSave = !TextUtils.isEmpty(normalizedPlayerName)
+                    ? normalizedPlayerName
+                    : storedPlayerName;
+            saveRealmPlayerSkeleton(guid, playerNameToSave);
+        }
+
+        guidVerified = !TextUtils.isEmpty(guid);
+        resetDeviceInfoSyncWhenGuidChanged(guid);
         return guid;
     }
 
@@ -734,6 +917,85 @@ public class RethinkDbClient {
         realm.close();
     }
 
+    private void saveRealmPlayerSkeleton(String guid, String playerName) {
+        if (TextUtils.isEmpty(guid)) {
+            return;
+        }
+        Realm realm = Realm.getDefaultInstance();
+        realm.executeTransaction(r -> {
+            RealmPlayer existing = r.where(RealmPlayer.class).findFirst();
+            if (existing != null && !TextUtils.isEmpty(existing.getPlayerId())
+                    && !existing.getPlayerId().equals(guid)) {
+                existing.deleteFromRealm();
+                existing = null;
+            }
+            RealmPlayer target = existing;
+            if (target == null) {
+                target = r.createObject(RealmPlayer.class, guid);
+            }
+            if (!TextUtils.isEmpty(playerName)) {
+                target.setPlayerName(playerName);
+            }
+        });
+        realm.close();
+    }
+
+    private void resetDeviceInfoSyncWhenGuidChanged(String guid) {
+        synchronized (deviceInfoLock) {
+            if (lastSyncedPlayerGuid != null && !lastSyncedPlayerGuid.equals(guid)) {
+                deviceInfoSynced = false;
+                lastSyncedPlayerGuid = null;
+            }
+        }
+    }
+
+    private String createNewGuidNotExists() {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String candidate = UUID.randomUUID().toString();
+            Map exists = runSingle(R.db(DATABASE).table(TABLE_PLAYER).get(candidate));
+            if (exists == null || exists.isEmpty()) {
+                return candidate;
+            }
+        }
+        return UUID.randomUUID().toString();
+    }
+
+    private String upsertPlayerSkeleton(String guid, String normalizedPlayerName, String storedPlayerName) {
+        if (TextUtils.isEmpty(guid)) {
+            return null;
+        }
+        String playerName = !TextUtils.isEmpty(normalizedPlayerName)
+                ? normalizedPlayerName
+                : storedPlayerName;
+        if (TextUtils.isEmpty(playerName)) {
+            playerName = AndoWSignageApp.PLAYER_ID;
+        }
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("id", guid);
+        payload.put("PIF_PlayerName", TextUtils.isEmpty(playerName) ? "" : playerName.trim());
+        String ip = resolveLocalIpAddress();
+        if (!TextUtils.isEmpty(ip)) {
+            payload.put("PIF_IPAddress", ip);
+        }
+        String mac = NetworkUtils.getMACAddress();
+        if (!TextUtils.isEmpty(mac)) {
+            payload.put("PIF_MacAddress", mac);
+        }
+        payload.put("PIF_OSName", "Android " + Build.VERSION.RELEASE);
+        try {
+            R.db(DATABASE)
+                    .table(TABLE_PLAYER)
+                    .insert(payload)
+                    .optArg("conflict", "update")
+                    .runNoReply(getConnection());
+            saveRealmPlayerSkeleton(guid, playerName);
+            return guid;
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
+            return null;
+        }
+    }
+
     private String resolveLocalIpAddress() {
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
@@ -750,62 +1012,140 @@ public class RethinkDbClient {
                     }
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
         return "127.0.0.1";
     }
 
     private Map runSingle(ReqlExpr expr) {
-        Object obj = null;
-        try {
-            obj = expr.run(getConnection());
-            if (obj == null) {
-                return null;
-            }
-            if (obj instanceof Result) {
-                Result result = (Result) obj;
-                if (result.hasNext()) {
-                    return asMap(result.next());
+        for (int attempt = 0; attempt <= QUERY_RETRY_COUNT_ON_RESTART; attempt++) {
+            Object obj = null;
+            try {
+                obj = expr.run(getConnection());
+                if (obj == null) {
+                    return null;
+                }
+                if (obj instanceof Result) {
+                    Result result = (Result) obj;
+                    if (result.hasNext()) {
+                        return asMap(result.next());
+                    }
+                    return null;
+                }
+                if (obj instanceof Iterable) {
+                    Iterable iterable = (Iterable) obj;
+                    java.util.Iterator iterator = iterable.iterator();
+                    if (iterator.hasNext()) {
+                        return asMap(iterator.next());
+                    }
+                    return null;
+                }
+                return asMap(obj);
+            } catch (Exception ex) {
+                if (isConnectionShutdownRequested(ex) && attempt < QUERY_RETRY_COUNT_ON_RESTART) {
+                    Log.w(TAG, "RethinkDbClient: query retried while connection is restarting.");
+                    sleepQuietly(QUERY_RETRY_DELAY_MS);
+                    continue;
+                }
+                if (isConnectionShutdownRequested(ex)) {
+                    Log.w(TAG, "RethinkDbClient: query skipped while connection is restarting.");
+                } else {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
                 }
                 return null;
+            } finally {
+                closeIfNeeded(obj);
             }
-            if (obj instanceof Iterable) {
-                Iterable iterable = (Iterable) obj;
-                java.util.Iterator iterator = iterable.iterator();
-                if (iterator.hasNext()) {
-                    return asMap(iterator.next());
-                }
-                return null;
-            }
-            return asMap(obj);
-        } catch (Exception ignored) {
-            return null;
-        } finally {
-            closeIfNeeded(obj);
         }
+        return null;
     }
 
     private List<Map> runList(ReqlExpr expr) {
-        List<Map> list = new ArrayList<>();
-        Object obj = null;
-        try {
-            obj = expr.run(getConnection());
-            if (obj instanceof Iterable) {
-                for (Object item : (Iterable) obj) {
-                    list.add(asMap(item));
+        for (int attempt = 0; attempt <= QUERY_RETRY_COUNT_ON_RESTART; attempt++) {
+            List<Map> list = new ArrayList<>();
+            Object obj = null;
+            try {
+                obj = expr.run(getConnection());
+                if (obj instanceof Iterable) {
+                    for (Object item : (Iterable) obj) {
+                        list.add(asMap(item));
+                    }
+                } else if (obj instanceof List) {
+                    for (Object item : (List) obj) {
+                        list.add(asMap(item));
+                    }
+                } else if (obj != null) {
+                    list.add(asMap(obj));
                 }
-            } else if (obj instanceof List) {
-                for (Object item : (List) obj) {
-                    list.add(asMap(item));
+                return list;
+            } catch (Exception ex) {
+                if (isConnectionShutdownRequested(ex) && attempt < QUERY_RETRY_COUNT_ON_RESTART) {
+                    Log.w(TAG, "RethinkDbClient: query retried while connection is restarting.");
+                    sleepQuietly(QUERY_RETRY_DELAY_MS);
+                    continue;
                 }
-            } else if (obj != null) {
-                list.add(asMap(obj));
+                if (isConnectionShutdownRequested(ex)) {
+                    Log.w(TAG, "RethinkDbClient: query skipped while connection is restarting.");
+                } else {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
+                }
+                return list;
+            } finally {
+                closeIfNeeded(obj);
             }
-        } catch (Exception ignored) {
-        } finally {
-            closeIfNeeded(obj);
         }
-        return list;
+        return new ArrayList<>();
+    }
+
+    private boolean isConnectionShutdownRequested(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (!TextUtils.isEmpty(message) && message.contains("Shutdown was requested")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean isTableAlreadyExists(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (!TextUtils.isEmpty(message) && message.contains("already exists")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private void sleepQuietly(long delayMs) {
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void closeConnectionQuietly(Connection conn) {
+        if (conn == null) {
+            return;
+        }
+        try {
+            conn.close();
+        } catch (Exception ex) {
+            Log.w(TAG, "RethinkDbClient: failed to close stale connection", ex);
+        }
+    }
+
+    private boolean safeEquals(String left, String right) {
+        if (left == null) {
+            return right == null;
+        }
+        return left.equals(right);
     }
 
     private <T> T convert(Object obj, Class<T> clazz) {
@@ -889,16 +1229,13 @@ public class RethinkDbClient {
         if (obj instanceof AutoCloseable) {
             try {
                 ((AutoCloseable) obj).close();
-            } catch (Exception ignore) { }
+            } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex); }
         }
     }
 
     public void fetchInitialWeeklySchedule() {
-        String guid = ensurePlayerGuid();
-        RethinkModels.PlayerInfoRecord player = fetchPlayerByGuid(guid);
-        if (player == null) {
-            player = fetchPlayerByNameOrGuid(AndoWSignageApp.PLAYER_ID);
-        }
+        RethinkModels.PlayerInfoRecord player = fetchPlayer(AndoWSignageApp.PLAYER_ID);
         if (player == null) {
             return;
         }
@@ -926,7 +1263,8 @@ public class RethinkDbClient {
                     .get(documentId)
                     .update(payload)
                     .runNoReply(getConnection());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
     }
 
@@ -944,7 +1282,8 @@ public class RethinkDbClient {
         values.put("UpdateProgress", progress01);
         values.put("UpdateError", TextUtils.isEmpty(errorMessage) ? "" : errorMessage);
         values.put("UpdateRetry", retryCount);
-        values.put("UpdateNext", formatLocalTimestamp(nextAttemptTicks));
+        long nextTicks = toDotNetLocalTicks(nextAttemptTicks);
+        values.put("UpdateNext", nextTicks);
         values.put("UpdateNextEpochMillis", nextAttemptTicks);
         try {
             R.db(DATABASE)
@@ -952,7 +1291,8 @@ public class RethinkDbClient {
                     .get(playerId)
                     .update(values)
                     .runNoReply(getConnection());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
     }
 
@@ -984,7 +1324,8 @@ public class RethinkDbClient {
                     .optArg("conflict", "replace")
                     .runNoReply(getConnection());
             return historyId;
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
             return "";
         }
     }
@@ -997,7 +1338,7 @@ public class RethinkDbClient {
                                                String errorCode,
                                                String errorMessage,
                                                String metadata) {
-        return upsertCommandHistoryForQueue(playerId, playerName, command, queueId, status, errorCode, errorMessage, metadata, null);
+        return upsertCommandHistoryForQueue(playerId, playerName, command, String.valueOf(queueId), status, errorCode, errorMessage, metadata, null);
     }
 
     public String upsertCommandHistoryForQueue(String playerId,
@@ -1009,12 +1350,36 @@ public class RethinkDbClient {
                                                String errorMessage,
                                                String metadata,
                                                Long createdTicks) {
+        return upsertCommandHistoryForQueue(playerId, playerName, command, String.valueOf(queueId), status, errorCode, errorMessage, metadata, createdTicks);
+    }
+
+    public String upsertCommandHistoryForQueue(String playerId,
+                                               String playerName,
+                                               String command,
+                                               String queueId,
+                                               String status,
+                                               String errorCode,
+                                               String errorMessage,
+                                               String metadata) {
+        return upsertCommandHistoryForQueue(playerId, playerName, command, queueId, status, errorCode, errorMessage, metadata, null);
+    }
+
+    public String upsertCommandHistoryForQueue(String playerId,
+                                               String playerName,
+                                               String command,
+                                               String queueId,
+                                               String status,
+                                               String errorCode,
+                                               String errorMessage,
+                                               String metadata,
+                                               Long createdTicks) {
         ensureCommandHistoryTable();
         String owner = resolveOwnerPlayerId(playerId);
         long ticks = createdTicks != null && createdTicks > 0
                 ? createdTicks
                 : toDotNetLocalTicks(System.currentTimeMillis());
-        String historyId = buildCommandHistoryIdForQueue(owner, queueId, ticks);
+        String queueIdSafe = TextUtils.isEmpty(queueId) ? "" : queueId;
+        String historyId = buildCommandHistoryIdForQueue(owner, queueIdSafe, ticks);
         String now = getCurrentTimestamp();
         String normalized = normalizeHistoryStatus(status);
         Map<String, Object> doc = new HashMap<>();
@@ -1022,7 +1387,7 @@ public class RethinkDbClient {
         doc.put("playerId", TextUtils.isEmpty(owner) ? "" : owner);
         doc.put("playerName", TextUtils.isEmpty(playerName) ? "" : playerName);
         doc.put("command", TextUtils.isEmpty(command) ? "" : command);
-        doc.put("refQueueId", String.valueOf(queueId));
+        doc.put("refQueueId", queueIdSafe);
         doc.put("status", normalized);
         doc.put("errorCode", TextUtils.isEmpty(errorCode) ? "" : errorCode);
         doc.put("errorMessage", TextUtils.isEmpty(errorMessage) ? "" : errorMessage);
@@ -1037,7 +1402,8 @@ public class RethinkDbClient {
                     .optArg("conflict", "replace")
                     .runNoReply(getConnection());
             return historyId;
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
             return "";
         }
     }
@@ -1092,7 +1458,8 @@ public class RethinkDbClient {
                     .get(historyId)
                     .update(update)
                     .runNoReply(getConnection());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
     }
 
@@ -1151,7 +1518,8 @@ public class RethinkDbClient {
                     .filter(row -> row.g("refQueueId").eq(queueId))
                     .update(update)
                     .runNoReply(getConnection());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            Log.e(TAG, "RethinkDbClient: operation failed", ex);
         }
     }
 
@@ -1215,6 +1583,7 @@ public class RethinkDbClient {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
             return sdf.format(new Date(millis));
         } catch (Exception e) {
+            Log.e(TAG, "formatLocalTimestamp: failed to format millis=" + millis, e);
             return "";
         }
     }
