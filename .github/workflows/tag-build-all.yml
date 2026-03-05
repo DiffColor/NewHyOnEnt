@@ -197,11 +197,145 @@ jobs:
           path: release-assets/player-android-${{ github.ref_name }}.apk
           if-no-files-found: error
 
+  build-player-launcher-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup JDK 17 for sdkmanager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK environment
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --version
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-22" "build-tools;29.0.2" "ndk;26.1.10909125"
+
+      - name: Setup JDK 11 for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Build TurtleLauncher Android (Release APK)
+        working-directory: Player/TurtleLauncher
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon clean :LaLauncher:assembleRelease -x lintVitalRelease -x lint
+
+      - name: Resolve TurtleLauncher APK path
+        id: launcher_apk
+        run: |
+          APK_PATH=$(find Player/TurtleLauncher/LaLauncher/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" | head -n 1)
+          test -n "$APK_PATH"
+          test -f "$APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload TurtleLauncher Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-launcher-android-${{ github.ref_name }}
+          path: ${{ steps.launcher_apk.outputs.apk_path }}
+          if-no-files-found: warn
+
+      - name: Collect TurtleLauncher APK as release asset
+        run: |
+          mkdir -p release-assets
+          cp "${{ steps.launcher_apk.outputs.apk_path }}" "release-assets/player-launcher-android-${{ github.ref_name }}.apk"
+
+      - name: Upload TurtleLauncher Android release asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-player-launcher-android-${{ github.ref_name }}
+          path: release-assets/player-launcher-android-${{ github.ref_name }}.apk
+          if-no-files-found: error
+
+  build-player-watchdog-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup JDK 17 for sdkmanager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK environment
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --version
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-22" "build-tools;29.0.2" "ndk;26.1.10909125"
+
+      - name: Setup JDK 11 for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Build WatchDog Android (Release APK)
+        working-directory: Player/WatchDog_4launcher
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon clean :app:assembleRelease -x lintVitalRelease -x lint
+
+      - name: Resolve WatchDog APK path
+        id: watchdog_apk
+        run: |
+          APK_PATH=$(find Player/WatchDog_4launcher/app/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" | head -n 1)
+          test -n "$APK_PATH"
+          test -f "$APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload WatchDog Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-watchdog-android-${{ github.ref_name }}
+          path: ${{ steps.watchdog_apk.outputs.apk_path }}
+          if-no-files-found: warn
+
+      - name: Collect WatchDog APK as release asset
+        run: |
+          mkdir -p release-assets
+          cp "${{ steps.watchdog_apk.outputs.apk_path }}" "release-assets/player-watchdog-android-${{ github.ref_name }}.apk"
+
+      - name: Upload WatchDog Android release asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-player-watchdog-android-${{ github.ref_name }}
+          path: release-assets/player-watchdog-android-${{ github.ref_name }}.apk
+          if-no-files-found: error
+
   publish-release:
     needs:
       - build-manager-windows
       - build-player-windows
       - build-player-android
+      - build-player-launcher-android
+      - build-player-watchdog-android
     runs-on: ubuntu-latest
     steps:
       - name: Download Manager release asset
@@ -222,6 +356,18 @@ jobs:
           name: release-asset-player-android-${{ github.ref_name }}
           path: release-assets/player-android
 
+      - name: Download TurtleLauncher Android release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset-player-launcher-android-${{ github.ref_name }}
+          path: release-assets/player-launcher-android
+
+      - name: Download WatchDog Android release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset-player-watchdog-android-${{ github.ref_name }}
+          path: release-assets/player-watchdog-android
+
       - name: Attach all build outputs to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -231,4 +377,6 @@ jobs:
             release-assets/manager/*.zip
             release-assets/player-windows/*.zip
             release-assets/player-android/*.apk
+            release-assets/player-launcher-android/*.apk
+            release-assets/player-watchdog-android/*.apk
           overwrite_files: true
