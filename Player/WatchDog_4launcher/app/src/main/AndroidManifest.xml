@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="kr.co.turtlelab.startnow.watchdog"
+    android:versionCode="1"
+    android:versionName="1.5" >
+
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@android:style/Theme.NoDisplay" >
+        
+        <service android:name="kr.co.turtlelab.startnow.watchdog.WatchDogService" android:enabled="true"/>
+        
+		<receiver android:name="kr.co.turtlelab.startnow.watchdog.WatchDogReceiver" android:enabled="true">
+		    <intent-filter>
+                <action android:name="kr.co.turtlelab.watchdog.state" />
+                <action android:name="kr.co.turtlelab.watchdog.disable" />
+                <action android:name="kr.co.turtlelab.watchdog.enable" />
+                <action android:name="kr.co.turtlelab.watchdog.enable7wait" />
+                <action android:name="kr.co.turtlelab.watchdog.ping" />
+                <action android:name="kr.co.turtlelab.watchdog.kill" />
+            </intent-filter>
+		</receiver>
+		
+		<activity
+            android:name="kr.co.turtlelab.startnow.watchdog.BlankActivity"
+            android:label="@string/app_name"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        
+    </application>
+
+</manifest>

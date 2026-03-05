@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools" package="com.github.postapczuk.lalauncher">
+    <application
+            android:icon="@mipmap/ic_launcher"
+            android:label="TurtleLauncher"
+            android:excludeFromRecents="true"
+            android:clearTaskOnLaunch="true"
+            android:immersive="true"
+            android:stateNotNeeded="true"
+            android:theme="@android:style/Theme.Wallpaper.NoTitleBar"
+            tools:ignore="GoogleAppIndexingWarning,UnusedAttribute">
+        <activity android:name=".FavoriteAppsActivity"
+                  android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.HOME" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".InstalledAppsActivity"
+                  android:launchMode="singleTask">
+        </activity>
+
+        <receiver
+                android:name=".LaunchRequestReceiver"
+                android:enabled="true"
+                android:exported="true">
+            <intent-filter>
+                <action android:name="kr.co.turtlelab.turtlelauncher.action.LAUNCH_COMPONENT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
