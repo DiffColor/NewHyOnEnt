@@ -7,7 +7,7 @@ import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
  */
 public final class PendingDownloadWatcher {
 
-    private static final long STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2분
+    private static final long STALE_THRESHOLD_TICKS = 2L * 60L * 10_000_000L; // 2분
 
     private PendingDownloadWatcher() { }
 
@@ -17,18 +17,27 @@ public final class PendingDownloadWatcher {
         }
         ContentDownloadJournal journal = ContentDownloadJournal.fromJson(queue.getDownloadContentsJson());
         journal.ensureDefaults();
-        long now = System.currentTimeMillis();
+        long nowTicks = UpdateQueueHelper.toDotNetLocalTicks(System.currentTimeMillis());
         boolean changed = false;
-        for (UpdateQueueContract.DownloadContentEntry entry : journal.getEntries()) {
+        for (UpdateQueueContract.DownloadEntry entry : journal.getEntries()) {
             if (entry == null) {
                 continue;
             }
-            if (UpdateQueueContract.DownloadStatus.DOWNLOADING.equals(entry.status)
-                    && entry.lastUpdatedAt > 0
-                    && (now - entry.lastUpdatedAt) > STALE_THRESHOLD_MS) {
-                entry.status = UpdateQueueContract.DownloadStatus.PENDING;
-                entry.lastUpdatedAt = now;
-                changed = true;
+            if (entry.Chunks == null) {
+                continue;
+            }
+            for (UpdateQueueContract.DownloadChunk chunk : entry.Chunks) {
+                if (chunk == null) {
+                    continue;
+                }
+                if (UpdateQueueContract.ChunkStatus.DOWNLOADING.equals(chunk.Status)
+                        && chunk.LastUpdatedTicks > 0
+                        && (nowTicks - chunk.LastUpdatedTicks) > STALE_THRESHOLD_TICKS) {
+                    chunk.Status = UpdateQueueContract.ChunkStatus.PENDING;
+                    chunk.DownloadedBytes = 0L;
+                    chunk.LastUpdatedTicks = nowTicks;
+                    changed = true;
+                }
             }
         }
         if (changed) {

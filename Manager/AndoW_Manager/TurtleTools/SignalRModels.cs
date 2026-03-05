@@ -10,7 +10,6 @@ namespace TurtleTools
         public string Version { get; set; }
         public string CurrentPage { get; set; }
         public bool HdmiState { get; set; }
-        public DateTime Timestamp { get; set; }
     }
 
     public sealed class SignalRHeartbeatEventArgs : EventArgs

@@ -296,6 +296,51 @@ public final class RethinkModels {
         }
     }
 
+    public static class ServerSettingsRecord {
+        @SerializedName("id")
+        private Object id;
+        @SerializedName("DataServerIp")
+        private String dataServerIp;
+        @SerializedName("MessageServerIp")
+        private String messageServerIp;
+        @SerializedName("FTP_Port")
+        private int ftpPort;
+        @SerializedName("FTP_PasvMinPort")
+        private int ftpPasvMinPort;
+        @SerializedName("FTP_PasvMaxPort")
+        private int ftpPasvMaxPort;
+        @SerializedName("FTP_RootPath")
+        private String ftpRootPath;
+
+        public Object getId() {
+            return id;
+        }
+
+        public String getDataServerIp() {
+            return dataServerIp;
+        }
+
+        public String getMessageServerIp() {
+            return messageServerIp;
+        }
+
+        public int getFtpPort() {
+            return ftpPort;
+        }
+
+        public int getFtpPasvMinPort() {
+            return ftpPasvMinPort;
+        }
+
+        public int getFtpPasvMaxPort() {
+            return ftpPasvMaxPort;
+        }
+
+        public String getFtpRootPath() {
+            return ftpRootPath;
+        }
+    }
+
     public static class WeeklyScheduleRecord {
         @SerializedName("id")
         private String id;

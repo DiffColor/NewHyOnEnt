@@ -44,6 +44,7 @@ public class FTP4JUtil {
         public boolean success;
         public boolean missing;
         public long downloadedBytes;
+        public String errorMessage;
     }
 
     public DownloadResult downloadWithResume(String remotePath, File targetFile, long resumeHint) {
@@ -91,11 +92,162 @@ public class FTP4JUtil {
             int code = e.getCode();
             if (code == 550 || code == 553) {
                 result.missing = true;
+                result.errorMessage = "MISSING_FILE";
+            } else {
+                result.errorMessage = "FTP_ERROR:" + e.getMessage();
             }
             UpdateQueueLogger.log("FTP4J FTPException code=" + e.getCode() + " msg=" + e.getMessage());
         } catch (FTPDataTransferException | FTPAbortedException | FTPIllegalReplyException | java.io.IOException e) {
+            result.errorMessage = "IO_ERROR:" + e.getMessage();
             UpdateQueueLogger.log("FTP4J download failed: " + e.getMessage());
         } catch (Exception e) {
+            result.errorMessage = "FTP_ERROR:" + e.getMessage();
+            UpdateQueueLogger.log("FTP4J unexpected error: " + e.getMessage());
+        } finally {
+            try {
+                if (client.isConnected()) {
+                    client.logout();
+                    client.disconnect(true);
+                }
+            } catch (Exception ignore) { }
+        }
+        return result;
+    }
+
+    public DownloadResult downloadRange(String remotePath,
+                                        File targetFile,
+                                        long offset,
+                                        long length,
+                                        long totalSize,
+                                        java.util.concurrent.atomic.AtomicBoolean stopFlag) {
+        DownloadResult result = new DownloadResult();
+        FTPClient client = new FTPClient();
+        java.util.concurrent.atomic.AtomicLong written = new java.util.concurrent.atomic.AtomicLong(0L);
+        java.util.concurrent.atomic.AtomicBoolean abortedByLimit = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicBoolean abortedByStop = new java.util.concurrent.atomic.AtomicBoolean(false);
+        long safeLength = Math.max(0L, length);
+        if (targetFile == null || TextUtils.isEmpty(remotePath)) {
+            result.errorMessage = "REMOTE_PATH_EMPTY";
+            return result;
+        }
+        if (safeLength == 0L) {
+            result.success = true;
+            return result;
+        }
+        try {
+            File parent = targetFile.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+
+            client.setPassive(true);
+            client.setCharset(charset);
+            client.setType(FTPClient.TYPE_BINARY);
+            client.setAutoNoopTimeout(30_000);
+            client.connect(host, port);
+            client.login(id, pw);
+
+            long ensureSize = totalSize;
+            if (ensureSize <= 0) {
+                try {
+                    long remoteSize = client.fileSize(remotePath);
+                    if (remoteSize > 0) {
+                        ensureSize = remoteSize;
+                    }
+                } catch (Exception ignore) { }
+            }
+
+            try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(targetFile, "rw")) {
+                if (ensureSize > 0 && raf.length() < ensureSize) {
+                    raf.setLength(ensureSize);
+                }
+                raf.seek(Math.max(0L, offset));
+
+                java.io.OutputStream output = new java.io.OutputStream() {
+                    @Override
+                    public void write(int b) throws java.io.IOException {
+                        byte[] single = new byte[] { (byte) b };
+                        write(single, 0, 1);
+                    }
+
+                    @Override
+                    public void write(byte[] b, int off, int len) throws java.io.IOException {
+                        if (stopFlag != null && stopFlag.get()) {
+                            abortedByStop.set(true);
+                            throw new java.io.IOException("LEASE_LOST");
+                        }
+                        long remaining = safeLength - written.get();
+                        if (remaining <= 0) {
+                            return;
+                        }
+                        int toWrite = (int) Math.min(len, remaining);
+                        raf.write(b, off, toWrite);
+                        written.addAndGet(toWrite);
+                    }
+                };
+
+                FTPDataTransferListener listener = new FTPDataTransferListener() {
+                    @Override
+                    public void started() { }
+                    @Override
+                    public void transferred(int length) {
+                        if (stopFlag != null && stopFlag.get()) {
+                            abortedByStop.set(true);
+                            try {
+                                client.abortCurrentDataTransfer(true);
+                            } catch (Exception ignore) { }
+                            return;
+                        }
+                        if (!abortedByLimit.get() && written.get() >= safeLength) {
+                            abortedByLimit.set(true);
+                            try {
+                                client.abortCurrentDataTransfer(true);
+                            } catch (Exception ignore) { }
+                        }
+                    }
+                    @Override
+                    public void completed() { }
+                    @Override
+                    public void aborted() { }
+                    @Override
+                    public void failed() { }
+                };
+
+                client.download(remotePath, output, Math.max(0L, offset), listener);
+            }
+
+            result.downloadedBytes = written.get();
+            result.success = written.get() >= safeLength;
+            if (!result.success) {
+                result.errorMessage = "INCOMPLETE_RANGE";
+            }
+        } catch (FTPAbortedException e) {
+            result.downloadedBytes = written.get();
+            if (abortedByStop.get()) {
+                result.errorMessage = "LEASE_LOST";
+            } else if (abortedByLimit.get() && written.get() >= safeLength) {
+                result.success = true;
+            } else {
+                result.errorMessage = "FTP_ABORTED";
+            }
+        } catch (FTPException e) {
+            int code = e.getCode();
+            if (code == 550 || code == 553) {
+                result.missing = true;
+                result.errorMessage = "MISSING_FILE";
+            } else {
+                result.errorMessage = "FTP_ERROR:" + e.getMessage();
+            }
+            UpdateQueueLogger.log("FTP4J FTPException code=" + e.getCode() + " msg=" + e.getMessage());
+        } catch (FTPDataTransferException | FTPIllegalReplyException | java.io.IOException e) {
+            if (abortedByStop.get()) {
+                result.errorMessage = "LEASE_LOST";
+            } else {
+                result.errorMessage = "IO_ERROR:" + e.getMessage();
+            }
+            UpdateQueueLogger.log("FTP4J download failed: " + e.getMessage());
+        } catch (Exception e) {
+            result.errorMessage = "FTP_ERROR:" + e.getMessage();
             UpdateQueueLogger.log("FTP4J unexpected error: " + e.getMessage());
         } finally {
             try {

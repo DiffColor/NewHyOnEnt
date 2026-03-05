@@ -5,6 +5,8 @@ import android.text.TextUtils;
 import com.google.gson.Gson;
 
 import java.io.File;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -13,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import io.realm.Realm;
 import io.realm.RealmResults;
+import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
@@ -38,6 +41,15 @@ public final class UpdateQueueHelper {
             }
         } catch (Exception ignore) {
         }
+        try {
+            UpdatePayloadModels.UpdatePayload updatePayload =
+                    UpdatePayloadModels.UpdatePayloadCodec.decode(payloadJson);
+            if (updatePayload != null && updatePayload.Contract != null
+                    && !TextUtils.isEmpty(updatePayload.Contract.PlayerId)) {
+                return updatePayload.Contract.PlayerId;
+            }
+        } catch (Exception ignore) {
+        }
         String owner = RethinkDbClient.getInstance().getStoredPlayerGuid();
         if (TextUtils.isEmpty(owner)) {
             owner = RethinkDbClient.getInstance().ensurePlayerGuid();
@@ -48,6 +60,23 @@ public final class UpdateQueueHelper {
                                            String payloadJson,
                                            String downloadContentsJson,
                                            long ttlMillis) {
+        return enqueue(type, payloadJson, downloadContentsJson, ttlMillis, false);
+    }
+
+    public static RealmUpdateQueue enqueue(String type,
+                                           String payloadJson,
+                                           String downloadContentsJson,
+                                           long ttlMillis,
+                                           boolean isScheduleQueue) {
+        return enqueue(type, payloadJson, downloadContentsJson, ttlMillis, isScheduleQueue, null);
+    }
+
+    public static RealmUpdateQueue enqueue(String type,
+                                           String payloadJson,
+                                           String downloadContentsJson,
+                                           long ttlMillis,
+                                           boolean isScheduleQueue,
+                                           String externalIdOverride) {
         Realm realm = Realm.getDefaultInstance();
         try {
             long now = System.currentTimeMillis();
@@ -58,7 +87,9 @@ public final class UpdateQueueHelper {
                 long nextId = maxId == null ? 1 : maxId.longValue() + 1;
                 String owner = resolveOwnerPlayerIdFromPayload(payloadJson);
                 long ticks = toDotNetLocalTicks(now);
-                String externalId = TextUtils.isEmpty(owner) ? String.valueOf(nextId) : owner + ":" + ticks;
+                String externalId = !TextUtils.isEmpty(externalIdOverride)
+                        ? externalIdOverride
+                        : (TextUtils.isEmpty(owner) ? String.valueOf(nextId) : owner + ":" + ticks);
                 RealmUpdateQueue queue = r.createObject(RealmUpdateQueue.class, nextId);
                 queue.setType(type);
                 queue.setPayloadJson(payloadJson);
@@ -71,6 +102,7 @@ public final class UpdateQueueHelper {
                 queue.setUpdatedAt(now);
                 queue.setExpiresAt(expires);
                 queue.setExternalId(externalId);
+                queue.setScheduleQueue(isScheduleQueue);
                 ref.set(r.copyFromRealm(queue));
                 UpdateQueueLogger.log("Queue #" + nextId + " enqueued type=" + type);
             });
@@ -91,6 +123,7 @@ public final class UpdateQueueHelper {
         Realm realm = Realm.getDefaultInstance();
         try {
             long now = System.currentTimeMillis();
+            String normalizedErrorMessage = normalizeLastError(errorCode, errorMessage);
             AtomicReference<StatusSnapshot> statusSnapshot = new AtomicReference<>();
             AtomicBoolean deleteRemoteRecord = new AtomicBoolean(false);
             AtomicReference<String> playerRef = new AtomicReference<>("");
@@ -115,8 +148,10 @@ public final class UpdateQueueHelper {
                 if (errorCode != null) {
                     queue.setErrorCode(errorCode);
                 }
-                if (errorMessage != null) {
-                    queue.setErrorMessage(errorMessage);
+                if (normalizedErrorMessage != null) {
+                    queue.setErrorMessage(normalizedErrorMessage);
+                } else {
+                    queue.setErrorMessage("");
                 }
                 if (UpdateQueueContract.Status.DONE.equals(status)
                         || UpdateQueueContract.Status.CANCELLED.equals(status)) {
@@ -133,12 +168,19 @@ public final class UpdateQueueHelper {
                 if (UpdateQueueContract.Status.FAILED.equals(status)) {
                     UpdateQueueLogger.log("Queue #" + queueId
                             + " failed: " + String.valueOf(errorCode)
-                            + " / " + String.valueOf(errorMessage));
+                            + " / " + String.valueOf(normalizedErrorMessage));
                     deleteRemoteRecord.set(true);
                     RethinkDbClient.getInstance().updateCommandHistoryByQueue(queue.getExternalId(),
                             UpdateQueueContract.Status.FAILED.toLowerCase(),
                             errorCode,
-                            errorMessage,
+                            normalizedErrorMessage,
+                            playerRef.get(),
+                            toDotNetLocalTicks(queue.getCreatedAt()));
+                } else if (UpdateQueueContract.Status.DOWNLOADING.equals(status)) {
+                    RethinkDbClient.getInstance().updateCommandHistoryByQueue(queue.getExternalId(),
+                            "in_progress",
+                            errorCode,
+                            normalizedErrorMessage,
                             playerRef.get(),
                             toDotNetLocalTicks(queue.getCreatedAt()));
                 } else if (UpdateQueueContract.Status.DONE.equals(status)) {
@@ -155,7 +197,7 @@ public final class UpdateQueueHelper {
                     RethinkDbClient.getInstance().updateCommandHistoryByQueue(queue.getExternalId(),
                             UpdateQueueContract.Status.CANCELLED.toLowerCase(),
                             errorCode,
-                            errorMessage,
+                            normalizedErrorMessage,
                             playerRef.get(),
                             toDotNetLocalTicks(queue.getCreatedAt()));
                 }
@@ -231,6 +273,36 @@ public final class UpdateQueueHelper {
         }
     }
 
+    public static void scheduleLeaseRetry(long queueId, long nextRetryAt, String errorCode, String errorMessage) {
+        Realm realm = Realm.getDefaultInstance();
+        try {
+            long now = System.currentTimeMillis();
+            String normalizedErrorMessage = normalizeLastError(errorCode, errorMessage);
+            realm.executeTransaction(r -> {
+                RealmUpdateQueue queue = r.where(RealmUpdateQueue.class)
+                        .equalTo("id", queueId)
+                        .findFirst();
+                if (queue == null) {
+                    return;
+                }
+                queue.setStatus(UpdateQueueContract.Status.QUEUED);
+                queue.setNextRetryAt(nextRetryAt);
+                queue.setUpdatedAt(now);
+                if (!TextUtils.isEmpty(errorCode)) {
+                    queue.setErrorCode(errorCode);
+                }
+                if (!TextUtils.isEmpty(normalizedErrorMessage)) {
+                    queue.setErrorMessage(normalizedErrorMessage);
+                } else {
+                    queue.setErrorMessage("");
+                }
+                sendStatus(queue);
+            });
+        } finally {
+            realm.close();
+        }
+    }
+
     /**
      * 만료 기간이 지난 큐 레코드를 정리한다.
      */
@@ -265,10 +337,6 @@ public final class UpdateQueueHelper {
                 queue.setUpdatedAt(System.currentTimeMillis());
                 UpdateQueueLogger.log("Queue #" + queueId + " retry scheduled (attempt "
                         + nextRetryCount + ") at " + nextRetryAt);
-                if (nextRetryCount >= UpdateQueueContract.RetryPolicy.MAX_ATTEMPTS) {
-                    UpdateQueueLogger.log("Queue #" + queueId
-                            + " reached retry cap, awaiting manual intervention.");
-                }
                 sendStatus(queue);
             });
         } finally {
@@ -313,28 +381,24 @@ public final class UpdateQueueHelper {
         try {
             long now = System.currentTimeMillis();
             realm.executeTransaction(r -> {
-                RealmResults<RealmUpdateQueue> stuckDownloading = r.where(RealmUpdateQueue.class)
-                        .equalTo("status", UpdateQueueContract.Status.DOWNLOADING)
+                RealmResults<RealmUpdateQueue> stuck = r.where(RealmUpdateQueue.class)
+                        .in("status", new String[]{
+                                UpdateQueueContract.Status.DOWNLOADING,
+                                UpdateQueueContract.Status.DOWNLOADED,
+                                UpdateQueueContract.Status.VALIDATING,
+                                UpdateQueueContract.Status.APPLYING
+                        })
                         .findAll();
-                if (stuckDownloading != null) {
-                    for (RealmUpdateQueue queue : stuckDownloading) {
+                if (stuck != null) {
+                    for (RealmUpdateQueue queue : stuck) {
                         queue.setStatus(UpdateQueueContract.Status.QUEUED);
                         queue.setErrorCode(null);
-                        queue.setErrorMessage(null);
+                        queue.setErrorMessage("Recovered from interrupted state");
                         queue.setUpdatedAt(now);
                         queue.setNextRetryAt(0L);
-                        sendStatus(queue);
-                    }
-                }
-
-                RealmResults<RealmUpdateQueue> stuckApplying = r.where(RealmUpdateQueue.class)
-                        .equalTo("status", UpdateQueueContract.Status.APPLYING)
-                        .findAll();
-                if (stuckApplying != null) {
-                    for (RealmUpdateQueue queue : stuckApplying) {
-                        queue.setStatus(UpdateQueueContract.Status.READY);
-                        queue.setUpdatedAt(now);
-                        queue.setNextRetryAt(0L);
+                        queue.setDownloadProgress(0f);
+                        queue.setValidateProgress(0f);
+                        queue.setProgress(0f);
                         sendStatus(queue);
                     }
                 }
@@ -353,6 +417,7 @@ public final class UpdateQueueHelper {
         String message = (reason == null || reason.trim().isEmpty())
                 ? "Cancelled by manager"
                 : reason.trim();
+        Set<String> releasePlayers = new HashSet<>();
         try {
             AtomicInteger cancelled = new AtomicInteger();
             realm.executeTransaction(r -> {
@@ -373,11 +438,26 @@ public final class UpdateQueueHelper {
                     cleanupTempFiles(queue);
                     sendStatus(queue);
                     String playerId = getPlayerId(queue);
-                    RethinkDbClient.getInstance().deleteQueueRecord(String.valueOf(queue.getId()), playerId);
+                    String externalId = TextUtils.isEmpty(queue.getExternalId())
+                            ? String.valueOf(queue.getId())
+                            : queue.getExternalId();
+                    RethinkDbClient.getInstance().deleteQueueRecord(externalId, playerId);
+                    if (!TextUtils.isEmpty(playerId)) {
+                        releasePlayers.add(playerId);
+                    }
                     queue.deleteFromRealm();
                     cancelled.incrementAndGet();
                 }
             });
+            if (!releasePlayers.isEmpty()) {
+                String host = AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(AndoWSignageApp.MANUAL_IP)
+                        ? AndoWSignageApp.MANUAL_IP
+                        : AndoWSignageApp.MANAGER_IP;
+                UpdateLeaseClient leaseClient = new UpdateLeaseClient(host);
+                for (String playerId : releasePlayers) {
+                    leaseClient.releaseByPlayer(playerId);
+                }
+            }
             return cancelled.get();
         } finally {
             realm.close();
@@ -419,6 +499,13 @@ public final class UpdateQueueHelper {
 
     private static void sendStatus(RealmUpdateQueue queue, String playerId) {
         sendStatusAsync(buildSnapshot(queue, playerId));
+    }
+
+    private static String normalizeLastError(String errorCode, String errorMessage) {
+        if (!TextUtils.isEmpty(errorMessage)) {
+            return errorMessage;
+        }
+        return TextUtils.isEmpty(errorCode) ? null : errorCode;
     }
 
     private static void sendStatusAsync(StatusSnapshot snapshot) {
@@ -479,6 +566,41 @@ public final class UpdateQueueHelper {
             }
         } catch (Exception ignore) {
         }
+        if (TextUtils.isEmpty(playlistId) || TextUtils.isEmpty(playlistName) || TextUtils.isEmpty(playerName)) {
+            try {
+                UpdatePayloadModels.UpdatePayload updatePayload =
+                        UpdatePayloadModels.UpdatePayloadCodec.decode(queue.getPayloadJson());
+                if (updatePayload != null) {
+                    if (updatePayload.Contract != null) {
+                        if (TextUtils.isEmpty(playerName)) {
+                            playerName = updatePayload.Contract.PlayerName == null ? "" : updatePayload.Contract.PlayerName;
+                        }
+                        if (TextUtils.isEmpty(playlistId)) {
+                            playlistId = updatePayload.Contract.PlaylistId == null ? "" : updatePayload.Contract.PlaylistId;
+                        }
+                        if (TextUtils.isEmpty(playlistName)) {
+                            playlistName = updatePayload.Contract.PlaylistName == null ? "" : updatePayload.Contract.PlaylistName;
+                        }
+                        if (TextUtils.isEmpty(playerId) && !TextUtils.isEmpty(updatePayload.Contract.PlayerId)) {
+                            playerId = updatePayload.Contract.PlayerId;
+                        }
+                    }
+                    if (updatePayload.PageList != null) {
+                        String listName = updatePayload.PageList.PLI_PageListName == null ? "" : updatePayload.PageList.PLI_PageListName;
+                        if (!TextUtils.isEmpty(listName)) {
+                            playlistId = listName;
+                            playlistName = listName;
+                        }
+                    }
+                }
+            } catch (Exception ignore) {
+            }
+        }
+        if (TextUtils.isEmpty(playerName)) {
+            playerName = TextUtils.isEmpty(kr.co.turtlelab.andowsignage.AndoWSignageApp.PLAYER_ID)
+                    ? ""
+                    : kr.co.turtlelab.andowsignage.AndoWSignageApp.PLAYER_ID;
+        }
         long createdTicks = queue.getCreatedAt() <= 0
                 ? 0L
                 : toDotNetLocalTicks(queue.getCreatedAt());
@@ -525,7 +647,16 @@ public final class UpdateQueueHelper {
             }
         } catch (Exception ignore) {
         }
-        return "";
+        try {
+            UpdatePayloadModels.UpdatePayload updatePayload =
+                    UpdatePayloadModels.UpdatePayloadCodec.decode(queue.getPayloadJson());
+            if (updatePayload != null && updatePayload.Contract != null
+                    && !TextUtils.isEmpty(updatePayload.Contract.PlayerId)) {
+                return updatePayload.Contract.PlayerId;
+            }
+        } catch (Exception ignore) {
+        }
+        return resolveOwnerPlayerIdFromPayload(queue.getPayloadJson());
     }
 
     private static void cleanupTempFiles(RealmUpdateQueue queue) {
@@ -534,11 +665,18 @@ public final class UpdateQueueHelper {
         }
         try {
             ContentDownloadJournal journal = ContentDownloadJournal.fromJson(queue.getDownloadContentsJson());
-            for (UpdateQueueContract.DownloadContentEntry entry : journal.getEntries()) {
+            for (UpdateQueueContract.DownloadEntry entry : journal.getEntries()) {
                 if (entry == null) {
                     continue;
                 }
-                String tempPath = LocalPathUtils.getTempPath(entry.remotePath);
+                String fileName = normalizeFileName(entry.FileName);
+                if (TextUtils.isEmpty(fileName)) {
+                    fileName = normalizeFileName(entry.RemotePath);
+                    if (TextUtils.isEmpty(fileName)) {
+                        continue;
+                    }
+                }
+                String tempPath = getTempContentPath(fileName);
                 File file = new File(tempPath);
                 if (file.exists()) {
                     file.delete();
@@ -546,6 +684,35 @@ public final class UpdateQueueHelper {
             }
         } catch (Exception ignore) {
         }
+    }
+
+    public static String normalizeFileName(String fileNameOrPath) {
+        if (TextUtils.isEmpty(fileNameOrPath)) {
+            return "";
+        }
+        try {
+            String name = new File(fileNameOrPath).getName();
+            return TextUtils.isEmpty(name) ? "" : name;
+        } catch (Exception ignore) {
+            return fileNameOrPath;
+        }
+    }
+
+    public static String getFinalContentPath(String fileNameOrPath) {
+        String name = normalizeFileName(fileNameOrPath);
+        if (TextUtils.isEmpty(name)) {
+            return "";
+        }
+        return LocalPathUtils.getContentPath(name);
+    }
+
+    public static String getTempContentPath(String fileNameOrPath) {
+        String name = normalizeFileName(fileNameOrPath);
+        if (TextUtils.isEmpty(name)) {
+            return "";
+        }
+        String relative = "Contents" + File.separator + name;
+        return LocalPathUtils.getTempPath(relative);
     }
 
     /**

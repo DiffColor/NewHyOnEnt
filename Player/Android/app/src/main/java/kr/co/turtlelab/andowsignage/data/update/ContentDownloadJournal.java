@@ -3,9 +3,6 @@ package kr.co.turtlelab.andowsignage.data.update;
 import android.text.TextUtils;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -18,11 +15,9 @@ import java.util.List;
 public class ContentDownloadJournal {
 
     private static final Gson GSON = new Gson();
-    private static final Type ENTRY_LIST = new TypeToken<List<UpdateQueueContract.DownloadContentEntry>>() {}.getType();
+    private final List<UpdateQueueContract.DownloadEntry> entries;
 
-    private final List<UpdateQueueContract.DownloadContentEntry> entries;
-
-    private ContentDownloadJournal(List<UpdateQueueContract.DownloadContentEntry> entries) {
+    private ContentDownloadJournal(List<UpdateQueueContract.DownloadEntry> entries) {
         this.entries = entries;
     }
 
@@ -31,7 +26,8 @@ public class ContentDownloadJournal {
             return new ContentDownloadJournal(new ArrayList<>());
         }
         try {
-            List<UpdateQueueContract.DownloadContentEntry> items = GSON.fromJson(json, ENTRY_LIST);
+            java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<List<UpdateQueueContract.DownloadEntry>>() {}.getType();
+            List<UpdateQueueContract.DownloadEntry> items = GSON.fromJson(json, type);
             if (items == null) {
                 items = new ArrayList<>();
             }
@@ -45,59 +41,78 @@ public class ContentDownloadJournal {
         return GSON.toJson(entries);
     }
 
-    public List<UpdateQueueContract.DownloadContentEntry> getEntries() {
+    public List<UpdateQueueContract.DownloadEntry> getEntries() {
         return entries;
     }
 
     public void ensureDefaults() {
-        for (UpdateQueueContract.DownloadContentEntry entry : entries) {
+        for (UpdateQueueContract.DownloadEntry entry : entries) {
             if (entry == null) {
                 continue;
             }
-            if (TextUtils.isEmpty(entry.status)) {
-                entry.status = UpdateQueueContract.DownloadStatus.PENDING;
+            if (TextUtils.isEmpty(entry.Status)) {
+                entry.Status = UpdateQueueContract.DownloadStatus.QUEUED;
             }
-            if (entry.downloadedBytes < 0) {
-                entry.downloadedBytes = 0L;
+            if (entry.Chunks == null) {
+                entry.Chunks = new ArrayList<>();
             }
-            if (entry.sizeBytes > 0 && entry.downloadedBytes > entry.sizeBytes) {
-                entry.downloadedBytes = entry.sizeBytes;
-            }
-            if (entry.lastUpdatedAt < 0) {
-                entry.lastUpdatedAt = 0L;
+            for (UpdateQueueContract.DownloadChunk chunk : entry.Chunks) {
+                if (chunk == null) {
+                    continue;
+                }
+                if (TextUtils.isEmpty(chunk.Status)) {
+                    chunk.Status = UpdateQueueContract.ChunkStatus.PENDING;
+                }
+                if (chunk.DownloadedBytes < 0) {
+                    chunk.DownloadedBytes = 0L;
+                }
+                if (chunk.LastUpdatedTicks < 0) {
+                    chunk.LastUpdatedTicks = 0L;
+                }
             }
         }
     }
 
-    public List<UpdateQueueContract.DownloadContentEntry> getPendingEntriesSortedBySize() {
-        List<UpdateQueueContract.DownloadContentEntry> pending = new ArrayList<>();
-        for (UpdateQueueContract.DownloadContentEntry entry : entries) {
+    public List<UpdateQueueContract.DownloadEntry> getPendingEntriesSortedBySize() {
+        List<UpdateQueueContract.DownloadEntry> pending = new ArrayList<>();
+        for (UpdateQueueContract.DownloadEntry entry : entries) {
             if (!isEntryComplete(entry)) {
                 pending.add(entry);
             }
         }
-        Collections.sort(pending, new Comparator<UpdateQueueContract.DownloadContentEntry>() {
+        Collections.sort(pending, new Comparator<UpdateQueueContract.DownloadEntry>() {
             @Override
-            public int compare(UpdateQueueContract.DownloadContentEntry o1, UpdateQueueContract.DownloadContentEntry o2) {
+            public int compare(UpdateQueueContract.DownloadEntry o1, UpdateQueueContract.DownloadEntry o2) {
                 return Long.compare(safeSize(o1), safeSize(o2));
             }
         });
         return pending;
     }
 
-    public void updateEntryStatus(String contentUid, String status, long downloadedBytes) {
-        UpdateQueueContract.DownloadContentEntry entry = findEntry(contentUid);
+    public void updateEntryStatus(String fileName, String status) {
+        UpdateQueueContract.DownloadEntry entry = findEntry(fileName);
         if (entry == null) {
             return;
         }
-        long now = System.currentTimeMillis();
-        entry.status = status;
-        entry.downloadedBytes = downloadedBytes;
-        entry.lastUpdatedAt = now;
+        entry.Status = status;
+        if (entry.Chunks != null) {
+            long nowTicks = System.currentTimeMillis();
+            for (UpdateQueueContract.DownloadChunk chunk : entry.Chunks) {
+                if (chunk == null) {
+                    continue;
+                }
+                if (UpdateQueueContract.ChunkStatus.DONE.equals(chunk.Status)) {
+                    continue;
+                }
+                chunk.Status = UpdateQueueContract.ChunkStatus.PENDING;
+                chunk.DownloadedBytes = 0L;
+                chunk.LastUpdatedTicks = nowTicks;
+            }
+        }
     }
 
     public boolean isComplete() {
-        for (UpdateQueueContract.DownloadContentEntry entry : entries) {
+        for (UpdateQueueContract.DownloadEntry entry : entries) {
             if (!isEntryComplete(entry)) {
                 return false;
             }
@@ -107,42 +122,57 @@ public class ContentDownloadJournal {
 
     public void resetAllToPending() {
         long now = System.currentTimeMillis();
-        for (UpdateQueueContract.DownloadContentEntry entry : entries) {
+        for (UpdateQueueContract.DownloadEntry entry : entries) {
             if (entry == null) {
                 continue;
             }
-            entry.status = UpdateQueueContract.DownloadStatus.PENDING;
-            entry.downloadedBytes = 0L;
-            entry.lastUpdatedAt = now;
+            entry.Status = UpdateQueueContract.DownloadStatus.QUEUED;
+            entry.LastError = "";
+            if (entry.Chunks != null) {
+                for (UpdateQueueContract.DownloadChunk chunk : entry.Chunks) {
+                    if (chunk == null) {
+                        continue;
+                    }
+                    chunk.Status = UpdateQueueContract.ChunkStatus.PENDING;
+                    chunk.DownloadedBytes = 0L;
+                    chunk.LastUpdatedTicks = now;
+                }
+            }
         }
     }
 
-    private boolean isEntryComplete(UpdateQueueContract.DownloadContentEntry entry) {
+    private boolean isEntryComplete(UpdateQueueContract.DownloadEntry entry) {
         if (entry == null) {
             return true;
         }
-        return UpdateQueueContract.DownloadStatus.DONE.equals(entry.status);
+        return UpdateQueueContract.DownloadStatus.DONE.equals(entry.Status);
     }
 
-    private long safeSize(UpdateQueueContract.DownloadContentEntry entry) {
+    private long safeSize(UpdateQueueContract.DownloadEntry entry) {
         if (entry == null) {
             return Long.MAX_VALUE;
         }
-        if (entry.sizeBytes > 0) {
-            return entry.sizeBytes;
+        if (entry.SizeBytes > 0) {
+            return entry.SizeBytes;
         }
-        if (entry.downloadedBytes > 0) {
-            return entry.downloadedBytes;
+        long done = 0L;
+        if (entry.Chunks != null) {
+            for (UpdateQueueContract.DownloadChunk chunk : entry.Chunks) {
+                if (chunk == null) {
+                    continue;
+                }
+                done += Math.max(0L, chunk.DownloadedBytes);
+            }
         }
-        return Long.MAX_VALUE - 1;
+        return done > 0 ? done : (Long.MAX_VALUE - 1);
     }
 
-    private UpdateQueueContract.DownloadContentEntry findEntry(String contentUid) {
-        if (TextUtils.isEmpty(contentUid)) {
+    private UpdateQueueContract.DownloadEntry findEntry(String fileName) {
+        if (TextUtils.isEmpty(fileName)) {
             return null;
         }
-        for (UpdateQueueContract.DownloadContentEntry entry : entries) {
-            if (contentUid.equals(entry.contentUid)) {
+        for (UpdateQueueContract.DownloadEntry entry : entries) {
+            if (entry != null && fileName.equalsIgnoreCase(entry.FileName)) {
                 return entry;
             }
         }

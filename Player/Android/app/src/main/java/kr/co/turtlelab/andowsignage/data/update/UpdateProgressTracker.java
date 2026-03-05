@@ -68,7 +68,7 @@ public class UpdateProgressTracker {
     private float setProgress(float downloadPercent, float validatePercent) {
         float dl = Math.min(100f, Math.max(0f, downloadPercent));
         float vl = Math.min(100f, Math.max(0f, validatePercent));
-        float overall = Math.min(100f, Math.max(0f, (dl * 0.9f) + (vl * 0.1f)));
+        float overall = Math.min(100f, Math.max(0f, (dl + vl) / 2f));
         UpdateQueueHelper.updateProgress(queueId, dl, vl, overall);
         return overall;
     }
