@@ -342,10 +342,14 @@ jobs:
       - name: Resolve TurtleLauncher APK path
         id: launcher_apk
         run: |
-          APK_PATH=$(find Player/TurtleLauncher/LaLauncher/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" | head -n 1)
+          APK_PATH=$(find Player/TurtleLauncher/LaLauncher/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" ! -name "*-unsigned.apk" | head -n 1)
           test -n "$APK_PATH"
           test -f "$APK_PATH"
           echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Verify TurtleLauncher APK signature
+        run: |
+          "$ANDROID_HOME/build-tools/29.0.2/apksigner" verify --verbose "${{ steps.launcher_apk.outputs.apk_path }}"
 
       - name: Upload TurtleLauncher Android artifact
         uses: actions/upload-artifact@v4
@@ -422,10 +426,14 @@ jobs:
       - name: Resolve WatchDog APK path
         id: watchdog_apk
         run: |
-          APK_PATH=$(find Player/WatchDog_4launcher/app/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" | head -n 1)
+          APK_PATH=$(find Player/WatchDog_4launcher/app/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" ! -name "*-unsigned.apk" | head -n 1)
           test -n "$APK_PATH"
           test -f "$APK_PATH"
           echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Verify WatchDog APK signature
+        run: |
+          "$ANDROID_HOME/build-tools/29.0.2/apksigner" verify --verbose "${{ steps.watchdog_apk.outputs.apk_path }}"
 
       - name: Upload WatchDog Android artifact
         uses: actions/upload-artifact@v4

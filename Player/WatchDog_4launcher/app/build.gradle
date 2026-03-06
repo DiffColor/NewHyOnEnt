@@ -1,8 +1,28 @@
 apply plugin: 'com.android.application'
 
+def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: "../../Android/app/libs/platform.jks"
+def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "zbqj2636"
+def keyAliasValue = System.getenv("ANDROID_KEY_ALIAS") ?: "quber"
+def keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD") ?: "zbqj2636"
+
 android {
     compileSdkVersion 22
     buildToolsVersion "29.0.2"
+
+    signingConfigs {
+        debug {
+            storeFile file(keystorePath)
+            storePassword keystorePassword
+            keyAlias keyAliasValue
+            keyPassword keyPasswordValue
+        }
+        release {
+            storeFile file(keystorePath)
+            storePassword keystorePassword
+            keyAlias keyAliasValue
+            keyPassword keyPasswordValue
+        }
+    }
 
     defaultConfig {
         applicationId "kr.co.turtlelab.startnow.watchdog"
@@ -13,6 +33,7 @@ android {
 
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
         }
