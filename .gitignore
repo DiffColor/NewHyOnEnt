@@ -208,6 +208,10 @@ coverage*.info
 *.[Cc]ache
 !?*.[Cc]ache/
 
+# Gradle / Android build outputs
+**/.gradle/
+**/build/
+
 # Misc
 **/ClientBin/
 ~$*
