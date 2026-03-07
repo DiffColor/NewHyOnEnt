@@ -12,6 +12,7 @@ namespace TurtleTools
     {
         private const int DefaultPort = 21;
         private const int DefaultTimeoutMs = 5000;
+        private const int TransferBufferSizeBytes = 2 * 1024 * 1024;
         private const string UpgradeApkRelativePath = "UpgradeAPK/AndoW_Player.apk";
 
         public static bool TryTestConnection(out string error)
@@ -307,6 +308,8 @@ namespace TurtleTools
             config.ReadTimeout = DefaultTimeoutMs;
             config.DataConnectionConnectTimeout = DefaultTimeoutMs;
             config.DataConnectionReadTimeout = DefaultTimeoutMs;
+            config.TransferChunkSize = TransferBufferSizeBytes;
+            config.LocalFileBufferSize = TransferBufferSizeBytes;
         }
 
         private static string CombineRemotePath(string root, string relative)
