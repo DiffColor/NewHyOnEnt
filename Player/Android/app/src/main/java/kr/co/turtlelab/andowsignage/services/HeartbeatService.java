@@ -14,7 +14,9 @@ import java.util.concurrent.Executors;
 
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
+import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
+import kr.co.turtlelab.andowsignage.dataproviders.UpdateQueueProvider;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.tools.LightestTimer;
 import kr.co.turtlelab.andowsignage.tools.PowerApi;
@@ -186,13 +188,12 @@ public class HeartbeatService extends Service {
             }
             status = updateSnapshot.status;
             process = updateSnapshot.progress;
-        } else {
-            // heartbeat service가 재시작된 직후를 위해 최신 큐 상태를 보조적으로 반영한다.
-            kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue queue = kr.co.turtlelab.andowsignage.dataproviders.UpdateQueueProvider.getLatestQueueSnapshot();
-            if (queue != null && isActiveUpdateStatus(queue.getStatus())) {
-                status = normalizeUpdateStatus(queue.getStatus());
-                process = normalizeProgress(queue.getProgress());
-            }
+        }
+
+        UpdateHeartbeatSnapshot queueSnapshot = resolveActiveQueueSnapshot();
+        if (queueSnapshot != null) {
+            status = queueSnapshot.status;
+            process = queueSnapshot.progress;
         }
         String version = AndoWSignageApp.version;
         String currentPage = AndoWSignage.currentPageName;
@@ -309,6 +310,16 @@ public class HeartbeatService extends Service {
             lastUpdateReportedAtMs = now;
             return UpdateHeartbeatSnapshot.active(updateReportingStatus, updateReportingProgress);
         }
+    }
+
+    private UpdateHeartbeatSnapshot resolveActiveQueueSnapshot() {
+        RealmUpdateQueue queue = UpdateQueueProvider.getLatestQueueSnapshot();
+        if (queue == null || !isActiveUpdateStatus(queue.getStatus())) {
+            return null;
+        }
+        return UpdateHeartbeatSnapshot.active(
+                normalizeUpdateStatus(queue.getStatus()),
+                normalizeProgress(queue.getProgress()));
     }
 
     private static void resetUpdateReportingStateLocked() {
