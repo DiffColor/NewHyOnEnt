@@ -52,7 +52,6 @@ namespace HyOnPlayer
 
         public void SaveData()
         {
-            // ÇÃ·¹ÀÌ¾î ¿ø°Ý ½ºÅ°¸¶ ÀúÀå
             g_PlayerInfo.Id = 0;
             repository.ReplaceAll(new[] { g_PlayerInfo });
         }
