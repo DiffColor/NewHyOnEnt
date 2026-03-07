@@ -549,8 +549,11 @@ public final class UpdateQueueHelper {
             return false;
         }
         String normalized = status.trim().toUpperCase();
-        return !UpdateQueueContract.Status.DOWNLOADING.equals(normalized)
-                && !UpdateQueueContract.Status.VALIDATING.equals(normalized);
+        return UpdateQueueContract.Status.READY.equals(normalized)
+                || UpdateQueueContract.Status.APPLYING.equals(normalized)
+                || UpdateQueueContract.Status.DONE.equals(normalized)
+                || UpdateQueueContract.Status.FAILED.equals(normalized)
+                || UpdateQueueContract.Status.CANCELLED.equals(normalized);
     }
 
     private static void deleteQueueRecordAsync(long queueId, String externalId, String playerId) {
