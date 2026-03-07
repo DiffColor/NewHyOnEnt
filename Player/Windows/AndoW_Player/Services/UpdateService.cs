@@ -21,6 +21,7 @@ namespace HyOnPlayer
         private const int FTP_PORT = 10021;
         private const string FTP_LOGIN = "asdf";
         private const string FTP_PASSWORD = "Emfndhk!";
+        private const int FtpTransferBufferSizeBytes = 2 * 1024 * 1024;
 
         private readonly MainWindow owner;
         private readonly object syncRoot = new object();
@@ -1880,6 +1881,8 @@ namespace HyOnPlayer
 
                 using (var client = new FtpClient(ftp.Host, FTP_LOGIN, FTP_PASSWORD, ftp.Port))
                 {
+                    client.Config.TransferChunkSize = FtpTransferBufferSizeBytes;
+                    client.Config.LocalFileBufferSize = FtpTransferBufferSizeBytes;
                     client.Connect();
                     long offset = chunk.Offset;
                     long length = chunk.Length > 0 ? chunk.Length : Math.Max(0, entry.SizeBytes - offset);
@@ -1895,7 +1898,7 @@ namespace HyOnPlayer
 
                         local.Seek(offset, SeekOrigin.Begin);
 
-                        byte[] buffer = new byte[256 * 1024];
+                        byte[] buffer = new byte[FtpTransferBufferSizeBytes];
                         long remaining = length;
                         while (remaining > 0)
                         {

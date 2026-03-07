@@ -14,6 +14,7 @@ namespace TurtleTools
 {
 	public class FileTools
 	{
+		private const int FtpTransferBufferSizeBytes = 2 * 1024 * 1024;
 
 		public static void CopyDirectory(string sdpath, string tdpath, bool recursive = true)
 		{
@@ -631,6 +632,8 @@ namespace TurtleTools
 				try
 				{
 					ftp.Config.RetryAttempts = retryCount;
+					ftp.Config.TransferChunkSize = FtpTransferBufferSizeBytes;
+					ftp.Config.LocalFileBufferSize = FtpTransferBufferSizeBytes;
 					await ftp.Connect();
 					await ftp.DownloadFile(localPath, remotePath, FtpLocalExists.Overwrite, FtpVerify.Retry);
 				}
