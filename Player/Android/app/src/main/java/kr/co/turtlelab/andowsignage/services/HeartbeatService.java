@@ -56,9 +56,11 @@ public class HeartbeatService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_SEND_STOPPED.equals(intent.getAction())) {
+            AndoWSignageApp.beginShutdown();
             executor.execute(() -> {
                 ensureSignalRReady();
                 publishHeartbeatStoppedAndStop();
+                stopManagedServicesForShutdown();
                 stopSelfResult(startId);
             });
             return START_NOT_STICKY;
@@ -74,6 +76,7 @@ public class HeartbeatService extends Service {
             });
             return START_NOT_STICKY;
         }
+        AndoWSignageApp.clearShutdownInProgress();
         clearTerminalStopRequested();
         executor.execute(this::ensureSignalRReady);
         if (intent != null && intent.hasExtra(EXTRA_INTERVAL_MS)) {
@@ -228,6 +231,31 @@ public class HeartbeatService extends Service {
                     false);
             payload.PlayerName = playerName;
             signalRClient.sendStoppedAndStop(payload);
+        }
+    }
+
+    private void stopManagedServicesForShutdown() {
+        AndoWSignageApp app = AndoWSignageApp.getApplication();
+        if (app == null) {
+            return;
+        }
+
+        try {
+            app.stopService(new Intent(app, UpdateManagerService.class));
+        } catch (Exception ex) {
+            Log.w(TAG, "stopManagedServicesForShutdown: failed to stop UpdateManagerService", ex);
+        }
+
+        try {
+            app.stopService(new Intent(app, PowerService.class));
+        } catch (Exception ex) {
+            Log.w(TAG, "stopManagedServicesForShutdown: failed to stop PowerService", ex);
+        }
+
+        try {
+            app.stopService(new Intent(app, ConfigLinkService.class));
+        } catch (Exception ex) {
+            Log.w(TAG, "stopManagedServicesForShutdown: failed to stop ConfigLinkService", ex);
         }
     }
 

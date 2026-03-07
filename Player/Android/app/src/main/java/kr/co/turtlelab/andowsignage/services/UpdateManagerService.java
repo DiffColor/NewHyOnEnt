@@ -178,7 +178,12 @@ public class UpdateManagerService extends Service implements SignalRClientServic
             updateTimer.stop();
         }
         if (signalRClient != null) {
-            signalRClient.stop();
+            signalRClient.setListener(null);
+            if (!AndoWSignageApp.isShutdownInProgress()) {
+                signalRClient.stop();
+            } else {
+                Log.i(TAG, "onDestroy: skip SignalR stop because terminal shutdown is in progress.");
+            }
         }
         commandExecutor.shutdownNow();
     }

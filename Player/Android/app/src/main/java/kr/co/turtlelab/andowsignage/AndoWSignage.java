@@ -461,6 +461,7 @@ public class AndoWSignage extends Activity {
 	UpdateManagerService mUpdateMgrSrv;
 	
 	private void startServices() {
+        AndoWSignageApp.clearShutdownInProgress();
         pendingHeartbeatServiceStop = false;
 		startService(new Intent(AndoWSignage.this, ConfigLinkService.class));
 		startService(new Intent(AndoWSignage.this, PowerService.class));
@@ -488,6 +489,7 @@ public class AndoWSignage extends Activity {
 	}
 	
 	public void restartNetworkSrvs() {
+        AndoWSignageApp.clearShutdownInProgress();
         pendingHeartbeatServiceStop = false;
 		stopService(new Intent(AndoWSignage.this, UpdateManagerService.class));
 		startService(new Intent(AndoWSignage.this, UpdateManagerService.class));
@@ -496,6 +498,7 @@ public class AndoWSignage extends Activity {
 	}
 
 	private void requestFinalHeartbeat() {
+        AndoWSignageApp.beginShutdown();
         pendingHeartbeatServiceStop = true;
 		Intent intent = new Intent(this, HeartbeatService.class);
 		intent.setAction(HeartbeatService.ACTION_SEND_STOPPED);

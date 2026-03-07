@@ -57,8 +57,9 @@ public class AndoWSignageApp extends Application {
 	public static boolean isRunning = false;
 	public static boolean isUpdating = false;
 	public static boolean isSlept = false;
+	private static volatile boolean shutdownInProgress = false;
 
-    public static String state = RP_STATUS.stopped.toString();	// playing, stopped, updating
+	public static String state = RP_STATUS.stopped.toString();	// playing, stopped, updating
 	public static String process = "0";		// download process
 	public static String version;
 	
@@ -71,6 +72,7 @@ public class AndoWSignageApp extends Application {
 	public void onCreate() {
 		super.onCreate();
 		sApp = this;
+		clearShutdownInProgress();
 		QuberAgentClient.get().initialize(this);
 		initRealm();
 		init();
@@ -157,5 +159,17 @@ public class AndoWSignageApp extends Application {
 	
 	public static String getDirPath() {
 		return sDir_Path;
+	}
+
+	public static void beginShutdown() {
+		shutdownInProgress = true;
+	}
+
+	public static void clearShutdownInProgress() {
+		shutdownInProgress = false;
+	}
+
+	public static boolean isShutdownInProgress() {
+		return shutdownInProgress;
 	}
 }
