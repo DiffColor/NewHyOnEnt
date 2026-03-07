@@ -16,6 +16,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
@@ -70,6 +71,8 @@ public class SignalRClientService {
     private final Object syncRoot = new Object();
     private final AtomicBoolean stopping = new AtomicBoolean(false);
     private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean terminalHeartbeatMode = new AtomicBoolean(false);
+    private final AtomicLong heartbeatGeneration = new AtomicLong(0L);
 
     private HubConnection connection;
     private HubProxy hubProxy;
@@ -104,18 +107,23 @@ public class SignalRClientService {
 
     public void start() {
         stopping.set(false);
+        terminalHeartbeatMode.set(false);
         enqueueAction("start", this::ensureConnectedInternal);
     }
 
     public void stop() {
         stopping.set(true);
+        invalidateHeartbeatGeneration();
         cancelReconnectSchedule();
+        clearPendingActions();
         enqueueAction("stop", this::stopInternal);
     }
 
     public void reconnect() {
         stopping.set(false);
+        terminalHeartbeatMode.set(false);
         cancelReconnectSchedule();
+        clearPendingActions();
         enqueueAction("reconnect", () -> {
             stopInternal();
             ensureConnectedInternal();
@@ -126,7 +134,24 @@ public class SignalRClientService {
         if (payload == null) {
             return;
         }
-        enqueueAction("heartbeat", () -> sendHeartbeatInternal(payload));
+        if (terminalHeartbeatMode.get()) {
+            return;
+        }
+        long generation = heartbeatGeneration.get();
+        enqueueAction("heartbeat", () -> sendHeartbeatInternal(payload, generation));
+    }
+
+    public void sendStoppedAndStop(HeartbeatPayload payload) {
+        terminalHeartbeatMode.set(true);
+        invalidateHeartbeatGeneration();
+        cancelReconnectSchedule();
+        clearPendingActions();
+        try {
+            sendTerminalHeartbeat(payload);
+        } finally {
+            stopping.set(true);
+            stopInternal();
+        }
     }
 
     private void ensureConnectedInternal() {
@@ -269,8 +294,11 @@ public class SignalRClientService {
         return state == ConnectionState.Connected || state == ConnectionState.Connecting;
     }
 
-    private void sendHeartbeatInternal(HeartbeatPayload payload) {
+    private void sendHeartbeatInternal(HeartbeatPayload payload, long generation) {
         if (stopping.get()) {
+            return;
+        }
+        if (!isCurrentHeartbeatGeneration(generation)) {
             return;
         }
         HubConnection localConn;
@@ -288,6 +316,9 @@ public class SignalRClientService {
             return;
         }
         try {
+            if (!isCurrentHeartbeatGeneration(generation)) {
+                return;
+            }
             SignalRFuture<Void> future = localProxy.invoke("ReportHeartbeat", payload);
             future.get(HEARTBEAT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception ex) {
@@ -303,6 +334,28 @@ public class SignalRClientService {
         }
     }
 
+    private void sendTerminalHeartbeat(HeartbeatPayload payload) {
+        if (payload == null) {
+            return;
+        }
+        HubConnection localConn;
+        HubProxy localProxy;
+        synchronized (syncRoot) {
+            localConn = connection;
+            localProxy = hubProxy;
+        }
+        if (localConn == null || localProxy == null || localConn.getState() != ConnectionState.Connected) {
+            Log.w(TAG, "sendTerminalHeartbeat: connection unavailable");
+            return;
+        }
+        try {
+            SignalRFuture<Void> future = localProxy.invoke("ReportHeartbeat", payload);
+            future.get(HEARTBEAT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (Exception ex) {
+            Log.e(TAG, "sendTerminalHeartbeat: ReportHeartbeat invoke failed", ex);
+        }
+    }
+
     private void cancelReconnectSchedule() {
         reconnectScheduled.set(false);
         synchronized (syncRoot) {
@@ -311,6 +364,18 @@ public class SignalRClientService {
                 reconnectFuture = null;
             }
         }
+    }
+
+    private void clearPendingActions() {
+        actionExecutor.getQueue().clear();
+    }
+
+    private void invalidateHeartbeatGeneration() {
+        heartbeatGeneration.incrementAndGet();
+    }
+
+    private boolean isCurrentHeartbeatGeneration(long generation) {
+        return generation == heartbeatGeneration.get() && !terminalHeartbeatMode.get();
     }
 
     private void enqueueAction(String label, Runnable action) {

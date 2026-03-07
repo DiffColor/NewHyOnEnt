@@ -24,6 +24,8 @@ public class HeartbeatService extends Service {
     private static final int RETHINK_PORT = 28015;
     private static final int CONNECT_TIMEOUT_MS = 1000;
     private static final long RECONNECT_SKIP_MS = 5000L;
+    private static final long UPDATE_KEEPALIVE_MS = 5000L;
+    private static final long UPDATE_REQUEST_MIN_INTERVAL_MS = 500L;
 
     public static final String EXTRA_INTERVAL_MS = "kr.co.turtlelab.andowsignage.services.EXTRA_HEARTBEAT_INTERVAL";
     public static final String ACTION_SEND_STOPPED = "kr.co.turtlelab.andowsignage.services.action.SEND_HEARTBEAT_STOPPED";
@@ -31,6 +33,13 @@ public class HeartbeatService extends Service {
     private static final long DEFAULT_INTERVAL_MS = 5000L;
     private static final long MIN_INTERVAL_MS = 1000L;
     private static final long CLIENT_ID_REFRESH_MS = 5000L;
+    private static final Object UPDATE_REPORT_LOCK = new Object();
+    private static boolean updateReportingActive = false;
+    private static String updateReportingStatus = "updating";
+    private static int updateReportingProgress = 0;
+    private static long lastUpdateReportedAtMs = 0L;
+    private static long lastUpdateRequestAtMs = 0L;
+    private static boolean terminalStopRequested = false;
 
     private final IBinder binder = new LocalBinder();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -54,17 +63,22 @@ public class HeartbeatService extends Service {
         if (intent != null && ACTION_SEND_STOPPED.equals(intent.getAction())) {
             executor.execute(() -> {
                 ensureSignalRReady();
-                publishHeartbeatStopped();
+                publishHeartbeatStoppedAndStop();
+                stopSelfResult(startId);
             });
             return START_NOT_STICKY;
         }
         if (intent != null && ACTION_SEND_NOW.equals(intent.getAction())) {
             executor.execute(() -> {
+                if (isTerminalStopRequested()) {
+                    return;
+                }
                 ensureSignalRReady();
-                publishHeartbeat(true);
+                publishHeartbeat(true, true);
             });
             return START_NOT_STICKY;
         }
+        clearTerminalStopRequested();
         executor.execute(this::ensureSignalRReady);
         if (intent != null && intent.hasExtra(EXTRA_INTERVAL_MS)) {
             long requested = intent.getLongExtra(EXTRA_INTERVAL_MS, intervalMs);
@@ -120,7 +134,7 @@ public class HeartbeatService extends Service {
     }
 
     private void triggerHeartbeatNow() {
-        executor.execute(() -> publishHeartbeat(false));
+        executor.execute(() -> publishHeartbeat(false, false));
     }
 
     private void ensureSignalRReady() {
@@ -147,10 +161,17 @@ public class HeartbeatService extends Service {
     }
 
     public void publishHeartbeat() {
-        publishHeartbeat(false);
+        publishHeartbeat(false, false);
     }
 
     private void publishHeartbeat(boolean forceGuidRefresh) {
+        publishHeartbeat(forceGuidRefresh, false);
+    }
+
+    private void publishHeartbeat(boolean forceGuidRefresh, boolean forceUpdateReport) {
+        if (isTerminalStopRequested()) {
+            return;
+        }
         String clientId = resolveClientId(forceGuidRefresh);
         if (TextUtils.isEmpty(clientId)) {
             return;
@@ -158,16 +179,20 @@ public class HeartbeatService extends Service {
         String playerName = resolvePlayerName();
         String status = AndoWSignageApp.state;
         int process = parseProcess(AndoWSignageApp.process);
-        // 업데이트 큐 진행 중이면 Heartbeat에도 반영
-        kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue queue = kr.co.turtlelab.andowsignage.dataproviders.UpdateQueueProvider.getLatestQueueSnapshot();
-        if (queue != null && !TextUtils.equals(queue.getStatus(), kr.co.turtlelab.andowsignage.data.update.UpdateQueueContract.Status.DONE)
-                && !TextUtils.equals(queue.getStatus(), kr.co.turtlelab.andowsignage.data.update.UpdateQueueContract.Status.FAILED)
-                && !TextUtils.equals(queue.getStatus(), kr.co.turtlelab.andowsignage.data.update.UpdateQueueContract.Status.CANCELLED)) {
-            status = "updating";
-            float dl = queue.getDownloadProgress();
-            float vl = queue.getValidateProgress();
-            float avg = (dl + vl) / 2f;
-            process = Math.round(avg);
+        UpdateHeartbeatSnapshot updateSnapshot = captureUpdateSnapshot(forceUpdateReport);
+        if (updateSnapshot != null) {
+            if (updateSnapshot.suppressNormalHeartbeat) {
+                return;
+            }
+            status = updateSnapshot.status;
+            process = updateSnapshot.progress;
+        } else {
+            // heartbeat service가 재시작된 직후를 위해 최신 큐 상태를 보조적으로 반영한다.
+            kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue queue = kr.co.turtlelab.andowsignage.dataproviders.UpdateQueueProvider.getLatestQueueSnapshot();
+            if (queue != null && isActiveUpdateStatus(queue.getStatus())) {
+                status = normalizeUpdateStatus(queue.getStatus());
+                process = normalizeProgress(queue.getProgress());
+            }
         }
         String version = AndoWSignageApp.version;
         String currentPage = AndoWSignage.currentPageName;
@@ -188,9 +213,16 @@ public class HeartbeatService extends Service {
         }
     }
 
-    public void publishHeartbeatStopped() {
+    public void publishHeartbeatStoppedAndStop() {
+        synchronized (UPDATE_REPORT_LOCK) {
+            terminalStopRequested = true;
+            resetUpdateReportingStateLocked();
+        }
         String clientId = resolveClientId(true);
         if (TextUtils.isEmpty(clientId)) {
+            if (signalRClient != null) {
+                signalRClient.stop();
+            }
             return;
         }
         String playerName = resolvePlayerName();
@@ -203,7 +235,132 @@ public class HeartbeatService extends Service {
                     "",
                     false);
             payload.PlayerName = playerName;
-            signalRClient.sendHeartbeat(payload);
+            signalRClient.sendStoppedAndStop(payload);
+        }
+    }
+
+    public static void reportUpdateProgress(String status, float progress, boolean force) {
+        boolean requestNow = false;
+        synchronized (UPDATE_REPORT_LOCK) {
+            if (terminalStopRequested) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            String normalizedStatus = normalizeUpdateStatus(status);
+            int normalizedProgress = normalizeProgress(progress);
+            boolean sameStatus = TextUtils.equals(updateReportingStatus, normalizedStatus);
+            boolean sameProgress = updateReportingProgress == normalizedProgress;
+            updateReportingActive = true;
+            updateReportingStatus = normalizedStatus;
+            updateReportingProgress = normalizedProgress;
+            if (force || !sameStatus || !sameProgress || now - lastUpdateRequestAtMs >= UPDATE_REQUEST_MIN_INTERVAL_MS) {
+                lastUpdateRequestAtMs = now;
+                requestNow = true;
+            }
+        }
+        if (requestNow) {
+            requestServiceAction(ACTION_SEND_NOW);
+        }
+    }
+
+    public static void reportQueueStatus(String status, float progress, boolean isScheduleQueue) {
+        String normalizedStatus = normalizeUpdateStatus(status);
+        if (isActiveUpdateStatus(normalizedStatus)) {
+            reportUpdateProgress(normalizedStatus, progress, false);
+            return;
+        }
+
+        boolean requestNormalHeartbeat = false;
+        synchronized (UPDATE_REPORT_LOCK) {
+            if (terminalStopRequested) {
+                return;
+            }
+            resetUpdateReportingStateLocked();
+            requestNormalHeartbeat = shouldSendNormalHeartbeatNow(normalizedStatus, isScheduleQueue);
+        }
+        if (requestNormalHeartbeat) {
+            requestServiceAction(ACTION_SEND_NOW);
+        }
+    }
+
+    private static void requestServiceAction(String action) {
+        AndoWSignageApp app = AndoWSignageApp.getApplication();
+        if (app == null || TextUtils.isEmpty(action)) {
+            return;
+        }
+        Intent intent = new Intent(app, HeartbeatService.class);
+        intent.setAction(action);
+        app.startService(intent);
+    }
+
+    private UpdateHeartbeatSnapshot captureUpdateSnapshot(boolean forceUpdateReport) {
+        synchronized (UPDATE_REPORT_LOCK) {
+            if (!updateReportingActive) {
+                return null;
+            }
+            long now = System.currentTimeMillis();
+            if (!forceUpdateReport && lastUpdateReportedAtMs > 0L
+                    && now - lastUpdateReportedAtMs < UPDATE_KEEPALIVE_MS) {
+                return UpdateHeartbeatSnapshot.suppress();
+            }
+            lastUpdateReportedAtMs = now;
+            return UpdateHeartbeatSnapshot.active(updateReportingStatus, updateReportingProgress);
+        }
+    }
+
+    private static void resetUpdateReportingStateLocked() {
+        updateReportingActive = false;
+        updateReportingStatus = "updating";
+        updateReportingProgress = 0;
+        lastUpdateReportedAtMs = 0L;
+        lastUpdateRequestAtMs = 0L;
+    }
+
+    private static boolean isActiveUpdateStatus(String status) {
+        if (TextUtils.isEmpty(status)) {
+            return false;
+        }
+        String normalized = status.trim().toLowerCase();
+        return "queued".equals(normalized)
+                || "downloading".equals(normalized)
+                || "downloaded".equals(normalized)
+                || "validating".equals(normalized)
+                || "ready".equals(normalized)
+                || "applying".equals(normalized)
+                || "updating".equals(normalized);
+    }
+
+    private static boolean shouldSendNormalHeartbeatNow(String normalizedStatus, boolean isScheduleQueue) {
+        if ("done".equals(normalizedStatus) && !isScheduleQueue) {
+            return false;
+        }
+        return true;
+    }
+
+    private static String normalizeUpdateStatus(String status) {
+        if (TextUtils.isEmpty(status)) {
+            return "updating";
+        }
+        return status.trim().toLowerCase();
+    }
+
+    private static int normalizeProgress(float progress) {
+        float value = progress;
+        if (value <= 1f) {
+            value *= 100f;
+        }
+        return Math.max(0, Math.min(100, Math.round(value)));
+    }
+
+    private static void clearTerminalStopRequested() {
+        synchronized (UPDATE_REPORT_LOCK) {
+            terminalStopRequested = false;
+        }
+    }
+
+    private static boolean isTerminalStopRequested() {
+        synchronized (UPDATE_REPORT_LOCK) {
+            return terminalStopRequested;
         }
     }
 
@@ -287,6 +444,26 @@ public class HeartbeatService extends Service {
 
         public void sendHeartbeatNow() {
             triggerHeartbeatNow();
+        }
+    }
+
+    private static final class UpdateHeartbeatSnapshot {
+        final String status;
+        final int progress;
+        final boolean suppressNormalHeartbeat;
+
+        private UpdateHeartbeatSnapshot(String status, int progress, boolean suppressNormalHeartbeat) {
+            this.status = status;
+            this.progress = progress;
+            this.suppressNormalHeartbeat = suppressNormalHeartbeat;
+        }
+
+        static UpdateHeartbeatSnapshot active(String status, int progress) {
+            return new UpdateHeartbeatSnapshot(status, progress, false);
+        }
+
+        static UpdateHeartbeatSnapshot suppress() {
+            return new UpdateHeartbeatSnapshot(null, 0, true);
         }
     }
 }

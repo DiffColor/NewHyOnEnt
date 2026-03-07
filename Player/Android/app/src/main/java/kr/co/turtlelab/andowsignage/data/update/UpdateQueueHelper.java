@@ -19,6 +19,7 @@ import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
+import kr.co.turtlelab.andowsignage.services.HeartbeatService;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 
 /**
@@ -535,6 +536,7 @@ public final class UpdateQueueHelper {
                                 snapshot.playlistName,
                                 snapshot.payloadJson,
                                 snapshot.createdAt);
+                HeartbeatService.reportQueueStatus(snapshot.status, snapshot.progress, snapshot.scheduleQueue);
             } catch (Exception ignore) {
             }
         });
@@ -634,7 +636,8 @@ public final class UpdateQueueHelper {
                 playlistId,
                 playlistName,
                 queue.getPayloadJson(),
-                createdTicks);
+                createdTicks,
+                queue.isScheduleQueue());
     }
 
     public static String getPlayerId(RealmUpdateQueue queue) {
@@ -746,6 +749,7 @@ public final class UpdateQueueHelper {
         final String playlistName;
         final String payloadJson;
         final long createdAt;
+        final boolean scheduleQueue;
 
         StatusSnapshot(long queueId,
                        String externalId,
@@ -763,7 +767,8 @@ public final class UpdateQueueHelper {
                        String playlistId,
                        String playlistName,
                        String payloadJson,
-                       long createdAt) {
+                       long createdAt,
+                       boolean scheduleQueue) {
             this.queueId = queueId;
             this.externalId = externalId;
             this.progress = progress;
@@ -781,6 +786,7 @@ public final class UpdateQueueHelper {
             this.playlistName = playlistName;
             this.payloadJson = payloadJson;
             this.createdAt = createdAt;
+            this.scheduleQueue = scheduleQueue;
         }
     }
 
