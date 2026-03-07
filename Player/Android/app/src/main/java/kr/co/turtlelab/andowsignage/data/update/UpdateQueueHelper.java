@@ -536,10 +536,21 @@ public final class UpdateQueueHelper {
                                 snapshot.playlistName,
                                 snapshot.payloadJson,
                                 snapshot.createdAt);
-                HeartbeatService.reportQueueStatus(snapshot.status, snapshot.progress, snapshot.scheduleQueue);
+                if (shouldReportHeartbeatSnapshot(snapshot.status)) {
+                    HeartbeatService.reportQueueStatus(snapshot.status, snapshot.progress, snapshot.scheduleQueue);
+                }
             } catch (Exception ignore) {
             }
         });
+    }
+
+    private static boolean shouldReportHeartbeatSnapshot(String status) {
+        if (TextUtils.isEmpty(status)) {
+            return false;
+        }
+        String normalized = status.trim().toUpperCase();
+        return !UpdateQueueContract.Status.DOWNLOADING.equals(normalized)
+                && !UpdateQueueContract.Status.VALIDATING.equals(normalized);
     }
 
     private static void deleteQueueRecordAsync(long queueId, String externalId, String playerId) {

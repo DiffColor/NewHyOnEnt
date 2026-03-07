@@ -250,6 +250,9 @@ public class HeartbeatService extends Service {
             int normalizedProgress = normalizeProgress(progress);
             boolean sameStatus = TextUtils.equals(updateReportingStatus, normalizedStatus);
             boolean sameProgress = updateReportingProgress == normalizedProgress;
+            if (!force && sameStatus && normalizedProgress < updateReportingProgress) {
+                return;
+            }
             updateReportingActive = true;
             updateReportingStatus = normalizedStatus;
             updateReportingProgress = normalizedProgress;
@@ -345,11 +348,7 @@ public class HeartbeatService extends Service {
     }
 
     private static int normalizeProgress(float progress) {
-        float value = progress;
-        if (value <= 1f) {
-            value *= 100f;
-        }
-        return Math.max(0, Math.min(100, Math.round(value)));
+        return Math.max(0, Math.min(100, Math.round(progress)));
     }
 
     private static void clearTerminalStopRequested() {
