@@ -185,15 +185,23 @@ public class MediaView extends RelativeLayout {
     public void count() {
         ++tick;
 
+        if (this.cdmList == null || this.cdmList.isEmpty()) {
+            tick = 0;
+            return;
+        }
+
+        if (this.cdmList.size() == 1) {
+            if (s_usedType == CONTENT_TYPE.Video) {
+                videoView.setLoop(true);
+            }
+            tick = 0;
+            return;
+        }
+
         if (s_usedType == CONTENT_TYPE.Video) {
             int duration = videoView.getDuration();
-            if (this.cdmList.size() > 1) {
-                if (duration > 0 && playTime * 1000 >= duration && duration - (tick * 1000) <= 1000) {
-                    videoView.setLoop(false);
-                    tick = 0;
-                    return;
-                }
-            } else {
+            if (duration > 0 && playTime * 1000 >= duration && duration - (tick * 1000) <= 1000) {
+                videoView.setLoop(false);
                 tick = 0;
                 return;
             }
