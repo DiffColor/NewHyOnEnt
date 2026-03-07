@@ -32,6 +32,8 @@ namespace HyOnPlayer
         private int queuedActionProcessor;
         private int reconnectScheduled;
         private int stopping;
+        private int terminalHeartbeatMode;
+        private long heartbeatGeneration;
         private string currentUrl;
         private CancellationTokenSource reconnectDelayCts;
 
@@ -46,12 +48,14 @@ namespace HyOnPlayer
         public void Start()
         {
             Interlocked.Exchange(ref stopping, 0);
+            Interlocked.Exchange(ref terminalHeartbeatMode, 0);
             EnqueueAction("start", () => EnsureConnectionAsync(forceRefreshSettings: false));
         }
 
         public void Stop()
         {
             Interlocked.Exchange(ref stopping, 1);
+            InvalidateHeartbeatQueue();
             CancelReconnectSchedule();
             ClearPendingActions();
             StopConnection();
@@ -60,6 +64,7 @@ namespace HyOnPlayer
         public void StopForExit()
         {
             Interlocked.Exchange(ref stopping, 1);
+            InvalidateHeartbeatQueue();
             CancelReconnectSchedule();
             ClearPendingActions();
             Task.Run(() => StopConnection());
@@ -68,6 +73,7 @@ namespace HyOnPlayer
         public void Reconnect()
         {
             Interlocked.Exchange(ref stopping, 0);
+            Interlocked.Exchange(ref terminalHeartbeatMode, 0);
             CancelReconnectSchedule();
             ClearPendingActions();
             StopConnection();
@@ -141,7 +147,31 @@ namespace HyOnPlayer
                 return;
             }
 
-            EnqueueAction("heartbeat", () => SendHeartbeatInternal(payload, shouldSend));
+            if (Interlocked.CompareExchange(ref terminalHeartbeatMode, 0, 0) == 1)
+            {
+                return;
+            }
+
+            long generation = Interlocked.Read(ref heartbeatGeneration);
+            EnqueueAction("heartbeat", () => SendHeartbeatInternal(payload, shouldSend, generation));
+        }
+
+        public void SendStoppedAndStop(HeartbeatPayload payload)
+        {
+            Interlocked.Exchange(ref terminalHeartbeatMode, 1);
+            InvalidateHeartbeatQueue();
+            CancelReconnectSchedule();
+            ClearPendingActions();
+
+            try
+            {
+                SendTerminalHeartbeat(payload);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref stopping, 1);
+                StopConnection();
+            }
         }
 
         private void ScheduleReconnect()
@@ -182,9 +212,14 @@ namespace HyOnPlayer
             });
         }
 
-        private async Task SendHeartbeatInternal(HeartbeatPayload payload, Func<bool> shouldSend)
+        private async Task SendHeartbeatInternal(HeartbeatPayload payload, Func<bool> shouldSend, long generation)
         {
             if (Interlocked.CompareExchange(ref stopping, 0, 0) == 1)
+            {
+                return;
+            }
+
+            if (!IsCurrentHeartbeatGeneration(generation))
             {
                 return;
             }
@@ -210,6 +245,11 @@ namespace HyOnPlayer
 
             try
             {
+                if (!IsCurrentHeartbeatGeneration(generation))
+                {
+                    return;
+                }
+
                 if (shouldSend != null && !shouldSend())
                 {
                     return;
@@ -222,6 +262,39 @@ namespace HyOnPlayer
                 Logger.WriteErrorLog($"SignalR heartbeat send failed: {ex}", Logger.GetLogFileName());
                 ResetConnectionIfCurrent(localConnection);
                 ScheduleReconnect();
+            }
+        }
+
+        private void SendTerminalHeartbeat(HeartbeatPayload payload)
+        {
+            if (payload == null)
+            {
+                return;
+            }
+
+            HubConnection localConnection;
+            IHubProxy localProxy;
+            lock (syncRoot)
+            {
+                localConnection = connection;
+                localProxy = hubProxy;
+            }
+
+            if (localConnection == null || localProxy == null || localConnection.State != ConnectionState.Connected)
+            {
+                Logger.WriteLog("SignalR terminal heartbeat skipped: connection unavailable.", Logger.GetLogFileName());
+                return;
+            }
+
+            try
+            {
+                WaitWithTimeoutAsync(localProxy.Invoke("ReportHeartbeat", payload), HeartbeatTimeoutMs)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"SignalR terminal heartbeat send failed: {ex}", Logger.GetLogFileName());
             }
         }
 
@@ -615,6 +688,17 @@ namespace HyOnPlayer
             {
                 actionQueue.Clear();
             }
+        }
+
+        private void InvalidateHeartbeatQueue()
+        {
+            Interlocked.Increment(ref heartbeatGeneration);
+        }
+
+        private bool IsCurrentHeartbeatGeneration(long generation)
+        {
+            return generation == Interlocked.Read(ref heartbeatGeneration)
+                   && Interlocked.CompareExchange(ref terminalHeartbeatMode, 0, 0) == 0;
         }
 
         private async Task ProcessActionQueueAsync()
