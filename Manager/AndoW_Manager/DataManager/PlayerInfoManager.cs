@@ -589,13 +589,6 @@ namespace AndoW_Manager
         [JsonProperty("command")]
         public string PendingCommand { get; set; } = string.Empty;
         public string PIF_AuthKey = string.Empty;
-        public string UpdateStatus = string.Empty;
-        public double UpdateProgress;
-        public string UpdateError = string.Empty;
-        public int UpdateRetry;
-        public long UpdateNext;
-
-
         //public string PIF_DataFileName_1 = string.Empty;  // 플레이어에 저장된 컨텐츠파일이름
         //public string PIF_DataFileName_2 = string.Empty;  // 월별 스케줄 파일이름
         //public string PIF_DataFileName_3 = string.Empty;  // 주간 스케줄 파일이름
@@ -620,11 +613,6 @@ namespace AndoW_Manager
             this.PIF_MacAddress = pinfo.PIF_MacAddress;
             this.PendingCommand = pinfo.PendingCommand;
             this.PIF_AuthKey = pinfo.PIF_AuthKey;
-            this.UpdateStatus = pinfo.UpdateStatus;
-            this.UpdateProgress = pinfo.UpdateProgress;
-            this.UpdateError = pinfo.UpdateError;
-            this.UpdateRetry = pinfo.UpdateRetry;
-            this.UpdateNext = pinfo.UpdateNext;
         }
 
         public void CleanDataField()
@@ -641,11 +629,6 @@ namespace AndoW_Manager
             PIF_MacAddress = string.Empty;
             PendingCommand = string.Empty;
             PIF_AuthKey = string.Empty;
-            UpdateStatus = string.Empty;
-            UpdateProgress = 0;
-            UpdateError = string.Empty;
-            UpdateRetry = 0;
-            UpdateNext = 0;
         }
     }
 }

@@ -37,7 +37,6 @@ namespace HyOnPlayer
         private readonly string managerHost;
         private readonly ServerSettingsClient serverSettingsClient;
         private const string RethinkDbName = "NewHyOn";
-        private const string PlayerTableName = "PlayerInfoManager";
         private const string UpdateQueueTableName = "UpdateQueue";
         private const string RethinkUser = "admin";
         private const string RethinkPassword = "turtle04!9";
@@ -56,6 +55,8 @@ namespace HyOnPlayer
         private static readonly TimeSpan ProgressReportInterval = TimeSpan.FromMilliseconds(500);
         private long lastProgressReportTicks;
         private int lastProgressReportPercent;
+        private long updateHeartbeatSessionId;
+        private bool updateHeartbeatReportingActive;
 
         public UpdateService(MainWindow owner)
         {
@@ -1242,7 +1243,7 @@ namespace HyOnPlayer
             lastProgressReportPercent = percent;
             lastProgressReportTicks = nowTicks;
             queue.DownloadProgress = progress;
-            UpdateHeartbeatSnapshot(queue, progress);
+            UpdateHeartbeatSnapshot(queue, progress, force);
         }
 
         private static void ResetChunksToPending(DownloadEntry entry)
@@ -1517,8 +1518,7 @@ namespace HyOnPlayer
                 {
                     progress = validateProgress;
                 }
-                UpdateHeartbeatSnapshot(queue, progress);
-                UpdatePlayerQueueFields(managerHost, player.PIF_GUID, queue.Status, progress, queue.LastError, queue.RetryCount, queue.NextAttemptTicks);
+                UpdateHeartbeatSnapshot(queue, progress, false);
             }
             catch
             {
@@ -1526,11 +1526,11 @@ namespace HyOnPlayer
             }
         }  
 
-        private void UpdateHeartbeatSnapshot(UpdateQueue queue, double progress)
+        private void UpdateHeartbeatSnapshot(UpdateQueue queue, double progress, bool forceImmediateReport)
         {
             if (queue == null)
             {
-                ClearHeartbeatSnapshot();
+                ClearHeartbeatSnapshot(true);
                 return;
             }
 
@@ -1542,25 +1542,67 @@ namespace HyOnPlayer
                           || queue.Status == UpdateQueueStatus.Applying;
             if (!active)
             {
-                ClearHeartbeatSnapshot();
+                ClearHeartbeatSnapshot(true);
                 return;
             }
 
             int percent = (int)Math.Round(Math.Min(1.0, Math.Max(0.0, progress)) * 100);
+            string heartbeatStatus = NormalizeHeartbeatStatus(queue.Status);
+            long sessionId = 0;
             lock (heartbeatSync)
             {
-                heartbeatStatus = "updating";
+                this.heartbeatStatus = heartbeatStatus;
                 heartbeatProgress = percent;
+                sessionId = EnsureUpdateHeartbeatSessionLocked();
+            }
+
+            if (sessionId > 0)
+            {
+                owner?.ReportUpdateHeartbeatNow(heartbeatStatus, percent, forceImmediateReport, sessionId);
             }
         }
 
-        private void ClearHeartbeatSnapshot()
+        private void ClearHeartbeatSnapshot(bool sendNormalHeartbeatNow)
         {
+            long sessionId = 0;
             lock (heartbeatSync)
             {
                 heartbeatStatus = string.Empty;
                 heartbeatProgress = 0;
+                if (updateHeartbeatReportingActive)
+                {
+                    sessionId = updateHeartbeatSessionId;
+                    updateHeartbeatReportingActive = false;
+                    updateHeartbeatSessionId = 0;
+                }
             }
+
+            if (sessionId > 0)
+            {
+                owner?.EndUpdateHeartbeatReporting(sessionId, sendNormalHeartbeatNow);
+            }
+        }
+
+        private long EnsureUpdateHeartbeatSessionLocked()
+        {
+            if (updateHeartbeatReportingActive && updateHeartbeatSessionId > 0)
+            {
+                return updateHeartbeatSessionId;
+            }
+
+            updateHeartbeatSessionId = owner?.BeginUpdateHeartbeatReporting() ?? 0;
+            updateHeartbeatReportingActive = updateHeartbeatSessionId > 0;
+            return updateHeartbeatSessionId;
+        }
+
+        private static string NormalizeHeartbeatStatus(string status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                return "UPDATING";
+            }
+
+            return status.Trim().ToUpperInvariant();
         }
 
         private void RecordHistoryInProgress(string historyId, string refQueueId)
@@ -1583,34 +1625,6 @@ namespace HyOnPlayer
             }
             catch
             {
-            }
-        }
-
-        private void UpdatePlayerQueueFields(string host, string playerGuid, string status, double progress, string error, int retry, long nextAttemptTicks)
-        {
-            if (string.IsNullOrWhiteSpace(playerGuid))
-            {
-                return;
-            }
-
-            using (var conn = RethinkDB.R.Connection()
-                .Hostname(string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host)
-                .Port(28015)
-                .User(RethinkUser, RethinkPassword)
-                .Connect())
-            {
-                RethinkDB.R.Db(RethinkDbName)
-                    .Table(PlayerTableName)
-                    .Get(playerGuid)
-                    .Update(new
-                    {
-                        UpdateStatus = status,
-                        UpdateProgress = progress,
-                        UpdateError = error ?? string.Empty,
-                        UpdateRetry = retry,
-                        UpdateNext = nextAttemptTicks
-                    })
-                    .Run(conn);
             }
         }
 
@@ -2114,24 +2128,13 @@ namespace HyOnPlayer
                     queueRepository.DeleteById(q.Id);
                     cancelled++;
                     LogStatus(q, $"Cancelled: {reason}");
-                    try
-                    {
-                        var targetPlayerId = string.IsNullOrWhiteSpace(q.PlayerId)
-                            ? owner?.g_PlayerInfoManager?.g_PlayerInfo?.PIF_GUID
-                            : q.PlayerId;
-                        if (!string.IsNullOrWhiteSpace(targetPlayerId))
-                        {
-                            UpdatePlayerQueueFields(managerHost, targetPlayerId, "cancelled", 0.0, reason ?? string.Empty, q.RetryCount, q.NextAttemptTicks);
-                        }
-                    }
-                    catch { }
                     ReleasePlayerLease(q.PlayerId);
                     DeleteRemoteQueueRecord(q.PlayerId, q.Id, managerHost);
                 }
                 if (cancelled > 0)
                 {
                     ReleaseLease();
-                    ClearHeartbeatSnapshot();
+                    ClearHeartbeatSnapshot(true);
                 }
                 return cancelled;
             }

@@ -882,6 +882,16 @@ namespace HyOnPlayer
         internal string CurrentPageName => g_CurrentPageName;
         internal string NextPageName => GetNextPageName();
         internal RemoteCommandService CommandService => commandService;
+        internal long BeginUpdateHeartbeatReporting() => heartbeatReporter?.BeginUpdateReporting() ?? 0;
+        internal void ReportUpdateHeartbeatNow(string status, int progress, bool force, long sessionId)
+        {
+            heartbeatReporter?.ReportUpdateNow(status, progress, force, sessionId);
+        }
+
+        internal void EndUpdateHeartbeatReporting(long sessionId, bool sendNormalHeartbeatNow)
+        {
+            heartbeatReporter?.EndUpdateReporting(sessionId, sendNormalHeartbeatNow);
+        }
 
         public void UpdateCurrentPageListName(string pageListName)
         {

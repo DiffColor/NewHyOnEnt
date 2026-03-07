@@ -169,6 +169,12 @@ namespace TurtleTools
                 case "stopped":
                 case "stop":
                     return PlayerStatus.Stopped;
+                case "queued":
+                case "downloading":
+                case "downloaded":
+                case "validating":
+                case "ready":
+                case "applying":
                 case "updating":
                     return PlayerStatus.Updating;
                 default:
