@@ -7,12 +7,21 @@ namespace HyOnPlayer
 {
     internal sealed class HeartbeatReporter : IDisposable
     {
+        private static readonly TimeSpan UpdateKeepAliveInterval = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan UpdateProgressMinimumInterval = TimeSpan.FromMilliseconds(500);
+
         private readonly MainWindow owner;
         private readonly SignalRClientService signalRClientService;
         private readonly MultimediaTimer.Timer timer;
+        private readonly object updateStateLock = new object();
         private readonly int intervalMs;
         private int isExecuting;
         private bool disposed;
+        private long updateReportingSessionId;
+        private bool updateReportingActive;
+        private string lastUpdateStatus = "UPDATING";
+        private int lastUpdateProgress;
+        private DateTime lastUpdateReportedAtUtc = DateTime.MinValue;
 
         public HeartbeatReporter(MainWindow owner, SignalRClientService signalRClientService, int intervalMs = 5000)
         {
@@ -43,7 +52,69 @@ namespace HyOnPlayer
 
         public void SendHeartbeatNow()
         {
-            ThreadPool.QueueUserWorkItem(_ => SendHeartbeatInternal());
+            ThreadPool.QueueUserWorkItem(_ => SendHeartbeatInternal(forceUpdateKeepAlive: true));
+        }
+
+        public long BeginUpdateReporting()
+        {
+            lock (updateStateLock)
+            {
+                updateReportingSessionId++;
+                if (updateReportingSessionId <= 0)
+                {
+                    updateReportingSessionId = 1;
+                }
+
+                updateReportingActive = true;
+                lastUpdateStatus = "UPDATING";
+                lastUpdateProgress = 0;
+                lastUpdateReportedAtUtc = DateTime.MinValue;
+                return updateReportingSessionId;
+            }
+        }
+
+        public void ReportUpdateNow(string status, int progress, bool force, long sessionId)
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    if (!TryBuildImmediateUpdatePayload(sessionId, status, progress, force, out var payload, out var shouldSend))
+                    {
+                        return;
+                    }
+
+                    SendHeartbeatBySignalR(payload, shouldSend);
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
+                }
+            });
+        }
+
+        public void EndUpdateReporting(long sessionId, bool sendNormalHeartbeatNow)
+        {
+            bool shouldSendNormal = false;
+
+            lock (updateStateLock)
+            {
+                if (sessionId > 0 && (!updateReportingActive || updateReportingSessionId != sessionId))
+                {
+                    return;
+                }
+
+                updateReportingActive = false;
+                lastUpdateStatus = "UPDATING";
+                lastUpdateProgress = 0;
+                lastUpdateReportedAtUtc = DateTime.MinValue;
+                shouldSendNormal = sendNormalHeartbeatNow;
+            }
+
+            if (shouldSendNormal)
+            {
+                SendHeartbeatNow();
+            }
         }
 
         public void SendStopped()
@@ -56,7 +127,7 @@ namespace HyOnPlayer
                     payload.Process = 0;
                     payload.CurrentPage = string.Empty;
                     payload.HdmiState = false;
-                    SendHeartbeatBySignalR(payload);
+                    SendHeartbeatBySignalR(payload, null);
                 }
             }
             catch (Exception ex)
@@ -91,7 +162,7 @@ namespace HyOnPlayer
             {
                 try
                 {
-                    SendHeartbeatInternal();
+                    SendHeartbeatInternal(forceUpdateKeepAlive: false);
                 }
                 finally
                 {
@@ -101,14 +172,23 @@ namespace HyOnPlayer
             });
         }
 
-        private void SendHeartbeatInternal()
+        private void SendHeartbeatInternal(bool forceUpdateKeepAlive)
         {
             try
             {
+                if (TryBuildTimerUpdatePayload(forceUpdateKeepAlive, out var updatePayload, out var shouldSend))
+                {
+                    if (updatePayload != null)
+                    {
+                        SendHeartbeatBySignalR(updatePayload, shouldSend);
+                    }
+                    return;
+                }
+
                 var payload = BuildPayload();
                 if (payload != null)
                 {
-                    SendHeartbeatBySignalR(payload);
+                    SendHeartbeatBySignalR(payload, null);
                 }
             }
             catch (Exception ex)
@@ -117,17 +197,122 @@ namespace HyOnPlayer
             }
         }
 
-        private void SendHeartbeatBySignalR(HeartbeatPayload payload)
+        private void SendHeartbeatBySignalR(HeartbeatPayload payload, Func<bool> shouldSend)
         {
             if (payload == null)
             {
                 return;
             }
 
-            signalRClientService?.SendHeartbeat(payload);
+            signalRClientService?.SendHeartbeat(payload, shouldSend);
         }
 
-        private HeartbeatPayload BuildPayload(string overrideStatus = null)
+        private bool TryBuildTimerUpdatePayload(bool force, out HeartbeatPayload payload, out Func<bool> shouldSend)
+        {
+            payload = null;
+            shouldSend = null;
+
+            string status = null;
+            int progress = 0;
+            long sessionId = 0;
+
+            lock (updateStateLock)
+            {
+                if (!updateReportingActive)
+                {
+                    return false;
+                }
+
+                DateTime nowUtc = DateTime.UtcNow;
+                if (!force && lastUpdateReportedAtUtc != DateTime.MinValue && nowUtc - lastUpdateReportedAtUtc < UpdateKeepAliveInterval)
+                {
+                    return true;
+                }
+
+                sessionId = updateReportingSessionId;
+                status = lastUpdateStatus;
+                progress = lastUpdateProgress;
+                lastUpdateReportedAtUtc = nowUtc;
+            }
+
+            payload = BuildPayload(status, progress);
+            if (payload == null)
+            {
+                return true;
+            }
+
+            shouldSend = () => IsCurrentUpdateSession(sessionId);
+            return true;
+        }
+
+        private bool TryBuildImmediateUpdatePayload(long sessionId, string status, int progress, bool force, out HeartbeatPayload payload, out Func<bool> shouldSend)
+        {
+            payload = null;
+            shouldSend = null;
+
+            string normalizedStatus;
+            int normalizedProgress;
+
+            lock (updateStateLock)
+            {
+                if (!updateReportingActive || updateReportingSessionId != sessionId)
+                {
+                    return false;
+                }
+
+                normalizedStatus = NormalizeUpdateStatus(status);
+                normalizedProgress = NormalizeHeartbeatProcess(progress);
+
+                bool sameStatus = string.Equals(lastUpdateStatus, normalizedStatus, StringComparison.OrdinalIgnoreCase);
+                if (!force &&
+                    sameStatus &&
+                    lastUpdateProgress == normalizedProgress)
+                {
+                    return false;
+                }
+
+                if (!force &&
+                    sameStatus &&
+                    lastUpdateReportedAtUtc != DateTime.MinValue &&
+                    DateTime.UtcNow - lastUpdateReportedAtUtc < UpdateProgressMinimumInterval)
+                {
+                    return false;
+                }
+
+                lastUpdateStatus = normalizedStatus;
+                lastUpdateProgress = normalizedProgress;
+                lastUpdateReportedAtUtc = DateTime.UtcNow;
+            }
+
+            payload = BuildPayload(normalizedStatus, normalizedProgress);
+            if (payload == null)
+            {
+                return false;
+            }
+
+            shouldSend = () => IsCurrentUpdateSession(sessionId);
+            return true;
+        }
+
+        private bool IsCurrentUpdateSession(long sessionId)
+        {
+            lock (updateStateLock)
+            {
+                return updateReportingActive && updateReportingSessionId == sessionId;
+            }
+        }
+
+        private static string NormalizeUpdateStatus(string status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                return "UPDATING";
+            }
+
+            return status.Trim().ToUpperInvariant();
+        }
+
+        private HeartbeatPayload BuildPayload(string overrideStatus = null, int? overrideProcess = null)
         {
             var player = owner?.g_PlayerInfoManager?.g_PlayerInfo;
             if (player == null)
@@ -141,9 +326,9 @@ namespace HyOnPlayer
             }
 
             string status = overrideStatus;
-            int process = 0;
+            int process = overrideProcess ?? 0;
 
-            if (string.IsNullOrWhiteSpace(status))
+            if (string.IsNullOrWhiteSpace(status) && !overrideProcess.HasValue)
             {
                 try
                 {

@@ -134,14 +134,14 @@ namespace HyOnPlayer
             ScheduleReconnect();
         }
 
-        public void SendHeartbeat(HeartbeatPayload payload)
+        public void SendHeartbeat(HeartbeatPayload payload, Func<bool> shouldSend = null)
         {
             if (payload == null)
             {
                 return;
             }
 
-            EnqueueAction("heartbeat", () => SendHeartbeatInternal(payload));
+            EnqueueAction("heartbeat", () => SendHeartbeatInternal(payload, shouldSend));
         }
 
         private void ScheduleReconnect()
@@ -182,9 +182,14 @@ namespace HyOnPlayer
             });
         }
 
-        private async Task SendHeartbeatInternal(HeartbeatPayload payload)
+        private async Task SendHeartbeatInternal(HeartbeatPayload payload, Func<bool> shouldSend)
         {
             if (Interlocked.CompareExchange(ref stopping, 0, 0) == 1)
+            {
+                return;
+            }
+
+            if (shouldSend != null && !shouldSend())
             {
                 return;
             }
@@ -205,6 +210,11 @@ namespace HyOnPlayer
 
             try
             {
+                if (shouldSend != null && !shouldSend())
+                {
+                    return;
+                }
+
                 await WaitWithTimeoutAsync(localProxy.Invoke("ReportHeartbeat", payload), HeartbeatTimeoutMs);
             }
             catch (Exception ex)
