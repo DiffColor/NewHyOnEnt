@@ -438,11 +438,25 @@ namespace HyOnPlayer
                 ClientId = player.PIF_GUID,
                 Status = status,
                 Process = NormalizeHeartbeatProcess(process),
-                Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
+                Version = GetHeartbeatVersion(),
                 CurrentPage = owner?.g_CurrentPageName ?? string.Empty,
                 HdmiState = hdmiState
             };
         }
+
+
+        private static string GetHeartbeatVersion()
+        {
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            if (version == null)
+            {
+                return "v0.0.0";
+            }
+
+            var build = version.Build >= 0 ? version.Build : 0;
+            return string.Format("v{0}.{1}.{2}", version.Major, version.Minor, build);
+        }
+
 
         private static int NormalizeHeartbeatProcess(int progress)
         {
