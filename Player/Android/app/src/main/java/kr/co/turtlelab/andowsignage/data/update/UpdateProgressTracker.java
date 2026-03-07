@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import java.util.concurrent.atomic.AtomicReference;
 
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
+import kr.co.turtlelab.andowsignage.services.HeartbeatService;
 
 /**
  * UpdateQueue 진행률을 일관되게 계산하고 서버에도 보고하는 유틸.
@@ -100,5 +101,6 @@ public class UpdateProgressTracker {
                         null,
                         null,
                         null);
+        HeartbeatService.reportUpdateProgress(status, percent, false);
     }
 }
