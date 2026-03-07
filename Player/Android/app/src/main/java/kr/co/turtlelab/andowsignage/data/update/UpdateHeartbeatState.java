@@ -6,98 +6,132 @@ public final class UpdateHeartbeatState {
     private static final long UPDATE_KEEPALIVE_MS = 5000L;
     private static final long UPDATE_REQUEST_MIN_INTERVAL_MS = 500L;
     private static final Object LOCK = new Object();
+    private static final String SIGNALR_UPDATE_STATUS = "updating";
 
     private static boolean active = false;
-    private static String status = "updating";
-    private static int progress = 0;
-    private static long lastReportedAtMs = 0L;
+    private static String lastStatus = SIGNALR_UPDATE_STATUS;
+    private static int lastProgress = 0;
+    private static long lastSentAtMs = 0L;
     private static long lastRequestedAtMs = 0L;
+    private static long revision = 0L;
 
-    private UpdateHeartbeatState() { }
+    private UpdateHeartbeatState() {
+    }
 
-    public static boolean reportProgress(String rawStatus, float rawProgress, boolean force) {
+    public static DispatchRequest reportProgress(String rawStatus, float rawProgress, boolean force) {
         synchronized (LOCK) {
-            long now = System.currentTimeMillis();
-            String normalizedStatus = normalizeUpdateStatus(rawStatus);
-            int normalizedProgress = normalizeProgress(rawProgress);
-
-            if (!force && active) {
-                int currentRank = getStatusRank(status);
-                int nextRank = getStatusRank(normalizedStatus);
-                if (nextRank < currentRank) {
-                    return false;
-                }
-                if (nextRank == currentRank && normalizedProgress < progress) {
-                    return false;
-                }
-                if (nextRank > currentRank && normalizedProgress < progress) {
-                    normalizedProgress = progress;
-                }
+            if (!isActiveUpdateStatus(rawStatus)) {
+                return DispatchRequest.none();
             }
 
-            boolean sameStatus = TextUtils.equals(status, normalizedStatus);
-            boolean sameProgress = progress == normalizedProgress;
+            int normalizedProgress = normalizeProgress(rawProgress);
+            if (active && normalizedProgress < lastProgress) {
+                normalizedProgress = lastProgress;
+            }
+
+            boolean wasActive = active;
+            boolean changed = !wasActive || normalizedProgress != lastProgress;
+            if (changed) {
+                revision++;
+            }
 
             active = true;
-            status = normalizedStatus;
-            progress = normalizedProgress;
+            lastStatus = SIGNALR_UPDATE_STATUS;
+            lastProgress = normalizedProgress;
 
-            if (force || !sameStatus || !sameProgress || now - lastRequestedAtMs >= UPDATE_REQUEST_MIN_INTERVAL_MS) {
+            long now = System.currentTimeMillis();
+            if (force || changed || now - lastRequestedAtMs >= UPDATE_REQUEST_MIN_INTERVAL_MS) {
                 lastRequestedAtMs = now;
-                return true;
+                return DispatchRequest.send(revision);
             }
-            return false;
+
+            return DispatchRequest.none();
         }
     }
 
-    public static boolean reportQueueStatus(String rawStatus, float rawProgress, boolean isScheduleQueue) {
-        String normalizedStatus = normalizeUpdateStatus(rawStatus);
+    public static DispatchRequest reportQueueStatus(String rawStatus, float rawProgress, boolean isScheduleQueue) {
+        String normalizedStatus = normalizeStatus(rawStatus);
         if (isActiveUpdateStatus(normalizedStatus)) {
             return reportProgress(normalizedStatus, rawProgress, false);
         }
 
         synchronized (LOCK) {
-            resetLocked();
+            if (active) {
+                active = false;
+                lastStatus = SIGNALR_UPDATE_STATUS;
+                lastProgress = 0;
+                lastSentAtMs = 0L;
+                lastRequestedAtMs = 0L;
+                revision++;
+            }
         }
-        return shouldSendNormalHeartbeatNow(normalizedStatus, isScheduleQueue);
+
+        return shouldSendNormalHeartbeatNow(normalizedStatus, isScheduleQueue)
+                ? DispatchRequest.sendNormal()
+                : DispatchRequest.none();
     }
 
-    public static Snapshot captureForPublish(boolean forceUpdateReport) {
+    public static Snapshot captureForPublish(boolean forceUpdateReport, long expectedRevision) {
         synchronized (LOCK) {
             if (!active) {
-                return null;
+                return Snapshot.none();
             }
+
+            if (expectedRevision > 0L && revision != expectedRevision) {
+                return Snapshot.cancel();
+            }
+
             long now = System.currentTimeMillis();
-            if (!forceUpdateReport && lastReportedAtMs > 0L
-                    && now - lastReportedAtMs < UPDATE_KEEPALIVE_MS) {
+            if (!forceUpdateReport && lastSentAtMs > 0L && now - lastSentAtMs < UPDATE_KEEPALIVE_MS) {
                 return Snapshot.suppress();
             }
-            lastReportedAtMs = now;
-            return Snapshot.active(status, progress);
+
+            long currentRevision = revision;
+            String currentStatus = lastStatus;
+            int currentProgress = lastProgress;
+            lastSentAtMs = now;
+            return Snapshot.active(currentRevision, currentStatus, currentProgress);
+        }
+    }
+
+    public static boolean canSend(long expectedRevision) {
+        synchronized (LOCK) {
+            return active && revision == expectedRevision;
         }
     }
 
     public static void reset() {
         synchronized (LOCK) {
-            resetLocked();
+            active = false;
+            lastStatus = SIGNALR_UPDATE_STATUS;
+            lastProgress = 0;
+            lastSentAtMs = 0L;
+            lastRequestedAtMs = 0L;
+            revision++;
         }
     }
 
-    private static void resetLocked() {
-        active = false;
-        status = "updating";
-        progress = 0;
-        lastReportedAtMs = 0L;
-        lastRequestedAtMs = 0L;
-    }
-
     private static boolean shouldSendNormalHeartbeatNow(String normalizedStatus, boolean isScheduleQueue) {
-        return !"done".equals(normalizedStatus) || isScheduleQueue;
+        return "done".equals(normalizedStatus)
+                || "failed".equals(normalizedStatus)
+                || "cancelled".equals(normalizedStatus)
+                || isScheduleQueue;
     }
 
-    private static String normalizeUpdateStatus(String rawStatus) {
+    private static boolean isActiveUpdateStatus(String rawStatus) {
+        String normalizedStatus = normalizeStatus(rawStatus);
+        return "queued".equals(normalizedStatus)
+                || "downloading".equals(normalizedStatus)
+                || "downloaded".equals(normalizedStatus)
+                || "validating".equals(normalizedStatus)
+                || "ready".equals(normalizedStatus)
+                || "applying".equals(normalizedStatus)
+                || SIGNALR_UPDATE_STATUS.equals(normalizedStatus);
+    }
+
+    private static String normalizeStatus(String rawStatus) {
         if (TextUtils.isEmpty(rawStatus)) {
-            return "updating";
+            return "";
         }
         return rawStatus.trim().toLowerCase();
     }
@@ -106,66 +140,63 @@ public final class UpdateHeartbeatState {
         return Math.max(0, Math.min(100, Math.round(rawProgress)));
     }
 
-    private static boolean isActiveUpdateStatus(String rawStatus) {
-        if (TextUtils.isEmpty(rawStatus)) {
-            return false;
-        }
-        String normalizedStatus = rawStatus.trim().toLowerCase();
-        return "queued".equals(normalizedStatus)
-                || "downloading".equals(normalizedStatus)
-                || "downloaded".equals(normalizedStatus)
-                || "validating".equals(normalizedStatus)
-                || "ready".equals(normalizedStatus)
-                || "applying".equals(normalizedStatus)
-                || "updating".equals(normalizedStatus);
-    }
+    public static final class DispatchRequest {
+        public final boolean shouldSendUpdateNow;
+        public final boolean shouldSendNormalNow;
+        public final long revision;
 
-    private static int getStatusRank(String rawStatus) {
-        if (TextUtils.isEmpty(rawStatus)) {
-            return -1;
+        private DispatchRequest(boolean shouldSendUpdateNow, boolean shouldSendNormalNow, long revision) {
+            this.shouldSendUpdateNow = shouldSendUpdateNow;
+            this.shouldSendNormalNow = shouldSendNormalNow;
+            this.revision = revision;
         }
-        String normalizedStatus = rawStatus.trim().toLowerCase();
-        if ("queued".equals(normalizedStatus)) {
-            return 0;
+
+        public static DispatchRequest send(long revision) {
+            return new DispatchRequest(true, false, revision);
         }
-        if ("downloading".equals(normalizedStatus) || "updating".equals(normalizedStatus)) {
-            return 1;
+
+        public static DispatchRequest sendNormal() {
+            return new DispatchRequest(false, true, 0L);
         }
-        if ("downloaded".equals(normalizedStatus)) {
-            return 2;
+
+        public static DispatchRequest none() {
+            return new DispatchRequest(false, false, 0L);
         }
-        if ("validating".equals(normalizedStatus)) {
-            return 3;
-        }
-        if ("ready".equals(normalizedStatus)) {
-            return 4;
-        }
-        if ("applying".equals(normalizedStatus)) {
-            return 5;
-        }
-        if ("done".equals(normalizedStatus)) {
-            return 6;
-        }
-        return -1;
     }
 
     public static final class Snapshot {
+        public final boolean hasUpdatePayload;
+        public final boolean suppressNormalHeartbeat;
+        public final long revision;
         public final String status;
         public final int progress;
-        public final boolean suppressNormalHeartbeat;
 
-        private Snapshot(String status, int progress, boolean suppressNormalHeartbeat) {
+        private Snapshot(boolean hasUpdatePayload,
+                         boolean suppressNormalHeartbeat,
+                         long revision,
+                         String status,
+                         int progress) {
+            this.hasUpdatePayload = hasUpdatePayload;
+            this.suppressNormalHeartbeat = suppressNormalHeartbeat;
+            this.revision = revision;
             this.status = status;
             this.progress = progress;
-            this.suppressNormalHeartbeat = suppressNormalHeartbeat;
         }
 
-        public static Snapshot active(String status, int progress) {
-            return new Snapshot(status, progress, false);
+        public static Snapshot active(long revision, String status, int progress) {
+            return new Snapshot(true, false, revision, status, progress);
         }
 
         public static Snapshot suppress() {
-            return new Snapshot(null, 0, true);
+            return new Snapshot(false, true, 0L, null, 0);
+        }
+
+        public static Snapshot cancel() {
+            return new Snapshot(false, false, 0L, null, 0);
+        }
+
+        public static Snapshot none() {
+            return new Snapshot(false, false, 0L, null, 0);
         }
     }
 }

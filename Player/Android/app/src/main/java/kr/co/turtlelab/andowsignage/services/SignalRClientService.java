@@ -35,6 +35,10 @@ import microsoft.aspnet.signalr.client.transport.LongPollingTransport;
 public class SignalRClientService {
     private static final String TAG = "SignalRClientService";
 
+    public interface HeartbeatGuard {
+        boolean shouldSend();
+    }
+
     public interface Listener {
         void onCommand(String command);
         void onCommandEnvelope(SignalRCommandEnvelope envelope);
@@ -131,6 +135,10 @@ public class SignalRClientService {
     }
 
     public void sendHeartbeat(HeartbeatPayload payload) {
+        sendHeartbeat(payload, null);
+    }
+
+    public void sendHeartbeat(HeartbeatPayload payload, HeartbeatGuard guard) {
         if (payload == null) {
             return;
         }
@@ -138,7 +146,7 @@ public class SignalRClientService {
             return;
         }
         long generation = heartbeatGeneration.get();
-        enqueueAction("heartbeat", () -> sendHeartbeatInternal(payload, generation));
+        enqueueAction("heartbeat", () -> sendHeartbeatInternal(payload, guard, generation));
     }
 
     public void sendStoppedAndStop(HeartbeatPayload payload) {
@@ -294,11 +302,14 @@ public class SignalRClientService {
         return state == ConnectionState.Connected || state == ConnectionState.Connecting;
     }
 
-    private void sendHeartbeatInternal(HeartbeatPayload payload, long generation) {
+    private void sendHeartbeatInternal(HeartbeatPayload payload, HeartbeatGuard guard, long generation) {
         if (stopping.get()) {
             return;
         }
         if (!isCurrentHeartbeatGeneration(generation)) {
+            return;
+        }
+        if (guard != null && !guard.shouldSend()) {
             return;
         }
         HubConnection localConn;
@@ -317,6 +328,9 @@ public class SignalRClientService {
         }
         try {
             if (!isCurrentHeartbeatGeneration(generation)) {
+                return;
+            }
+            if (guard != null && !guard.shouldSend()) {
                 return;
             }
             SignalRFuture<Void> future = localProxy.invoke("ReportHeartbeat", payload);

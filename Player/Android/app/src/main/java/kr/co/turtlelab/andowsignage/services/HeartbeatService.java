@@ -29,6 +29,7 @@ public class HeartbeatService extends Service {
     public static final String EXTRA_INTERVAL_MS = "kr.co.turtlelab.andowsignage.services.EXTRA_HEARTBEAT_INTERVAL";
     public static final String ACTION_SEND_STOPPED = "kr.co.turtlelab.andowsignage.services.action.SEND_HEARTBEAT_STOPPED";
     public static final String ACTION_SEND_NOW = "kr.co.turtlelab.andowsignage.services.action.SEND_HEARTBEAT_NOW";
+    private static final String EXTRA_UPDATE_REVISION = "kr.co.turtlelab.andowsignage.services.extra.UPDATE_REVISION";
     private static final long DEFAULT_INTERVAL_MS = 5000L;
     private static final long MIN_INTERVAL_MS = 1000L;
     private static final long CLIENT_ID_REFRESH_MS = 5000L;
@@ -63,12 +64,13 @@ public class HeartbeatService extends Service {
             return START_NOT_STICKY;
         }
         if (intent != null && ACTION_SEND_NOW.equals(intent.getAction())) {
+            long expectedRevision = intent.getLongExtra(EXTRA_UPDATE_REVISION, 0L);
             executor.execute(() -> {
                 if (isTerminalStopRequested()) {
                     return;
                 }
                 ensureSignalRReady();
-                publishHeartbeat(true, true);
+                publishHeartbeat(true, true, expectedRevision);
             });
             return START_NOT_STICKY;
         }
@@ -128,7 +130,7 @@ public class HeartbeatService extends Service {
     }
 
     private void triggerHeartbeatNow() {
-        executor.execute(() -> publishHeartbeat(false, false));
+        executor.execute(() -> publishHeartbeat(false, false, 0L));
     }
 
     private void ensureSignalRReady() {
@@ -155,14 +157,14 @@ public class HeartbeatService extends Service {
     }
 
     public void publishHeartbeat() {
-        publishHeartbeat(false, false);
+        publishHeartbeat(false, false, 0L);
     }
 
     private void publishHeartbeat(boolean forceGuidRefresh) {
-        publishHeartbeat(forceGuidRefresh, false);
+        publishHeartbeat(forceGuidRefresh, false, 0L);
     }
 
-    private void publishHeartbeat(boolean forceGuidRefresh, boolean forceUpdateReport) {
+    private void publishHeartbeat(boolean forceGuidRefresh, boolean forceUpdateReport, long expectedRevision) {
         if (isTerminalStopRequested()) {
             return;
         }
@@ -173,13 +175,16 @@ public class HeartbeatService extends Service {
         String playerName = resolvePlayerName();
         String status = AndoWSignageApp.state;
         int process = parseProcess(AndoWSignageApp.process);
-        UpdateHeartbeatState.Snapshot updateSnapshot = UpdateHeartbeatState.captureForPublish(forceUpdateReport);
-        if (updateSnapshot != null) {
-            if (updateSnapshot.suppressNormalHeartbeat) {
-                return;
-            }
+        SignalRClientService.HeartbeatGuard heartbeatGuard = null;
+        UpdateHeartbeatState.Snapshot updateSnapshot = UpdateHeartbeatState.captureForPublish(forceUpdateReport, expectedRevision);
+        if (updateSnapshot.hasUpdatePayload) {
+            heartbeatGuard = () -> !isTerminalStopRequested() && UpdateHeartbeatState.canSend(updateSnapshot.revision);
             status = updateSnapshot.status;
             process = updateSnapshot.progress;
+        } else if (updateSnapshot.suppressNormalHeartbeat) {
+            return;
+        } else if (expectedRevision > 0L) {
+            return;
         }
         String version = AndoWSignageApp.version;
         String currentPage = AndoWSignage.currentPageName;
@@ -196,7 +201,7 @@ public class HeartbeatService extends Service {
                     currentPage,
                     Boolean.parseBoolean(hdmiState));
             payload.PlayerName = playerName;
-            signalRClient.sendHeartbeat(payload);
+            signalRClient.sendHeartbeat(payload, heartbeatGuard);
         }
     }
 
@@ -232,8 +237,9 @@ public class HeartbeatService extends Service {
                 return;
             }
         }
-        if (UpdateHeartbeatState.reportProgress(status, progress, force)) {
-            requestServiceAction(ACTION_SEND_NOW);
+        UpdateHeartbeatState.DispatchRequest request = UpdateHeartbeatState.reportProgress(status, progress, force);
+        if (request.shouldSendUpdateNow) {
+            requestServiceAction(ACTION_SEND_NOW, request.revision);
         }
     }
 
@@ -243,19 +249,28 @@ public class HeartbeatService extends Service {
                 return;
             }
         }
-        if (UpdateHeartbeatState.reportQueueStatus(status, progress, isScheduleQueue)) {
+        UpdateHeartbeatState.DispatchRequest request = UpdateHeartbeatState.reportQueueStatus(status, progress, isScheduleQueue);
+        if (request.shouldSendUpdateNow) {
+            requestServiceAction(ACTION_SEND_NOW, request.revision);
+        } else if (request.shouldSendNormalNow) {
             requestServiceAction(ACTION_SEND_NOW);
-            return;
         }
     }
 
     private static void requestServiceAction(String action) {
+        requestServiceAction(action, 0L);
+    }
+
+    private static void requestServiceAction(String action, long expectedRevision) {
         AndoWSignageApp app = AndoWSignageApp.getApplication();
         if (app == null || TextUtils.isEmpty(action)) {
             return;
         }
         Intent intent = new Intent(app, HeartbeatService.class);
         intent.setAction(action);
+        if (expectedRevision > 0L) {
+            intent.putExtra(EXTRA_UPDATE_REVISION, expectedRevision);
+        }
         app.startService(intent);
     }
 
