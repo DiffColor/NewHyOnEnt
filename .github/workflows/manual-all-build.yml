@@ -133,8 +133,10 @@ jobs:
           $packageRoot = "release-assets/manager-windows-${{ needs.prepare-release.outputs.artifact_suffix }}-staging"
           Remove-Item -Recurse -Force $packageRoot -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
-          Copy-Item -Path "Manager/AndoW_Manager/bin/x64/Release/*" -Destination $packageRoot -Recurse -Force
-          Copy-Item -Path "Manager/AndoW_Settings/bin/x64/Release/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "Manager/AndoW_Manager/bin/Release/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "Manager/AndoW_Settings/bin/Release/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "Manager/ContentViewer/bin/Release/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "Manager/PageViewer/bin/Release/*" -Destination $packageRoot -Recurse -Force
           Compress-Archive -Path "$packageRoot/*" -DestinationPath $zip -Force
 
       - name: Upload Manager artifact

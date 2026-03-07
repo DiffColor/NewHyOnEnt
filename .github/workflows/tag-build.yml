@@ -65,8 +65,10 @@ jobs:
           $packageRoot = "release-assets/manager-windows-${{ github.ref_name }}-staging"
           Remove-Item -Recurse -Force $packageRoot -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
-          Copy-Item -Path "Manager/AndoW_Manager/bin/x64/Release/*" -Destination $packageRoot -Recurse -Force
-          Copy-Item -Path "Manager/AndoW_Settings/bin/x64/Release/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "Manager/AndoW_Manager/bin/Release/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "Manager/AndoW_Settings/bin/Release/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "Manager/ContentViewer/bin/Release/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "Manager/PageViewer/bin/Release/*" -Destination $packageRoot -Recurse -Force
           Compress-Archive -Path "$packageRoot/*" -DestinationPath "release-assets/manager-windows-${{ github.ref_name }}.zip" -Force
 
       - name: Upload Manager artifact
