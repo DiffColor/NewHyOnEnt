@@ -17,94 +17,61 @@ namespace HyOnPlayer
         private const int DefaultPort = 5000;
         private const string DefaultHubPath = "/Data";
         private const int ReconnectDelayMs = 5000;
+        private const int ConnectTimeoutMs = 15000;
+        private const int HeartbeatTimeoutMs = 5000;
+        private const int MaxSignalRActionQueue = 10;
 
         private readonly MainWindow owner;
         private readonly RemoteCommandService commandService;
         private readonly object syncRoot = new object();
+        private readonly object actionQueueLock = new object();
         private readonly ServerSettingsClient serverSettingsClient;
+        private readonly Queue<SignalRAction> actionQueue = new Queue<SignalRAction>();
         private HubConnection connection;
         private IHubProxy hubProxy;
-        private int reconnecting;
+        private int queuedActionProcessor;
+        private int reconnectScheduled;
         private int stopping;
         private string currentUrl;
+        private CancellationTokenSource reconnectDelayCts;
 
         public SignalRClientService(MainWindow owner, RemoteCommandService commandService)
         {
             this.owner = owner;
             this.commandService = commandService;
             serverSettingsClient = new ServerSettingsClient(owner?.g_LocalSettingsManager?.Settings?.ManagerIP);
+            reconnectDelayCts = new CancellationTokenSource();
         }
 
         public void Start()
         {
-            Task.Run(StartAsync);
+            Interlocked.Exchange(ref stopping, 0);
+            EnqueueAction("start", () => EnsureConnectionAsync(forceRefreshSettings: false));
         }
 
         public void Stop()
         {
             Interlocked.Exchange(ref stopping, 1);
-            HubConnection local;
-
-            lock (syncRoot)
-            {
-                local = connection;
-                hubProxy = null;
-                connection = null;
-            }
-
-            if (local == null)
-            {
-                return;
-            }
-
-            try
-            {
-                local.Stop();
-                local.Dispose();
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog($"SignalR client stop failed: {ex}", Logger.GetLogFileName());
-            }
+            CancelReconnectSchedule();
+            ClearPendingActions();
+            StopConnection();
         }
 
         public void StopForExit()
         {
             Interlocked.Exchange(ref stopping, 1);
-            HubConnection local;
-
-            lock (syncRoot)
-            {
-                local = connection;
-                hubProxy = null;
-                connection = null;
-            }
-
-            if (local == null)
-            {
-                return;
-            }
-
-            Task.Run(() =>
-            {
-                try
-                {
-                    local.Stop();
-                    local.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    Logger.WriteErrorLog($"SignalR client stop failed: {ex}", Logger.GetLogFileName());
-                }
-            });
+            CancelReconnectSchedule();
+            ClearPendingActions();
+            Task.Run(() => StopConnection());
         }
 
         public void Reconnect()
         {
-            Stop();
             Interlocked.Exchange(ref stopping, 0);
-            Interlocked.Exchange(ref reconnecting, 0);
-            Start();
+            CancelReconnectSchedule();
+            ClearPendingActions();
+            StopConnection();
+            EnqueueAction("reconnect", () => EnsureConnectionAsync(forceRefreshSettings: true));
         }
 
         public void Dispose()
@@ -113,21 +80,12 @@ namespace HyOnPlayer
             serverSettingsClient?.Dispose();
         }
 
-        private async Task StartAsync()
-        {
-            bool connected = await EnsureConnectionAsync(forceRefreshSettings: false);
-            if (!connected)
-            {
-                ScheduleReconnect(allowStartWhenDisconnected: true);
-            }
-        }
-
         private HubConnection BuildConnection(string url)
         {
             var hub = new HubConnection(url, BuildQueryString());
             hubProxy = hub.CreateHubProxy("MsgHub");
             hubProxy.On<SignalRMessage>("ReceiveMessage", OnReceiveMessage);          
-            hub.Closed += OnClosed;
+            hub.Closed += () => OnClosed(hub);
             hub.Error += ex => Logger.WriteErrorLog($"SignalR client error: {ex}", Logger.GetLogFileName());
 
             return hub;
@@ -155,20 +113,78 @@ namespace HyOnPlayer
             return query;
         }
 
-        private void OnClosed()
+        private void OnClosed(HubConnection closedConnection)
         {
             if (Interlocked.CompareExchange(ref stopping, 0, 0) == 1)
             {
                 return;
             }
 
+            lock (syncRoot)
+            {
+                if (connection == closedConnection)
+                {
+                    connection = null;
+                    hubProxy = null;
+                    currentUrl = null;
+                }
+            }
+
             Logger.WriteLog("SignalR client disconnected. Reconnecting...", Logger.GetLogFileName());
-            ScheduleReconnect(allowStartWhenDisconnected: false);
+            ScheduleReconnect();
         }
 
         public void SendHeartbeat(HeartbeatPayload payload)
         {
             if (payload == null)
+            {
+                return;
+            }
+
+            EnqueueAction("heartbeat", () => SendHeartbeatInternal(payload));
+        }
+
+        private void ScheduleReconnect()
+        {
+            if (Interlocked.CompareExchange(ref stopping, 0, 0) == 1)
+            {
+                return;
+            }
+
+            if (Interlocked.Exchange(ref reconnectScheduled, 1) == 1)
+            {
+                return;
+            }
+
+            CancellationTokenSource delayCts = ReplaceReconnectCancellation();
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(ReconnectDelayMs, delayCts.Token);
+                    if (delayCts.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    if (Interlocked.CompareExchange(ref stopping, 0, 0) == 0)
+                    {
+                        EnqueueAction("scheduled-reconnect", () => EnsureConnectionAsync(forceRefreshSettings: true));
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref reconnectScheduled, 0);
+                }
+            });
+        }
+
+        private async Task SendHeartbeatInternal(HeartbeatPayload payload)
+        {
+            if (Interlocked.CompareExchange(ref stopping, 0, 0) == 1)
             {
                 return;
             }
@@ -183,61 +199,20 @@ namespace HyOnPlayer
 
             if (localConnection == null || localProxy == null || localConnection.State != ConnectionState.Connected)
             {
-                ScheduleReconnect(allowStartWhenDisconnected: true);
+                ScheduleReconnect();
                 return;
             }
 
-            Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await localProxy.Invoke("ReportHeartbeat", payload);
-                }
-                catch (Exception ex)
-                {
-                    Logger.WriteErrorLog($"SignalR heartbeat send failed: {ex}", Logger.GetLogFileName());
-                    ScheduleReconnect(allowStartWhenDisconnected: true);
-                }
-            });
-        }
-
-        private void ScheduleReconnect(bool allowStartWhenDisconnected)
-        {
-            if (Interlocked.Exchange(ref reconnecting, 1) == 1)
-            {
-                return;
+                await WaitWithTimeoutAsync(localProxy.Invoke("ReportHeartbeat", payload), HeartbeatTimeoutMs);
             }
-
-            Task.Run(async () =>
+            catch (Exception ex)
             {
-                try
-                {
-                    while (Interlocked.CompareExchange(ref stopping, 0, 0) == 0)
-                    {
-                        await Task.Delay(ReconnectDelayMs);
-                        HubConnection local;
-                        lock (syncRoot)
-                        {
-                            local = connection;
-                        }
-
-                        if (local == null && !allowStartWhenDisconnected)
-                        {
-                            return;
-                        }
-
-                        bool connected = await EnsureConnectionAsync(forceRefreshSettings: true);
-                        if (connected)
-                        {
-                            return;
-                        }
-                    }
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref reconnecting, 0);
-                }
-            });
+                Logger.WriteErrorLog($"SignalR heartbeat send failed: {ex}", Logger.GetLogFileName());
+                ResetConnectionIfCurrent(localConnection);
+                ScheduleReconnect();
+            }
         }
 
         private void OnReceiveMessage(SignalRMessage message)
@@ -427,45 +402,46 @@ namespace HyOnPlayer
 
         private async Task<bool> EnsureConnectionAsync(bool forceRefreshSettings)
         {
+            if (Interlocked.CompareExchange(ref stopping, 0, 0) == 1)
+            {
+                return false;
+            }
+
             string url = BuildUrl(forceRefreshSettings);
             if (string.IsNullOrWhiteSpace(url))
             {
                 return false;
             }
 
-            HubConnection local = null;
-            HubConnection old = null;
+            HubConnection local;
+            HubConnection previous = null;
             lock (syncRoot)
             {
                 if (connection != null)
                 {
-                    if (string.Equals(currentUrl, url, StringComparison.OrdinalIgnoreCase))
+                    bool sameUrl = string.Equals(currentUrl, url, StringComparison.OrdinalIgnoreCase);
+                    if (sameUrl && connection.State == ConnectionState.Connected)
                     {
-                        local = connection;
+                        return true;
                     }
-                    else
-                    {
-                        old = connection;
-                        hubProxy = null;
-                        connection = null;
-                        currentUrl = null;
-                    }
+
+                    previous = connection;
+                    hubProxy = null;
+                    connection = null;
+                    currentUrl = null;
                 }
 
-                if (local == null)
-                {
-                    local = BuildConnection(url);
-                    connection = local;
-                    currentUrl = url;
-                }
+                local = BuildConnection(url);
+                connection = local;
+                currentUrl = url;
             }
 
-            if (old != null)
+            if (previous != null)
             {
                 try
                 {
-                    old.Stop();
-                    old.Dispose();
+                    previous.Stop();
+                    previous.Dispose();
                 }
                 catch (Exception ex)
                 {
@@ -480,14 +456,198 @@ namespace HyOnPlayer
 
             try
             {
-                await local.Start();
+                await WaitWithTimeoutAsync(local.Start(), ConnectTimeoutMs);
                 Logger.WriteLog($"SignalR client connected: {url}", Logger.GetLogFileName());
                 return true;
             }
             catch (Exception ex)
             {
                 Logger.WriteErrorLog($"SignalR client connect failed: {ex}", Logger.GetLogFileName());
+                ResetConnectionIfCurrent(local);
+                ScheduleReconnect();
                 return false;
+            }
+        }
+
+        private CancellationTokenSource ReplaceReconnectCancellation()
+        {
+            CancellationTokenSource next = new CancellationTokenSource();
+            CancellationTokenSource old;
+            lock (syncRoot)
+            {
+                old = reconnectDelayCts;
+                reconnectDelayCts = next;
+            }
+
+            if (old != null)
+            {
+                try
+                {
+                    old.Cancel();
+                    old.Dispose();
+                }
+                catch
+                {
+                }
+            }
+
+            return next;
+        }
+
+        private void CancelReconnectSchedule()
+        {
+            Interlocked.Exchange(ref reconnectScheduled, 0);
+            ReplaceReconnectCancellation();
+        }
+
+        private void StopConnection()
+        {
+            HubConnection local;
+            lock (syncRoot)
+            {
+                local = connection;
+                hubProxy = null;
+                connection = null;
+                currentUrl = null;
+            }
+
+            if (local == null)
+            {
+                return;
+            }
+
+            try
+            {
+                local.Stop();
+                local.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"SignalR client stop failed: {ex}", Logger.GetLogFileName());
+            }
+        }
+
+        private void ResetConnectionIfCurrent(HubConnection local)
+        {
+            bool shouldStop = false;
+            lock (syncRoot)
+            {
+                if (connection == local)
+                {
+                    hubProxy = null;
+                    connection = null;
+                    currentUrl = null;
+                    shouldStop = true;
+                }
+            }
+
+            if (!shouldStop)
+            {
+                return;
+            }
+
+            try
+            {
+                local.Stop();
+                local.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"SignalR client reset failed: {ex}", Logger.GetLogFileName());
+            }
+        }
+
+        private async Task WaitWithTimeoutAsync(Task task, int timeoutMs)
+        {
+            Task completed = await Task.WhenAny(task, Task.Delay(timeoutMs));
+            if (completed != task)
+            {
+                throw new TimeoutException($"SignalR operation timed out after {timeoutMs}ms.");
+            }
+
+            await task;
+        }
+
+        private void EnqueueAction(string label, Func<Task> action)
+        {
+            bool shouldStartProcessor = false;
+            string droppedLabel = null;
+
+            lock (actionQueueLock)
+            {
+                if (actionQueue.Count >= MaxSignalRActionQueue)
+                {
+                    droppedLabel = actionQueue.Dequeue().Label;
+                }
+
+                actionQueue.Enqueue(new SignalRAction(label, action));
+                if (queuedActionProcessor == 0)
+                {
+                    queuedActionProcessor = 1;
+                    shouldStartProcessor = true;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(droppedLabel))
+            {
+                Logger.WriteLog($"SignalR action queue full. Dropped oldest action={droppedLabel}", Logger.GetLogFileName());
+            }
+
+            if (shouldStartProcessor)
+            {
+                Task.Run(ProcessActionQueueAsync);
+            }
+        }
+
+        private void ClearPendingActions()
+        {
+            lock (actionQueueLock)
+            {
+                actionQueue.Clear();
+            }
+        }
+
+        private async Task ProcessActionQueueAsync()
+        {
+            while (true)
+            {
+                SignalRAction next;
+                lock (actionQueueLock)
+                {
+                    if (actionQueue.Count == 0)
+                    {
+                        queuedActionProcessor = 0;
+                        return;
+                    }
+
+                    next = actionQueue.Dequeue();
+                }
+
+                try
+                {
+                    await next.ExecuteAsync();
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteErrorLog($"SignalR action failed [{next.Label}]: {ex}", Logger.GetLogFileName());
+                }
+            }
+        }
+
+        private sealed class SignalRAction
+        {
+            public string Label { get; private set; }
+            private readonly Func<Task> action;
+
+            public SignalRAction(string label, Func<Task> action)
+            {
+                Label = label ?? "unknown";
+                this.action = action;
+            }
+
+            public Task ExecuteAsync()
+            {
+                return action == null ? Task.CompletedTask : action();
             }
         }
 
