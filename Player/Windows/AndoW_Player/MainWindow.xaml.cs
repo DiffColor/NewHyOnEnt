@@ -228,6 +228,8 @@ namespace HyOnPlayer
 
         void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            bool signalRStoppedForExit = false;
+
             if (debugWindow != null)
             {
                 debugWindow.Close();
@@ -236,14 +238,15 @@ namespace HyOnPlayer
 
             if (heartbeatReporter != null)
             {
-                heartbeatReporter.SendStopped();
+                heartbeatReporter.SendStoppedAndStopSignalR();
                 heartbeatReporter.Dispose();
                 heartbeatReporter = null;
+                signalRStoppedForExit = true;
             }
 
             var signalRServiceLocal = signalRClientService;
             signalRClientService = null;
-            if (signalRServiceLocal != null)
+            if (!signalRStoppedForExit && signalRServiceLocal != null)
             {
                 signalRServiceLocal.StopForExit();
             }

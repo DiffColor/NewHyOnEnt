@@ -16,6 +16,7 @@ namespace HyOnPlayer
         private readonly object updateStateLock = new object();
         private readonly int intervalMs;
         private int isExecuting;
+        private int terminalStopped;
         private bool disposed;
         private long updateReportingSessionId;
         private bool updateReportingActive;
@@ -40,7 +41,7 @@ namespace HyOnPlayer
 
         public void Start()
         {
-            if (disposed) return;
+            if (disposed || IsTerminalStopped()) return;
             timer.Start();
         }
 
@@ -52,11 +53,21 @@ namespace HyOnPlayer
 
         public void SendHeartbeatNow()
         {
+            if (IsTerminalStopped())
+            {
+                return;
+            }
+
             ThreadPool.QueueUserWorkItem(_ => SendHeartbeatInternal(forceUpdateKeepAlive: true));
         }
 
         public long BeginUpdateReporting()
         {
+            if (IsTerminalStopped())
+            {
+                return 0;
+            }
+
             lock (updateStateLock)
             {
                 updateReportingSessionId++;
@@ -75,10 +86,20 @@ namespace HyOnPlayer
 
         public void ReportUpdateNow(string status, int progress, bool force, long sessionId)
         {
+            if (IsTerminalStopped())
+            {
+                return;
+            }
+
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
+                    if (IsTerminalStopped())
+                    {
+                        return;
+                    }
+
                     if (!TryBuildImmediateUpdatePayload(sessionId, status, progress, force, out var payload, out var shouldSend))
                     {
                         return;
@@ -95,6 +116,11 @@ namespace HyOnPlayer
 
         public void EndUpdateReporting(long sessionId, bool sendNormalHeartbeatNow)
         {
+            if (IsTerminalStopped())
+            {
+                return;
+            }
+
             bool shouldSendNormal = false;
 
             lock (updateStateLock)
@@ -117,29 +143,44 @@ namespace HyOnPlayer
             }
         }
 
-        public void SendStopped()
+        public void SendStoppedAndStopSignalR()
         {
             try
             {
+                Interlocked.Exchange(ref terminalStopped, 1);
+                Stop();
+
+                lock (updateStateLock)
+                {
+                    updateReportingActive = false;
+                    lastUpdateStatus = "UPDATING";
+                    lastUpdateProgress = 0;
+                    lastUpdateReportedAtUtc = DateTime.MinValue;
+                }
+
                 var payload = BuildPayload("stopped");
                 if (payload != null)
                 {
                     payload.Process = 0;
                     payload.CurrentPage = string.Empty;
                     payload.HdmiState = false;
-                    SendHeartbeatBySignalR(payload, null);
+                    signalRClientService?.SendStoppedAndStop(payload);
+                    return;
                 }
             }
             catch (Exception ex)
             {
                 Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
             }
+
+            signalRClientService?.StopForExit();
         }
 
         public void Dispose()
         {
             if (disposed) return;
             disposed = true;
+            Interlocked.Exchange(ref terminalStopped, 1);
             try
             {
                 timer.Stop();
@@ -152,6 +193,11 @@ namespace HyOnPlayer
 
         private void OnElapsed(object sender, EventArgs e)
         {
+            if (IsTerminalStopped())
+            {
+                return;
+            }
+
             if (Interlocked.Exchange(ref isExecuting, 1) == 1)
             {
                 return;
@@ -162,6 +208,11 @@ namespace HyOnPlayer
             {
                 try
                 {
+                    if (IsTerminalStopped())
+                    {
+                        return;
+                    }
+
                     SendHeartbeatInternal(forceUpdateKeepAlive: false);
                 }
                 finally
@@ -174,6 +225,11 @@ namespace HyOnPlayer
 
         private void SendHeartbeatInternal(bool forceUpdateKeepAlive)
         {
+            if (IsTerminalStopped())
+            {
+                return;
+            }
+
             try
             {
                 if (TryBuildTimerUpdatePayload(forceUpdateKeepAlive, out var updatePayload, out var shouldSend))
@@ -200,6 +256,11 @@ namespace HyOnPlayer
         private void SendHeartbeatBySignalR(HeartbeatPayload payload, Func<bool> shouldSend)
         {
             if (payload == null)
+            {
+                return;
+            }
+
+            if (IsTerminalStopped())
             {
                 return;
             }
@@ -298,8 +359,13 @@ namespace HyOnPlayer
         {
             lock (updateStateLock)
             {
-                return updateReportingActive && updateReportingSessionId == sessionId;
+                return !IsTerminalStopped() && updateReportingActive && updateReportingSessionId == sessionId;
             }
+        }
+
+        private bool IsTerminalStopped()
+        {
+            return Interlocked.CompareExchange(ref terminalStopped, 0, 0) == 1;
         }
 
         private static string NormalizeUpdateStatus(string status)
