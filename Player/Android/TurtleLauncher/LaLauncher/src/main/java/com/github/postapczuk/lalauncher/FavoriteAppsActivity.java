@@ -266,12 +266,12 @@ public class FavoriteAppsActivity extends Activity {
                 }
                 break;
 
-//            case KeyEvent.KEYCODE_Q:
-//                if(event.isAltPressed()) {
-//                    startActivity(new Intent(getBaseContext(), InstalledAppsActivity.class));
-//                    overridePendingTransition(R.anim.slide_up, android.R.anim.fade_out);
-//                }
-//                break;
+            case KeyEvent.KEYCODE_Q:
+                if(event.isAltPressed()) {
+                    startActivity(new Intent(getBaseContext(), InstalledAppsActivity.class));
+                    overridePendingTransition(R.anim.slide_up, android.R.anim.fade_out);
+                }
+                break;
 
             case KeyEvent.KEYCODE_POWER :
             case KeyEvent.KEYCODE_HOME :
