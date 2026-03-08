@@ -213,6 +213,8 @@ coverage*.info
 # Gradle / Android build outputs
 **/.gradle/
 **/build/
+**/.idea/
+Test/
 
 # Misc
 **/ClientBin/
