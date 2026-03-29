@@ -13,12 +13,16 @@ import android.content.pm.ResolveInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.text.TextUtils;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -32,12 +36,15 @@ import java.util.List;
 
 import java8.util.Comparators;
 
+import com.github.postapczuk.lalauncher.views.KeyCaptureEditText;
+
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
 
 public class FavoriteAppsActivity extends Activity {
 
     private static final String FAVS = "favorites";
     private static final String SEPARATOR = ",,,";
+    private static final long INPUT_SEQUENCE_TIMEOUT_MS = 1200L;
 
 //    private static final String START_INTENT = "kr.co.turtlelab.startnow";
 
@@ -46,9 +53,13 @@ public class FavoriteAppsActivity extends Activity {
     private List<String> packageNames = new ArrayList<>();
     private ArrayAdapter<String> adapter;
     private android.widget.ListView listView;
+    private KeyCaptureEditText keyInputOverlay;
 
     private SharedPreferences preferences;
     private List<String> favorites = new ArrayList<String>();
+    private final StringBuilder inputCommandBuffer = new StringBuilder();
+    private long inputCommandLastInputAt = 0L;
+    private boolean suppressOverlayTextWatcher = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,9 +91,11 @@ public class FavoriteAppsActivity extends Activity {
         loadFavoritesFromPreferences();
         adapter = createNewAdapter();
         listView = (ListView) findViewById(R.id.mobile_list);
+        keyInputOverlay = (KeyCaptureEditText) findViewById(R.id.key_input_overlay);
         listView.setAdapter(adapter);
         fetchAppList();
         AttitudeHelper.applyPadding(listView, ScreenUtils.getDisplay(getApplicationContext()));
+        initKeyInputOverlay();
 
         hide();
 
@@ -149,17 +162,27 @@ public class FavoriteAppsActivity extends Activity {
     protected void onRestart() {
         super.onRestart();
         hide();
+        requestKeyInputOverlayFocus();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        requestKeyInputOverlayFocus();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            requestKeyInputOverlayFocus();
+        }
     }
 
     private void loadFavoritesFromPreferences() {
         preferences = getSharedPreferences("light-phone-launcher", 0);
         favorites = Arrays.asList(preferences.getString(FAVS, "").split(SEPARATOR));
-        if (favorites.size() == 1 && favorites.get(0) == "") {
+        if (favorites.size() == 1 && "".equals(favorites.get(0))) {
             favorites = new ArrayList<>();
         }
     }
@@ -252,24 +275,30 @@ public class FavoriteAppsActivity extends Activity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (event != null && event.getAction() == KeyEvent.ACTION_DOWN && !event.isAltPressed() && handleOverlaySequenceKey(keyCode, event)) {
+            return true;
+        }
+
         switch(keyCode) {
 
             case KeyEvent.KEYCODE_S:
                 if(event.isAltPressed()) {
                     startActivityForResult(new Intent(android.provider.Settings.ACTION_SETTINGS), 0);
+                    return true;
                 }
                 break;
 
             case KeyEvent.KEYCODE_A:
                 if(event.isAltPressed()) {
                     showFavoriteModal();
+                    return true;
                 }
                 break;
 
             case KeyEvent.KEYCODE_Q:
                 if(event.isAltPressed()) {
-                    startActivity(new Intent(getBaseContext(), InstalledAppsActivity.class));
-                    overridePendingTransition(R.anim.slide_up, android.R.anim.fade_out);
+                    openQuickLaunch();
+                    return true;
                 }
                 break;
 
@@ -282,6 +311,15 @@ public class FavoriteAppsActivity extends Activity {
                 break;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        boolean handled = super.dispatchTouchEvent(event);
+        if (event != null && (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL)) {
+            getWindow().getDecorView().post(this::requestKeyInputOverlayFocus);
+        }
+        return handled;
     }
 
     private void onLongPressHandler(ListView listView) {
@@ -321,6 +359,148 @@ public class FavoriteAppsActivity extends Activity {
     public void onBackPressed() {
 //        startActivity(new Intent(getBaseContext(), InstalledAppsActivity.class));
 //        overridePendingTransition(R.anim.slide_up, android.R.anim.fade_out);
+    }
+
+    private void initKeyInputOverlay() {
+        if (keyInputOverlay == null) {
+            return;
+        }
+
+        keyInputOverlay.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus && hasWindowFocus()) {
+                v.post(this::requestKeyInputOverlayFocus);
+            }
+        });
+
+        keyInputOverlay.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (suppressOverlayTextWatcher || s == null || s.length() == 0) {
+                    return;
+                }
+
+                suppressOverlayTextWatcher = true;
+                try {
+                    handleOverlayContinuousInput(s);
+                    s.clear();
+                } finally {
+                    suppressOverlayTextWatcher = false;
+                }
+            }
+        });
+
+        requestKeyInputOverlayFocus();
+    }
+
+    private void requestKeyInputOverlayFocus() {
+        if (keyInputOverlay == null || isFinishing()) {
+            return;
+        }
+
+        keyInputOverlay.setVisibility(View.VISIBLE);
+        keyInputOverlay.setEnabled(true);
+        keyInputOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        keyInputOverlay.setSelection(keyInputOverlay.length());
+        if (!keyInputOverlay.hasFocus()) {
+            keyInputOverlay.requestFocus();
+        }
+        keyInputOverlay.requestFocusFromTouch();
+
+        InputMethodManager inputMethodManager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (inputMethodManager != null) {
+            inputMethodManager.restartInput(keyInputOverlay);
+            inputMethodManager.hideSoftInputFromWindow(keyInputOverlay.getWindowToken(), 0);
+        }
+    }
+
+    private void resetOverlayCommandBuffer() {
+        inputCommandBuffer.setLength(0);
+        inputCommandLastInputAt = 0L;
+    }
+
+    private void appendOverlaySequenceChar(char inputChar) {
+        char normalized = Character.toLowerCase(inputChar);
+        if (normalized < 'a' || normalized > 'z') {
+            resetOverlayCommandBuffer();
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (inputCommandLastInputAt > 0L && now - inputCommandLastInputAt > INPUT_SEQUENCE_TIMEOUT_MS) {
+            resetOverlayCommandBuffer();
+        }
+        inputCommandLastInputAt = now;
+        inputCommandBuffer.append(normalized);
+        if (inputCommandBuffer.length() > 2) {
+            inputCommandBuffer.delete(0, inputCommandBuffer.length() - 2);
+        }
+
+        int length = inputCommandBuffer.length();
+        if (length >= 2) {
+            char prev = inputCommandBuffer.charAt(length - 2);
+            char last = inputCommandBuffer.charAt(length - 1);
+            if (prev == last) {
+                executeOverlaySequenceCommand(last);
+            }
+        }
+    }
+
+    private void executeOverlaySequenceCommand(char commandChar) {
+        if (Character.toLowerCase(commandChar) == 'q') {
+            resetOverlayCommandBuffer();
+            openQuickLaunch();
+        }
+    }
+
+    private void handleOverlayContinuousInput(CharSequence input) {
+        if (TextUtils.isEmpty(input)) {
+            return;
+        }
+
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if (ch >= 1 && ch <= 26) {
+                executeOverlaySequenceCommand((char) ('a' + ch - 1));
+                continue;
+            }
+
+            if (Character.isLetter(ch)) {
+                appendOverlaySequenceChar(ch);
+                continue;
+            }
+
+            if (!Character.isWhitespace(ch)) {
+                resetOverlayCommandBuffer();
+            }
+        }
+    }
+
+    private boolean handleOverlaySequenceKey(int keyCode, KeyEvent event) {
+        if (event == null) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_Q:
+                appendOverlaySequenceChar('q');
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private void openQuickLaunch() {
+        startActivity(new Intent(getBaseContext(), InstalledAppsActivity.class));
+        overridePendingTransition(R.anim.slide_up, android.R.anim.fade_out);
     }
 
     private void showFavoriteModal() {

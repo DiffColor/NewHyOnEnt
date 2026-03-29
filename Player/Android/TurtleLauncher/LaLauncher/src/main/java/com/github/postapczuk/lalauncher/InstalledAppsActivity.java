@@ -14,8 +14,10 @@ import android.os.Handler;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ListView;
@@ -35,6 +37,7 @@ public class InstalledAppsActivity extends Activity {
     private List<String> appNamesPosition = new ArrayList<>();
     private ArrayAdapter<String> adapter;
     private ListView listView;
+    private EditText editTextFilter;
 
     @Override
     protected void onResume() {
@@ -42,6 +45,7 @@ public class InstalledAppsActivity extends Activity {
         if (getActivities(getPackageManager()).size() - 1 != packageNames.size()) {
             fetchAppList();
         }
+        requestSearchFilterFocus();
     }
 
     @Override
@@ -56,7 +60,7 @@ public class InstalledAppsActivity extends Activity {
                 FLAG_LAYOUT_NO_LIMITS);
         setContentView(R.layout.activity_installed);
 
-        EditText editTextFilter = (EditText) findViewById(R.id.searchFilter);
+        editTextFilter = (EditText) findViewById(R.id.searchFilter);
         int horizontalPadding = ScreenUtils.getDisplay(getApplicationContext()).getWidth() / 12;
         int topPadding = ScreenUtils.getDisplay(getApplicationContext()).getHeight() / 10;
         int bottomPadding = topPadding / 4;
@@ -84,7 +88,15 @@ public class InstalledAppsActivity extends Activity {
 
             }
         });
+        requestSearchFilterFocus();
+    }
 
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            requestSearchFilterFocus();
+        }
     }
 
     private ArrayAdapter<String> createNewAdapter() {
@@ -104,6 +116,7 @@ public class InstalledAppsActivity extends Activity {
 
     private void fetchAppList() {
         packageNames.clear();
+        appNamesPosition.clear();
         adapter.clear();
         for (ResolveInfo resolver : getActivities(getPackageManager())) {
             String appName = (String) resolver.loadLabel(getPackageManager());
@@ -183,8 +196,35 @@ public class InstalledAppsActivity extends Activity {
         overridePendingTransition(android.R.anim.fade_in, R.anim.slide_down);
     }
 
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        boolean handled = super.dispatchTouchEvent(event);
+        if (event != null && (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL)) {
+            getWindow().getDecorView().post(this::requestSearchFilterFocus);
+        }
+        return handled;
+    }
+
     private void toggleTextviewBackground(View selectedItem, Long millis) {
         selectedItem.setBackgroundColor(getResources().getColor(R.color.colorBackgroundFavorite));
         new Handler().postDelayed(() -> selectedItem.setBackgroundColor(getResources().getColor(R.color.colorTransparent)), millis);
+    }
+
+    private void requestSearchFilterFocus() {
+        if (editTextFilter == null || isFinishing()) {
+            return;
+        }
+
+        editTextFilter.setSelection(editTextFilter.length());
+        if (!editTextFilter.hasFocus()) {
+            editTextFilter.requestFocus();
+        }
+        editTextFilter.requestFocusFromTouch();
+
+        InputMethodManager inputMethodManager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (inputMethodManager != null) {
+            inputMethodManager.restartInput(editTextFilter);
+            inputMethodManager.hideSoftInputFromWindow(editTextFilter.getWindowToken(), 0);
+        }
     }
 }

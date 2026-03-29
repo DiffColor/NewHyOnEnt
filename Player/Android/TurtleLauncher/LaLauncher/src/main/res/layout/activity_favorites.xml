@@ -12,6 +12,14 @@
         android:scaleType="fitCenter"
         android:src="@drawable/turtlelab_bg"/>
 
+    <com.github.postapczuk.lalauncher.views.KeyCaptureEditText
+        android:id="@+id/key_input_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        android:importantForAccessibility="yes"
+        android:contentDescription="launcher_input_overlay" />
+
     <ListView
             android:id="@+id/mobile_list"
             android:layout_width="match_parent"

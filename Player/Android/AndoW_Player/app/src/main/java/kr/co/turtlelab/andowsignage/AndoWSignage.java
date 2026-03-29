@@ -16,8 +16,11 @@ import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.view.inputmethod.InputMethodManager;
 import android.os.IBinder;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -82,6 +85,7 @@ import kr.co.turtlelab.andowsignage.tools.WakeLocker;
 import kr.co.turtlelab.andowsignage.data.update.ContentDownloadJournal;
 import kr.co.turtlelab.andowsignage.data.update.UpdateQueueContract;
 import kr.co.turtlelab.andowsignage.views.GifMovieView;
+import kr.co.turtlelab.andowsignage.views.KeyCaptureEditText;
 import kr.co.turtlelab.andowsignage.views.MediaView;
 import kr.co.turtlelab.andowsignage.views.ScrollTextView;
 import kr.co.turtlelab.andowsignage.views.TurtleVideoView;
@@ -112,6 +116,11 @@ public class AndoWSignage extends Activity {
 	private boolean pendingUpdateReady = false;
 	private TextView debugOverlay;
 	private boolean debugOverlayVisible = false;
+	private KeyCaptureEditText keyInputOverlay;
+	private static final long OVERLAY_SEQUENCE_TIMEOUT_MS = 1200L;
+	private final StringBuilder overlayCommandBuffer = new StringBuilder();
+	private long overlayCommandLastInputAt = 0L;
+	private boolean suppressOverlayTextWatcher = false;
 
 	RelativeLayout layout_root;
 	RelativeLayout overlay_container;
@@ -253,7 +262,9 @@ public class AndoWSignage extends Activity {
 		
 		layout_root = (RelativeLayout) findViewById(R.id.layout_root);
 		overlay_container = (RelativeLayout) findViewById(R.id.overlay_container);
+		keyInputOverlay = (KeyCaptureEditText) findViewById(R.id.key_input_overlay);
 		initDebugOverlay();
+		initKeyInputOverlay();
 
 		checkBakFile();
         
@@ -375,7 +386,7 @@ public class AndoWSignage extends Activity {
 			
 			@Override
 			public void onDismiss(DialogInterface dialog) {
-				//占쏙옙트占쏙옙크 占쏙옙占쏙옙 占쏙옙占쏙옙
+				requestKeyInputOverlayFocus();
 			}
 		});
 
@@ -395,6 +406,7 @@ public class AndoWSignage extends Activity {
         WakeLocker.stanbyMode(this);
         SystemUtils.setDimButtons(act, true);
         SystemUtils.systemBarVisibility(act, false);
+		requestKeyInputOverlayFocus();
 	}
 	
 	private void releaseSettings() {
@@ -444,6 +456,7 @@ public class AndoWSignage extends Activity {
 		getPrefValues();
 
 		settingsForPlaying();
+		requestKeyInputOverlayFocus();
 
 		registerRcv();
 		enableWatchDog();
@@ -1143,6 +1156,10 @@ public class AndoWSignage extends Activity {
 
 	@Override
 	public boolean onKeyDown(int keyCode, KeyEvent event) {
+		if (handleOverlaySequenceKey(keyCode, event)) {
+			return true;
+		}
+
 		switch(keyCode) {
 
 			case KeyEvent.KEYCODE_HOME :
@@ -1152,43 +1169,36 @@ public class AndoWSignage extends Activity {
 				break;
 
 			case KeyEvent.KEYCODE_E:
-				if(event.isCtrlPressed()) {
-					enable7waitWatchDog();
+				if(event.isCtrlPressed() && executeOverlaySequenceCommand('e')) {
+					return true;
 				}
 				break;
 
 			case KeyEvent.KEYCODE_D:
-				if(event.isCtrlPressed()) {
-					manualStopRequested = true;
-					disableWatchDog();
-					stopWatchdogPing();
-					finish();
+				if(event.isCtrlPressed() && executeOverlaySequenceCommand('d')) {
 					return true;
 				}
 				break;
 
 			case KeyEvent.KEYCODE_M:
-				if(event.isCtrlPressed()) {
-					FileUtils.deleteFile(LocalPathUtils.getAuthFilePath());
-					LocalSettingsProvider.updateUsbAuthKey("");
+				if(event.isCtrlPressed() && executeOverlaySequenceCommand('m')) {
+					return true;
 				}
 				break;
 
 			case KeyEvent.KEYCODE_S:
-				if(event.isCtrlPressed()) {
-					Intent configIntent = new Intent();
-					configIntent.setAction("andowsignage.intent.action.CALL_SETTINGS");
-					act.sendBroadcast(configIntent);
+				if(event.isCtrlPressed() && executeOverlaySequenceCommand('s')) {
+					return true;
 				}
 				break;
 				
 			case KeyEvent.KEYCODE_DPAD_LEFT:
 				PrevContent();
-				break;
+				return true;
 				
 			case KeyEvent.KEYCODE_DPAD_RIGHT:
 				NextContent();
-				break;
+				return true;
 			
 			case KeyEvent.KEYCODE_POWER :
             case KeyEvent.KEYCODE_F1:
@@ -1258,7 +1268,18 @@ public class AndoWSignage extends Activity {
 
 	@Override
 	public boolean dispatchKeyEvent(KeyEvent event) {
+		if (event != null && event.getAction() == KeyEvent.ACTION_DOWN) {
+			requestKeyInputOverlayFocus();
+		}
 		return super.dispatchKeyEvent(event);
+	}
+
+	@Override
+	public void onWindowFocusChanged(boolean hasFocus) {
+		super.onWindowFocusChanged(hasFocus);
+		if (hasFocus) {
+			requestKeyInputOverlayFocus();
+		}
 	}
 
 	void bindUpdateMgrService() {
@@ -1401,6 +1422,192 @@ public class AndoWSignage extends Activity {
 			overlay_container.addView(debugOverlay, params);
 		} else {
 			layout_root.addView(debugOverlay, params);
+		}
+	}
+
+	private void initKeyInputOverlay() {
+		if (keyInputOverlay == null) {
+			return;
+		}
+
+		keyInputOverlay.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+			@Override
+			public void onFocusChange(View v, boolean hasFocus) {
+				if (!hasFocus && canTakeOverlayInputFocus()) {
+					v.post(new Runnable() {
+						@Override
+						public void run() {
+							requestKeyInputOverlayFocus();
+						}
+					});
+				}
+			}
+		});
+
+		keyInputOverlay.addTextChangedListener(new TextWatcher() {
+			@Override
+			public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+			}
+
+			@Override
+			public void onTextChanged(CharSequence s, int start, int before, int count) {
+			}
+
+			@Override
+			public void afterTextChanged(Editable s) {
+				if (suppressOverlayTextWatcher || s == null || s.length() == 0) {
+					return;
+				}
+
+				String input = s.toString();
+				suppressOverlayTextWatcher = true;
+				try {
+					handleOverlayContinuousInput(input);
+					s.clear();
+				} finally {
+					suppressOverlayTextWatcher = false;
+				}
+			}
+		});
+
+		requestKeyInputOverlayFocus();
+	}
+
+	private boolean canTakeOverlayInputFocus() {
+		return keyInputOverlay != null
+				&& !isFinishing()
+				&& (m_settingDlg == null || !m_settingDlg.isShowing());
+	}
+
+	private void resetOverlayCommandBuffer() {
+		overlayCommandBuffer.setLength(0);
+		overlayCommandLastInputAt = 0L;
+	}
+
+	private boolean executeOverlaySequenceCommand(char commandChar) {
+		switch (Character.toLowerCase(commandChar)) {
+			case 'e':
+				enable7waitWatchDog();
+				return true;
+
+			case 'd':
+				manualStopRequested = true;
+				disableWatchDog();
+				stopWatchdogPing();
+				finish();
+				return true;
+
+			case 'm':
+				FileUtils.deleteFile(LocalPathUtils.getAuthFilePath());
+				LocalSettingsProvider.updateUsbAuthKey("");
+				return true;
+
+			case 's':
+				Intent configIntent = new Intent();
+				configIntent.setAction("andowsignage.intent.action.CALL_SETTINGS");
+				act.sendBroadcast(configIntent);
+				return true;
+
+			default:
+				return false;
+		}
+	}
+
+	private boolean appendOverlaySequenceChar(char inputChar) {
+		char normalized = Character.toLowerCase(inputChar);
+		if (normalized < 'a' || normalized > 'z') {
+			resetOverlayCommandBuffer();
+			return false;
+		}
+
+		long now = System.currentTimeMillis();
+		if (overlayCommandLastInputAt > 0L && now - overlayCommandLastInputAt > OVERLAY_SEQUENCE_TIMEOUT_MS) {
+			resetOverlayCommandBuffer();
+		}
+		overlayCommandLastInputAt = now;
+		overlayCommandBuffer.append(normalized);
+		if (overlayCommandBuffer.length() > 2) {
+			overlayCommandBuffer.delete(0, overlayCommandBuffer.length() - 2);
+		}
+
+		int length = overlayCommandBuffer.length();
+		if (length >= 2) {
+			char prev = overlayCommandBuffer.charAt(length - 2);
+			char last = overlayCommandBuffer.charAt(length - 1);
+			if (prev == last && executeOverlaySequenceCommand(last)) {
+				resetOverlayCommandBuffer();
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private void handleOverlayContinuousInput(CharSequence input) {
+		if (TextUtils.isEmpty(input)) {
+			return;
+		}
+
+		for (int i = 0; i < input.length(); i++) {
+			char ch = input.charAt(i);
+			if (ch >= 1 && ch <= 26) {
+				executeOverlaySequenceCommand((char) ('a' + ch - 1));
+				resetOverlayCommandBuffer();
+				continue;
+			}
+
+			if (Character.isLetter(ch)) {
+				appendOverlaySequenceChar(ch);
+				continue;
+			}
+
+			if (!Character.isWhitespace(ch)) {
+				resetOverlayCommandBuffer();
+			}
+		}
+	}
+
+	private boolean handleOverlaySequenceKey(int keyCode, KeyEvent event) {
+		if (event == null || event.isCtrlPressed()) {
+			return false;
+		}
+
+		switch (keyCode) {
+			case KeyEvent.KEYCODE_D:
+				return appendOverlaySequenceChar('d');
+			case KeyEvent.KEYCODE_E:
+				return appendOverlaySequenceChar('e');
+			case KeyEvent.KEYCODE_M:
+				return appendOverlaySequenceChar('m');
+			case KeyEvent.KEYCODE_S:
+				return appendOverlaySequenceChar('s');
+			default:
+				return false;
+		}
+	}
+
+	private void requestKeyInputOverlayFocus() {
+		if (!canTakeOverlayInputFocus()) {
+			return;
+		}
+
+		if (overlay_container != null) {
+			overlay_container.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+			overlay_container.bringToFront();
+		}
+		keyInputOverlay.setVisibility(View.VISIBLE);
+		keyInputOverlay.setEnabled(true);
+		keyInputOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+		keyInputOverlay.bringToFront();
+		keyInputOverlay.setSelection(keyInputOverlay.length());
+		if (!keyInputOverlay.hasFocus()) {
+			keyInputOverlay.requestFocus();
+		}
+		keyInputOverlay.requestFocusFromTouch();
+		InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+		if (imm != null) {
+			imm.restartInput(keyInputOverlay);
+			imm.hideSoftInputFromWindow(keyInputOverlay.getWindowToken(), 0);
 		}
 	}
 
