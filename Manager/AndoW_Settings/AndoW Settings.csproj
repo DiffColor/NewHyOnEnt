@@ -8,7 +8,7 @@
     <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>AndoWSettings</RootNamespace>
-    <AssemblyName>AndoW Settings</AssemblyName>
+    <AssemblyName>NewHyOn Settings</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <PublishUrl>게시\</PublishUrl>

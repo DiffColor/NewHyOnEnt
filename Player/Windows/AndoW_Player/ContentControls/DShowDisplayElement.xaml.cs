@@ -13,7 +13,7 @@ using System.ComponentModel;
 using System.Text;
 using SharedContentsInfoClass = AndoW.Shared.ContentsInfoClass;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     /// <summary>
     /// Interaction logic for DShowDisplayElement.xaml

@@ -13,7 +13,7 @@ namespace TurtleTools
         private const int DefaultPort = 21;
         private const int DefaultTimeoutMs = 5000;
         private const int TransferBufferSizeBytes = 2 * 1024 * 1024;
-        private const string UpgradeApkRelativePath = "UpgradeAPK/AndoW_Player.apk";
+        private const string UpgradeApkRelativePath = "UpgradeAPK/NewHyOn_Player.apk";
 
         public static bool TryTestConnection(out string error)
         {

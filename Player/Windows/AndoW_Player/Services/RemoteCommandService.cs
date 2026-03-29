@@ -1,7 +1,7 @@
-using AndoW.Shared;
+﻿using AndoW.Shared;
 using Newtonsoft.Json;
 using SharedUpdatePayload = AndoW.Shared.UpdatePayload;
-using HyOnPlayer.DataManager;
+using NewHyOnPlayer.DataManager;
 using RethinkDb.Driver;
 using RethinkDb.Driver.Ast;
 using RethinkDb.Driver.Net;
@@ -10,10 +10,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using TurtleTools;
-using HyOnPlayer.Services;
+using NewHyOnPlayer.Services;
 using SharedWeeklyPlayScheduleInfo = AndoW.Shared.WeeklyPlayScheduleInfo;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class RemoteCommandService : IDisposable
     {

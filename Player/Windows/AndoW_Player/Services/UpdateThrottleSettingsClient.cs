@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using AndoW.Shared;
 using RethinkDb.Driver;
 using RethinkDb.Driver.Net;
 using TurtleTools;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class UpdateThrottleSettingsClient : IDisposable
     {

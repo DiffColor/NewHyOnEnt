@@ -1,12 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
-using HyOnPlayer.DataManager;
+using NewHyOnPlayer.DataManager;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public partial class DebugWindow : Window
     {

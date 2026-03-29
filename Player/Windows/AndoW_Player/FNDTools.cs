@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     class FNDTools
     {
@@ -132,11 +132,11 @@ namespace HyOnPlayer
 
         public static string GetPlayerProcName()
         {
-            return "HyOn Player";
+            return "NewHyOn Player";
         }
         public static string GetAgentProcName()
         {
-            return "HyOn Agent";
+            return "NewHyOn Agent";
         }
         public static string GetPCSProcName()
         {

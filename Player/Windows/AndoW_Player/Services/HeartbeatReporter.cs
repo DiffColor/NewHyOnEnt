@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 using System.Reflection;
 using System.Threading;
 using TurtleTools;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class HeartbeatReporter : IDisposable
     {

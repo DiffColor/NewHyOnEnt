@@ -12,7 +12,7 @@ namespace AndoWSettings
         static void Main()
         {
             bool newProc;
-            Mutex dup = new Mutex(true, "AndoW_Settings", out newProc);
+            Mutex dup = new Mutex(true, "NewHyOn_Settings", out newProc);
 
             if (newProc)
             {

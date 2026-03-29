@@ -8,7 +8,7 @@ using WndStyle = DirectShowLib.WindowStyle;
 using Forms = System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
 
     /// <summary>

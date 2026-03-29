@@ -12,7 +12,7 @@ namespace AndoW_Manager
     public partial class App : Application
     {
         private Mutex _instanceMutex;
-        private const string ProcName = "AndoW_Manager";
+        private const string ProcName = "NewHyOn_Manager";
 
         protected override void OnStartup(StartupEventArgs e)
         {

@@ -196,16 +196,16 @@ namespace ConfigPlayer
             CreateOrPass(path);
             return path;
         }
-        public static string GetHyOnUSBRootPath(string usbname)
+        public static string GetNewHyOnUSBRootPath(string usbname)
         {
-            string path = string.Format(@"{0}:\{1}", usbname, @"MultiHyOn USB");
+            string path = string.Format(@"{0}:\{1}", usbname, @"MultiNewHyOn USB");
             CreateOrPass(path);
             return path;
         }
 
         public static string GetUSBDataPath(string usbname)
         {
-            //string path = Path.Combine(GetHyOnUSBRootPath(usbname), "Data");
+            //string path = Path.Combine(GetNewHyOnUSBRootPath(usbname), "Data");
             string path = Path.Combine(GetUSBPagesPath(usbname), "TurtleData");
             CreateOrPass(path);
             return path;
@@ -214,7 +214,7 @@ namespace ConfigPlayer
 
         public static string GetUSBPagesPath(string usbname)
         {
-            string path = Path.Combine(GetHyOnUSBRootPath(usbname), "Pages");
+            string path = Path.Combine(GetNewHyOnUSBRootPath(usbname), "Pages");
             CreateOrPass(path);
             return path;
 
@@ -535,11 +535,11 @@ namespace ConfigPlayer
 
         public static string GetPlayerProcName()
         {
-            return "HyOn Player";
+            return "NewHyOn Player";
         }
         public static string GetAgentProcName()
         {
-            return "HyOn Agent";
+            return "NewHyOn Agent";
         }
         public static string GetShopPDProcName()
         {

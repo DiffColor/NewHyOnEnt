@@ -1,4 +1,4 @@
-﻿<Application x:Class="HyOnPlayer.App"
+﻿<Application x:Class="NewHyOnPlayer.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 </Application>

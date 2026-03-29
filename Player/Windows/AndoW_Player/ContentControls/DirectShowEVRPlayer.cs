@@ -11,7 +11,7 @@ using MediaFoundation.Transform;
 using MediaFoundation.Misc;
 //using GenericSampleSourceFilterClasses;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal enum PlaybackState
     {

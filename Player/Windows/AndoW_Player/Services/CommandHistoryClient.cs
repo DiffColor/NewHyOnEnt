@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using RethinkDb.Driver;
 using RethinkDb.Driver.Net;
-using HyOnPlayer.DataManager;
+using NewHyOnPlayer.DataManager;
 using System.Collections.Generic;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class CommandHistoryClient : IDisposable
     {

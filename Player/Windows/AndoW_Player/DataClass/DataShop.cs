@@ -1,5 +1,5 @@
 ﻿
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public enum PowerControlType { SystemOff, SystemReboot, ApplicationClose, BlackScreen, Hibernation }
     public enum DisplayType { None, Media, ScrollText, WelcomeBoard }

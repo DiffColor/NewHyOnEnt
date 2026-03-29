@@ -1,4 +1,4 @@
-using AndoW.Shared;
+﻿using AndoW.Shared;
 using RethinkDb.Driver;
 using RethinkDb.Driver.Ast;
 using RethinkDb.Driver.Net;
@@ -12,7 +12,7 @@ using System.Threading;
 using TurtleTools;
 using SharedWeeklyPlayScheduleInfo = AndoW.Shared.WeeklyPlayScheduleInfo;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class RethinkSyncService : IDisposable
     {

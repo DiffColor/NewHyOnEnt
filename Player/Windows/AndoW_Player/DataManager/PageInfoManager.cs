@@ -6,7 +6,7 @@ using AndoW.Shared;
 using SharedContentsInfoClass = AndoW.Shared.ContentsInfoClass;
 using SharedElementInfoClass = AndoW.Shared.ElementInfoClass;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public class PageInfoManager
     {

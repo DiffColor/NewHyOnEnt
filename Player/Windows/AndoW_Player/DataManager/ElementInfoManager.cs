@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using AndoW.Shared;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public class ElementInfoManager
     {

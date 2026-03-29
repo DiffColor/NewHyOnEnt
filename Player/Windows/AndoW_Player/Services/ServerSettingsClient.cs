@@ -1,11 +1,11 @@
-using System;
+﻿using System;
 using System.Linq;
 using Newtonsoft.Json;
 using RethinkDb.Driver;
 using RethinkDb.Driver.Net;
 using TurtleTools;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class ServerSettingsClient : IDisposable
     {

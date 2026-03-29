@@ -1,6 +1,6 @@
-using AndoW.Shared;
+﻿using AndoW.Shared;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     // 기존 코드 호환을 위한 래퍼 클래스들
     public class PageInfoClass : AndoW.Shared.PageInfoClass { }

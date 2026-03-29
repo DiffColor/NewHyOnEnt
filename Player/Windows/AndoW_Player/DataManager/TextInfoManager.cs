@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using AndoW.Shared;
-using HyOnPlayer;
+using NewHyOnPlayer;
 
-namespace HyOnPlayer.DataManager
+namespace NewHyOnPlayer.DataManager
 {
     public class TextInfoManager
     {

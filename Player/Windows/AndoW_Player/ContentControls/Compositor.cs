@@ -1,4 +1,4 @@
-/****************************************************************************
+﻿/****************************************************************************
 While the underlying libraries are covered by LGPL, this sample is released 
 as public domain.  It is distributed in the hope that it will be useful, but 
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
@@ -14,7 +14,7 @@ using System.Runtime.InteropServices;
 using DirectShowLib;
 using Microsoft.DirectX.Direct3D;
 
-namespace HyOnPlayer_WPF_DS
+namespace NewHyOnPlayer_WPF_DS
 {
   public class Compositor : IVMRImageCompositor9, IDisposable
   {

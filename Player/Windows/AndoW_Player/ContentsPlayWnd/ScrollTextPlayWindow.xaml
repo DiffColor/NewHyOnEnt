@@ -1,8 +1,8 @@
 ﻿<Window
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="clr-namespace:HyOnPlayer" 
-        x:Class="HyOnPlayer.ScrollTextPlayWindow"
+        xmlns:local="clr-namespace:NewHyOnPlayer" 
+        x:Class="NewHyOnPlayer.ScrollTextPlayWindow"
         Closing="Window_Closing"
         SizeChanged="Window_SizeChanged"
         Title="ScrollTextWindow" WindowStyle="None" ResizeMode="NoResize" Background="Transparent" IsHitTestVisible="False" AllowsTransparency="True">

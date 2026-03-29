@@ -1,11 +1,11 @@
-using System;
+﻿using System;
 using AndoW.Shared;
 using RethinkDb.Driver;
 using RethinkDb.Driver.Ast;
 using RethinkDb.Driver.Net;
 using TurtleTools;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class UpdateLeaseClient : IDisposable
     {

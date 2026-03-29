@@ -1,9 +1,9 @@
-using System;
-using HyOnPlayer.DataManager;
+﻿using System;
+using NewHyOnPlayer.DataManager;
 using RethinkDb.Driver;
 using RethinkDb.Driver.Net;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class UpdateQueueRethinkClient : IDisposable
     {

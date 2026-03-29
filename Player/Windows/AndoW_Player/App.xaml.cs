@@ -4,7 +4,7 @@ using System.Threading;
 using System.Windows;
 using TurtleTools;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     /// <summary>
     /// App.xaml에 대한 상호 작용 논리
@@ -12,7 +12,7 @@ namespace HyOnPlayer
     public partial class App : Application
     {
         private Mutex _instanceMutex = null;
-        string procName = "HyOn Player";
+        string procName = "NewHyOn Player";
 
         protected override void OnStartup(StartupEventArgs e)
         {

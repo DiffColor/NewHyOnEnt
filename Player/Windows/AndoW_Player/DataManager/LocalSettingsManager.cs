@@ -2,7 +2,7 @@
 
 using System.Collections.Generic;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public class LocalSettingsManager
     {

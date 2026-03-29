@@ -1,10 +1,10 @@
-using AndoW.Shared;
+﻿using AndoW.Shared;
 using System;
 using System.Threading;
 using TurtleTools;
 using SharedWeeklyPlayScheduleInfo = AndoW.Shared.WeeklyPlayScheduleInfo;
 
-namespace HyOnPlayer.Services
+namespace NewHyOnPlayer.Services
 {
     internal sealed class OnAirService : IDisposable
     {

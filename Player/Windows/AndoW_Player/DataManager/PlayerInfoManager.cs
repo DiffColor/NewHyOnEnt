@@ -1,7 +1,7 @@
 ﻿using AndoW.Shared;
 using System.Linq;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public class PlayerInfoManager
     {

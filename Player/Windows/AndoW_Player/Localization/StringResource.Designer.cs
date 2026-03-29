@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace HyOnPlayer.Localization {
+namespace NewHyOnPlayer.Localization {
     using System;
     
     
@@ -39,7 +39,7 @@ namespace HyOnPlayer.Localization {
         internal static global::System.Resources.ResourceManager ResourceManager {
             get {
                 if (object.ReferenceEquals(resourceMan, null)) {
-                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("HyOnPlayer.Localization.StringResource", typeof(StringResource).Assembly);
+                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("NewHyOnPlayer.Localization.StringResource", typeof(StringResource).Assembly);
                     resourceMan = temp;
                 }
                 return resourceMan;

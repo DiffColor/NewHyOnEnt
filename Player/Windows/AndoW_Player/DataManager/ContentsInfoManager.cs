@@ -2,7 +2,7 @@
 using AndoW.Shared;
 using SharedContentsInfoClass = AndoW.Shared.ContentsInfoClass;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public class ContentsInfoManager
     {

@@ -38,7 +38,7 @@ namespace AndoWSettings
         void SaveBtn_Click(object sender, EventArgs e)
         {
             ProcessTools.KillExeProcess(FNDTools.GetManagerProcName());
-            ProcessTools.KillExeProcess(FNDTools.GetHyOnManagerProcName());
+            ProcessTools.KillExeProcess(FNDTools.GetNewHyOnManagerProcName());
 
             SaveTurtlePort();
         }
@@ -184,7 +184,7 @@ namespace AndoWSettings
         {
             if (string.IsNullOrWhiteSpace(rootPath))
             {
-                return "/NewHyOnEnt";
+                return "/NewHyOn";
             }
 
             string normalized = rootPath.Replace("\\", "/").Trim();

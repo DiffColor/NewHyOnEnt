@@ -3,8 +3,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:DirectShowControls="clr-namespace:WPFMediaKit.DirectShow.Controls;assembly=WPFMediaKit"
-             xmlns:local="clr-namespace:HyOnPlayer" 
-             x:Class="HyOnPlayer.WMKitMediaElement" 
+             xmlns:local="clr-namespace:NewHyOnPlayer" 
+             x:Class="NewHyOnPlayer.WMKitMediaElement" 
              mc:Ignorable="d" >
     
     <Grid x:Name="ContentGrid" >

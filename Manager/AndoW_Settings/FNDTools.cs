@@ -88,7 +88,7 @@ namespace AndoWSettings
 
         public static string GetUSBRootPath(string usbname)
         {
-            string path = string.Format(@"{0}:\{1}", usbname, @"AndoW_USB");
+            string path = string.Format(@"{0}:\{1}", usbname, @"NewHyOn_USB");
             CreateOrPass(path);
             return path;
         }
@@ -152,10 +152,10 @@ namespace AndoWSettings
 
         public static string GetManagerProcName()
         {
-            return "AndoW Manager";
+            return "NewHyOn Manager";
         }
 
-        public static string GetHyOnManagerProcName()
+        public static string GetNewHyOnManagerProcName()
         {
             return "HyonMessageServer";
         }
@@ -167,7 +167,7 @@ namespace AndoWSettings
 
         public static string GetUpgradeAPKFTPFilePath()
         {
-            return Path.Combine(GetUpgradeAPKFTPDirPath(), "AndoW_Player.apk");
+            return Path.Combine(GetUpgradeAPKFTPDirPath(), "NewHyOn_Player.apk");
         }
 
         #endregion

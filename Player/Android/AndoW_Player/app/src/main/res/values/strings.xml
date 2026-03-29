@@ -3,7 +3,7 @@
 
 	<string name="app_version">v2.56</string>
 	
-    <string name="app_name">AndoW Signage</string>
+    <string name="app_name">NewHyOn Signage</string>
 
 	<string name="settings1">Player Settings</string>
 	<string name="settings2">Schedule Settings</string>
@@ -16,7 +16,7 @@
 	<string name="ps_item6">Source Key : </string>
 	<string name="ps_item7">  Auth Key : </string>
 
-	<string name="config_noti_name">AndoW Configuration</string>
+	<string name="config_noti_name">NewHyOn Configuration</string>
 	<string name="config_noti_desc">Touch Me!!</string>
 	
 	<string name="confirm">Set</string>

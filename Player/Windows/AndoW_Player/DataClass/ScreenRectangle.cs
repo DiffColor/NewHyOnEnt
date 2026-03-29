@@ -1,5 +1,5 @@
 ﻿
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public class ScreenRectangle
     {

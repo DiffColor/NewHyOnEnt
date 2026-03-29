@@ -8,7 +8,7 @@ namespace TurtleTools
 {
     internal static class LocalSettingsStore
     {
-        private const string DefaultFtpRootPath = "/NewHyOnEnt";
+        private const string DefaultFtpRootPath = "/NewHyOn";
         private const string ConnectionId = "singleton";
         private const string CollectionConnection = "local_connection";
         private const string CollectionFtp = "local_ftp";

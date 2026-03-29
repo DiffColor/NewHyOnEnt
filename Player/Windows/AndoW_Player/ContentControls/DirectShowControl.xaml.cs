@@ -13,7 +13,7 @@ using MediaFoundation.Misc;
 using System.Drawing;
 using System.IO;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public enum PlayStateType
     {

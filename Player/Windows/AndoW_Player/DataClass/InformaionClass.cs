@@ -1,7 +1,7 @@
 ﻿using System.Data;
 
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public enum WindowType { contentsPlayWindow, scrollTextWindow, welcomeBoardWindow}
 

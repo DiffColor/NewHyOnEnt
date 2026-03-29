@@ -353,7 +353,7 @@
     <value>3, 4, 3, 4</value>
   </data>
   <data name="$this.Text" xml:space="preserve">
-    <value>HyOn Log Viewer</value>
+    <value>NewHyOn Log Viewer</value>
   </data>
   <data name="&gt;&gt;$this.Name" xml:space="preserve">
     <value>FormLogView</value>

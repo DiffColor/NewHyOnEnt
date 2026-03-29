@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
@@ -7,7 +7,7 @@ using RethinkDb.Driver.Ast;
 using RethinkDb.Driver.Net;
 using TurtleTools;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class CommandQueueClient : IDisposable
     {

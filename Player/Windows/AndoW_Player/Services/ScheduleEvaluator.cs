@@ -1,12 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using AndoW.Shared;
-using HyOnPlayer.DataManager;
+using NewHyOnPlayer.DataManager;
 using SharedWeeklyPlayScheduleInfo = AndoW.Shared.WeeklyPlayScheduleInfo;
 
-namespace HyOnPlayer.Services
+namespace NewHyOnPlayer.Services
 {
     internal sealed class ScheduleEvaluator
     {

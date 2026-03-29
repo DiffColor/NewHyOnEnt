@@ -9,7 +9,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using WndStyle = DirectShowLib.WindowStyle;
 
-namespace HyOnPlayer_WPF_DS
+namespace NewHyOnPlayer_WPF_DS
 {
     //public enum PlayStateType
     //{

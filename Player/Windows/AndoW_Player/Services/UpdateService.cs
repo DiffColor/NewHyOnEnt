@@ -1,7 +1,7 @@
-using AndoW.Shared;
+﻿using AndoW.Shared;
 using SharedUpdatePayload = AndoW.Shared.UpdatePayload;
 using FluentFTP;
-using HyOnPlayer.DataManager;
+using NewHyOnPlayer.DataManager;
 using Newtonsoft.Json;
 using RethinkDb.Driver;
 using RethinkDb.Driver.Net;
@@ -14,7 +14,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TurtleTools;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     internal sealed class UpdateService : IDisposable
     {
@@ -2023,7 +2023,7 @@ namespace HyOnPlayer
 
         private static string BuildRemotePath(string rootPath, string relativePath)
         {
-            string normalizedRoot = NormalizeRemotePath(rootPath, "/NewHyOnEnt");
+            string normalizedRoot = NormalizeRemotePath(rootPath, "/NewHyOn");
             string normalizedRelative = NormalizeRemotePath(relativePath, "/");
 
             if (string.IsNullOrWhiteSpace(normalizedRelative) || normalizedRelative == "/")
@@ -2067,7 +2067,7 @@ namespace HyOnPlayer
             {
                 Host = string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host;
                 Port = port > 0 ? port : FTP_PORT;
-                RootPath = NormalizeRemotePath(rootPath, "/NewHyOnEnt");
+                RootPath = NormalizeRemotePath(rootPath, "/NewHyOn");
             }
         }
 

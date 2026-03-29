@@ -1,7 +1,7 @@
 ﻿using AndoW.LiteDb;
 using LiteDB;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public class TTPlayerInfoManager
     {

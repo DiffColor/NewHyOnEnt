@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Windows.Interop;
 using TurtleTools;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     /// <summary>
     /// ExeControl.xaml 

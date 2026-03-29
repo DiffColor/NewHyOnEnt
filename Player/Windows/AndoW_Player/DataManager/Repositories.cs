@@ -1,11 +1,11 @@
-using AndoW.LiteDb;
+﻿using AndoW.LiteDb;
 using AndoW.Shared;
-using HyOnPlayer.DataManager;
+using NewHyOnPlayer.DataManager;
 using System;
 using System.Collections.Generic;
 using SharedWeeklyPlayScheduleInfo = AndoW.Shared.WeeklyPlayScheduleInfo;
 
-namespace HyOnPlayer
+namespace NewHyOnPlayer
 {
     public sealed class PlayerInfoRepository : LiteDbRepository<PlayerInfoClass>, IDisposable
     {

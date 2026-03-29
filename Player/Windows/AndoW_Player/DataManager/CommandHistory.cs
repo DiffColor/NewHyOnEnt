@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using LiteDB;
 using Newtonsoft.Json;
 
-namespace HyOnPlayer.DataManager
+namespace NewHyOnPlayer.DataManager
 {
     public static class CommandHistoryStatus
     {

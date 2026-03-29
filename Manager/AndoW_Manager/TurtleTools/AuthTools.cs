@@ -255,7 +255,7 @@ namespace TurtleTools
         public static void WriteDemoReg()
         {
             string subKey = "ILYcode";
-            string valueKey = "HyOnInstalled";
+            string valueKey = "NewHyOnInstalled";
 
             DateTime dt = DateTime.Now;
 
@@ -280,7 +280,7 @@ namespace TurtleTools
         public static void WriteTryAuthReg()
         {
             string subKey = "ILYcode";
-            string valueKey = "TryHyOn";
+            string valueKey = "TryNewHyOn";
 
             string keyValue = ReadRegKey(subKey, valueKey);
 
@@ -298,7 +298,7 @@ namespace TurtleTools
         public static bool ProhibitTring()
         {
             string subKey = "ILYcode";
-            string valueKey = "TryHyOn";
+            string valueKey = "TryNewHyOn";
 
             string keyValue = ReadRegKey(subKey, valueKey);
 
