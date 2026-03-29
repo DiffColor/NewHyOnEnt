@@ -1,0 +1,158 @@
+<ui:FluentWindow
+    x:Class="StartApps.Views.Dialogs.AppSettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:models="clr-namespace:StartApps.Models"
+    xmlns:converters="clr-namespace:StartApps.Converters"
+    WindowStartupLocation="CenterOwner"
+    Title="앱 설정"
+    Width="420"
+    BorderThickness="0"
+    ResizeMode="NoResize"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
+    ExtendsContentIntoTitleBar="True">
+    <ui:FluentWindow.Resources>
+        <converters:AppTypeVisibilityConverter x:Key="AppTypeVisibilityConverter" />
+    </ui:FluentWindow.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <ScrollViewer Grid.Row="0">
+            <StackPanel Margin="24">
+                <TextBlock Text="기본 정보" FontSize="18" FontWeight="SemiBold" />
+                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,0" />
+
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <TextBlock Text="실행 영역" VerticalAlignment="Center" Width="80" />
+                    <ComboBox SelectedValue="{Binding Zone}" SelectedValuePath="Tag" Width="200" Margin="12,0,0,0">
+                        <ComboBoxItem Content="즉시 실행" Tag="{x:Static models:AppExecutionZone.Parallel}" />
+                        <ComboBoxItem Content="순차 실행" Tag="{x:Static models:AppExecutionZone.Sequential}" />
+                    </ComboBox>
+                </StackPanel>
+
+                <CheckBox Content="StartApps 실행 시 자동 활성화" IsChecked="{Binding IsEnabled}" Margin="0,12,0,0" />
+
+                <CheckBox Content="종료 후 다음 단계 진행"
+                          IsChecked="{Binding WaitForExitBeforeNext}"
+                          Margin="0,8,0,0">
+                    <CheckBox.Style>
+                        <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Zone}" Value="{x:Static models:AppExecutionZone.Sequential}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </CheckBox.Style>
+                </CheckBox>
+                
+                <Separator Margin="0,12,0,0" />
+
+                <StackPanel>
+                    <TextBlock Text="공통 실행 옵션" FontSize="18" FontWeight="SemiBold" Margin="0,12,0,4" />
+                    <CheckBox Content="콘솔창 표시" IsChecked="{Binding ShowWindow}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="콘솔창 스타일" Width="100" VerticalAlignment="Center" />
+                        <ComboBox x:Name="WindowStyleCombo" SelectedItem="{Binding WindowStyle}" Width="200" Margin="12,0,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="실행 지연" Width="100" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" Margin="12,0,0,0">
+                            <TextBox Width="60" Text="{Binding DelayMinutes}" />
+                            <TextBlock Text="분" Margin="6,0,0,0" VerticalAlignment="Center" />
+                            <TextBox Width="60" Text="{Binding DelaySeconds}" Margin="12,0,0,0" />
+                            <TextBlock Text="초" Margin="6,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+                    <CheckBox Content="네트워크 연결 시에만 실행" IsChecked="{Binding RequireNetworkAvailable}" Margin="0,8,0,0" />
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding Type, Converter={StaticResource AppTypeVisibilityConverter}, ConverterParameter=Rdb}" Margin="0,16,0,0">
+                    <TextBlock Text="RethinkDB 설정" FontSize="18" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="포트" Width="80" VerticalAlignment="Center" />
+                        <TextBox Width="200" Text="{Binding Port}" Margin="12,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding Type, Converter={StaticResource AppTypeVisibilityConverter}, ConverterParameter=Ftp}" Margin="0,16,0,0">
+                    <TextBlock Text="FileZilla 서버 설정" FontSize="18" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="포트" Width="80" VerticalAlignment="Center" />
+                        <TextBox Width="200" Text="{Binding Port}" Margin="12,0,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="패시브 포트 범위" Width="120" VerticalAlignment="Center" />
+                        <TextBox Width="200" Text="{Binding PassivePortRange}" Margin="12,0,0,0"
+                                 ToolTip="예: 24000-24240" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="사용자" Width="80" VerticalAlignment="Center" />
+                        <TextBox Width="200" Text="{Binding FtpUsername}" Margin="12,0,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="비밀번호" Width="80" VerticalAlignment="Center" />
+                        <PasswordBox x:Name="FtpPasswordBox" Width="200" Margin="12,0,0,0" PasswordChanged="OnFtpPasswordChanged" />
+                    </StackPanel>
+                    <TextBlock Text="홈 디렉터리" Margin="0,8,0,0" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Margin="0,0,12,0" Padding="8,6" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4">
+                            <TextBlock x:Name="FtpHomeDirectoryBox"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="NoWrap"
+                                       TextAlignment="Left"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                        <Button Grid.Column="1" Content="선택" Width="80" Click="OnBrowseFtpHome" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <CheckBox Content="읽기 허용" IsChecked="{Binding FtpAllowRead}" />
+                        <CheckBox Content="쓰기 허용" IsChecked="{Binding FtpAllowWrite}" Margin="12,0,0,0" />
+                    </StackPanel>
+                    <Button Content="FileZilla 인터페이스 실행" Click="OnLaunchFtpInterface" Margin="0,8,0,0" />
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding Type, Converter={StaticResource AppTypeVisibilityConverter}, ConverterParameter='Msg|Msg472|Msg90'}" Margin="0,16,0,0">
+                    <TextBlock Text="SignalR 설정" FontSize="18" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="포트" Width="80" VerticalAlignment="Center" />
+                        <TextBox Width="200" Text="{Binding Port}" Margin="12,0,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="허브 경로" Width="80" VerticalAlignment="Center" />
+                        <TextBox Width="200" Text="{Binding MsgHubPath}" Margin="12,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Visibility="{Binding Type, Converter={StaticResource AppTypeVisibilityConverter}, ConverterParameter=App}" Margin="0,16,0,0">
+                    <TextBlock Text="실행 파일" FontSize="18" FontWeight="SemiBold" />
+                    <DockPanel Margin="0,8,0,0">
+                        <TextBox x:Name="ExecutablePathBox" Text="{Binding ExecutablePath}" Margin="0,0,12,0" />
+                        <Button Content="찾기" Width="80" DockPanel.Dock="Right" Click="OnBrowseExecutable" />
+                    </DockPanel>
+                    <TextBlock Text="인자" Margin="0,8,0,0" />
+                    <TextBox Text="{Binding Arguments}" />
+                    <TextBlock Text="작업 디렉터리" Margin="0,8,0,0" />
+                    <DockPanel>
+                        <TextBox x:Name="WorkingDirectoryBox" Text="{Binding WorkingDirectory}" Margin="0,0,12,0" />
+                        <Button Content="선택" Width="80" DockPanel.Dock="Right" Click="OnBrowseWorkingDirectory" />
+                    </DockPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,24,24">
+            <Button Content="취소" Width="100" Click="OnCancel" Margin="0,0,12,0" />
+            <Button Content="저장" Width="120" Click="OnSave" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>
