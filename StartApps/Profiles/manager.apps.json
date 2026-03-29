@@ -1,0 +1,42 @@
+[
+  {
+    "name": "RDB",
+    "type": "Rdb",
+    "zone": "Parallel",
+    "isEnabled": true,
+    "runAsAdministrator": true,
+    "port": 28015
+  },
+  {
+    "name": "SignalR472",
+    "type": "Msg472",
+    "zone": "Parallel",
+    "isEnabled": true,
+    "port": 5000,
+    "msgHubPath": "/Data",
+    "showWindow": false,
+    "windowStyle": "Hidden"
+  },
+  {
+    "name": "FTP",
+    "type": "Ftp",
+    "zone": "Parallel",
+    "isEnabled": true,
+    "runAsAdministrator": true,
+    "port": 10021,
+    "passivePortRange": "24000-24240",
+    "ftpAllowRead": true,
+    "ftpAllowWrite": true
+  },
+  {
+    "name": "WindowLocker",
+    "type": "App",
+    "zone": "Parallel",
+    "isEnabled": true,
+    "runAsAdministrator": true,
+    "executablePath": "{MyDocuments}\\Turtle Lab\\NewHyOn Manager\\WindowLocker.exe",
+    "workingDirectory": "{MyDocuments}\\Turtle Lab\\NewHyOn Manager",
+    "showWindow": true,
+    "windowStyle": "Normal"
+  }
+]

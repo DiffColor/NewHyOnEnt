@@ -6,7 +6,9 @@ using StartApps.Models;
 using StartApps.Services;
 using Wpf.Ui.Controls;
 using PasswordBox = System.Windows.Controls.PasswordBox;
+using TextBox = System.Windows.Controls.TextBox;
 using Forms = System.Windows.Forms;
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 
 namespace StartApps.Views.Dialogs;
 
@@ -14,6 +16,7 @@ public partial class AppSettingsWindow : FluentWindow
 {
     private readonly AppDependencyService _dependencyService;
     private readonly AppDefinition _workingCopy;
+    private bool _isUpdatingPathTextBoxes;
 
     public AppSettingsWindow(AppDefinition definition, AppDependencyService dependencyService)
     {
@@ -45,6 +48,8 @@ public partial class AppSettingsWindow : FluentWindow
         WindowStyleCombo.ItemsSource = Enum.GetValues<ProcessWindowStyle>();
         FtpPasswordBox.Password = _workingCopy.FtpPassword ?? string.Empty;
         UpdateFtpHomeDirectoryDisplay();
+        UpdateExecutablePathDisplay();
+        UpdateWorkingDirectoryDisplay();
     }
 
     public AppDefinition? ResultDefinition { get; private set; }
@@ -62,6 +67,7 @@ public partial class AppSettingsWindow : FluentWindow
             Arguments = definition.Arguments,
             ShowWindow = definition.ShowWindow,
             WindowStyle = definition.WindowStyle,
+            RunAsAdministrator = definition.RunAsAdministrator,
             Port = definition.Port,
             MsgHubPath = definition.MsgHubPath,
             PassivePortRange = definition.PassivePortRange,
@@ -81,6 +87,8 @@ public partial class AppSettingsWindow : FluentWindow
 
     private void OnSave(object sender, RoutedEventArgs e)
     {
+        SyncPathInputs();
+
         if (string.IsNullOrWhiteSpace(_workingCopy.Name))
         {
             System.Windows.MessageBox.Show(this, "앱 이름을 입력하세요.");
@@ -162,7 +170,7 @@ public partial class AppSettingsWindow : FluentWindow
 
     private void OnBrowseExecutable(object sender, RoutedEventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog
+        var dialog = new OpenFileDialog
         {
             Filter = "실행 파일 (*.exe;*.bat)|*.exe;*.bat|모든 파일 (*.*)|*.*"
         };
@@ -170,7 +178,7 @@ public partial class AppSettingsWindow : FluentWindow
         if (dialog.ShowDialog(this) == true)
         {
             _workingCopy.ExecutablePath = dialog.FileName;
-            ExecutablePathBox.Text = _workingCopy.ExecutablePath ?? string.Empty;
+            UpdateExecutablePathDisplay();
         }
     }
 
@@ -180,7 +188,7 @@ public partial class AppSettingsWindow : FluentWindow
         if (dialog.ShowDialog() == Forms.DialogResult.OK)
         {
             _workingCopy.WorkingDirectory = dialog.SelectedPath;
-            WorkingDirectoryBox.Text = _workingCopy.WorkingDirectory ?? string.Empty;
+            UpdateWorkingDirectoryDisplay();
         }
     }
 
@@ -198,11 +206,49 @@ public partial class AppSettingsWindow : FluentWindow
     private void UpdateFtpHomeDirectoryDisplay()
     {
         var fullPath = _workingCopy.FtpHomeDirectory ?? string.Empty;
-        FtpHomeDirectoryBox.Text = BuildFtpHomeDirectoryPreview(fullPath);
+        FtpHomeDirectoryBox.Text = BuildPathPreview(fullPath);
         FtpHomeDirectoryBox.ToolTip = fullPath;
     }
 
-    private static string BuildFtpHomeDirectoryPreview(string? path)
+    private void UpdateExecutablePathDisplay(bool showFullPath = false)
+    {
+        UpdatePathTextBox(ExecutablePathBox, _workingCopy.ExecutablePath, showFullPath);
+    }
+
+    private void UpdateWorkingDirectoryDisplay(bool showFullPath = false)
+    {
+        UpdatePathTextBox(WorkingDirectoryBox, _workingCopy.WorkingDirectory, showFullPath);
+    }
+
+    private void UpdatePathTextBox(TextBox textBox, string? fullPath, bool showFullPath)
+    {
+        _isUpdatingPathTextBoxes = true;
+        try
+        {
+            var normalized = fullPath ?? string.Empty;
+            textBox.Text = showFullPath ? normalized : BuildPathPreview(normalized);
+            textBox.ToolTip = normalized;
+        }
+        finally
+        {
+            _isUpdatingPathTextBoxes = false;
+        }
+    }
+
+    private void SyncPathInputs()
+    {
+        if (ExecutablePathBox.IsKeyboardFocusWithin)
+        {
+            _workingCopy.ExecutablePath = ExecutablePathBox.Text;
+        }
+
+        if (WorkingDirectoryBox.IsKeyboardFocusWithin)
+        {
+            _workingCopy.WorkingDirectory = WorkingDirectoryBox.Text;
+        }
+    }
+
+    private static string BuildPathPreview(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -237,6 +283,40 @@ public partial class AppSettingsWindow : FluentWindow
         return $@"...\{segments[0]}";
     }
 
+    private void OnExecutablePathBoxGotFocus(object sender, RoutedEventArgs e)
+    {
+        UpdateExecutablePathDisplay(showFullPath: true);
+        ExecutablePathBox.SelectAll();
+    }
+
+    private void OnExecutablePathBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingPathTextBoxes)
+        {
+            return;
+        }
+
+        _workingCopy.ExecutablePath = ExecutablePathBox.Text;
+        UpdateExecutablePathDisplay();
+    }
+
+    private void OnWorkingDirectoryBoxGotFocus(object sender, RoutedEventArgs e)
+    {
+        UpdateWorkingDirectoryDisplay(showFullPath: true);
+        WorkingDirectoryBox.SelectAll();
+    }
+
+    private void OnWorkingDirectoryBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingPathTextBoxes)
+        {
+            return;
+        }
+
+        _workingCopy.WorkingDirectory = WorkingDirectoryBox.Text;
+        UpdateWorkingDirectoryDisplay();
+    }
+
     private void OnFtpPasswordChanged(object sender, RoutedEventArgs e)
     {
         if (sender is PasswordBox passwordBox)
@@ -265,7 +345,7 @@ public partial class AppSettingsWindow : FluentWindow
 
             if (!File.Exists(interfacePath))
             {
-                System.Windows.MessageBox.Show(this, "FileZilla 인터페이스 파일을 찾을 수 없습니다. FTP 앱을 추가하여 리소스를 다운로드하세요.");
+                System.Windows.MessageBox.Show(this, "FileZilla 인터페이스 파일을 찾을 수 없습니다. FTP 앱을 추가해 리소스를 내려받으세요.");
                 return;
             }
 

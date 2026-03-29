@@ -1,0 +1,23 @@
+[
+  {
+    "name": "WindowLocker",
+    "type": "App",
+    "zone": "Parallel",
+    "isEnabled": true,
+    "runAsAdministrator": true,
+    "executablePath": "{MyDocuments}\\Turtle Lab\\NewHyOn Player\\WindowLocker.exe",
+    "workingDirectory": "{MyDocuments}\\Turtle Lab\\NewHyOn Player",
+    "showWindow": true,
+    "windowStyle": "Normal"
+  },
+ {
+    "name": "NewHyOn Player",
+    "type": "App",
+    "zone": "Parallel",
+    "isEnabled": true,
+    "executablePath": "{MyDocuments}\\Turtle Lab\\NewHyOn Player\\NewHyOn Player.exe",
+    "workingDirectory": "{MyDocuments}\\Turtle Lab\\NewHyOn Player",
+    "showWindow": true,
+    "windowStyle": "Normal"
+  }
+]

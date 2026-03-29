@@ -93,6 +93,7 @@ public partial class AppEntryViewModel : ObservableObject
         Definition.Arguments = other.Arguments;
         Definition.ShowWindow = other.ShowWindow;
         Definition.WindowStyle = other.WindowStyle;
+        Definition.RunAsAdministrator = other.RunAsAdministrator;
         Definition.Port = other.Port;
         Definition.MsgHubPath = other.MsgHubPath;
         Definition.PassivePortRange = other.PassivePortRange;

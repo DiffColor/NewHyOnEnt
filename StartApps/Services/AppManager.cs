@@ -284,15 +284,28 @@ public class AppManager
             throw new InvalidOperationException("실행 파일이 지정되지 않았습니다.");
         }
 
+        var workingDirectory = !string.IsNullOrWhiteSpace(definition.WorkingDirectory)
+            && Directory.Exists(definition.WorkingDirectory)
+            ? definition.WorkingDirectory
+            : Path.GetDirectoryName(executablePath) ?? Environment.CurrentDirectory;
+
         var startInfo = new ProcessStartInfo
         {
-            UseShellExecute = false,
             FileName = executablePath,
-            WorkingDirectory = definition.WorkingDirectory ?? Path.GetDirectoryName(executablePath) ?? Environment.CurrentDirectory,
+            WorkingDirectory = workingDirectory,
             WindowStyle = definition.WindowStyle,
-            CreateNoWindow = !definition.ShowWindow,
-            Verb = "runas"
+            UseShellExecute = definition.RunAsAdministrator == true
         };
+
+        if (definition.RunAsAdministrator == true)
+        {
+            startInfo.Verb = "runas";
+        }
+
+        if (!startInfo.UseShellExecute)
+        {
+            startInfo.CreateNoWindow = !definition.ShowWindow;
+        }
 
         switch (definition.Type)
         {

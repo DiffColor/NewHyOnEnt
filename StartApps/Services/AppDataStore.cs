@@ -69,6 +69,7 @@ public class AppDataStore : IDisposable
             Arguments = source.Arguments,
             ShowWindow = source.ShowWindow,
             WindowStyle = source.WindowStyle,
+            RunAsAdministrator = source.RunAsAdministrator,
             Port = source.Port,
             MsgHubPath = source.MsgHubPath,
             PassivePortRange = source.PassivePortRange,

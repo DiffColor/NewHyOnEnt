@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 
 namespace StartApps.Models;
 
@@ -7,6 +8,7 @@ public sealed class AppProfile
     public const string DefaultId = "default";
     public const string ManagerId = "manager";
     public const string PlayerId = "player";
+    private const string ProfileMetadataKey = "StartAppsProfile";
 
     public string Id { get; }
     public string DisplayName { get; }
@@ -23,7 +25,10 @@ public sealed class AppProfile
 
     public static AppProfile Resolve(string[]? args, string? processPath)
     {
-        var profileId = ParseFromArguments(args) ?? ParseFromExecutableName(processPath) ?? DefaultId;
+        var profileId = ParseFromArguments(args)
+            ?? ParseFromAssemblyMetadata()
+            ?? ParseFromExecutableContext(processPath)
+            ?? DefaultId;
         return Create(profileId);
     }
 
@@ -94,7 +99,7 @@ public sealed class AppProfile
         return false;
     }
 
-    private static string? ParseFromExecutableName(string? processPath)
+    private static string? ParseFromExecutableContext(string? processPath)
     {
         if (string.IsNullOrWhiteSpace(processPath))
         {
@@ -102,22 +107,43 @@ public sealed class AppProfile
         }
 
         var fileName = Path.GetFileNameWithoutExtension(processPath);
-        if (string.IsNullOrWhiteSpace(fileName))
+        if (!string.IsNullOrWhiteSpace(fileName))
         {
-            return null;
+            if (fileName.Contains(ManagerId, StringComparison.OrdinalIgnoreCase))
+            {
+                return ManagerId;
+            }
+
+            if (fileName.Contains(PlayerId, StringComparison.OrdinalIgnoreCase))
+            {
+                return PlayerId;
+            }
         }
 
-        if (fileName.Contains(ManagerId, StringComparison.OrdinalIgnoreCase))
+        var currentDirectory = Path.GetDirectoryName(processPath);
+        while (!string.IsNullOrWhiteSpace(currentDirectory))
         {
-            return ManagerId;
-        }
+            var directoryName = Path.GetFileName(currentDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            var normalized = Normalize(directoryName);
+            if (!string.Equals(normalized, DefaultId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(directoryName, DefaultId, StringComparison.OrdinalIgnoreCase))
+            {
+                return normalized;
+            }
 
-        if (fileName.Contains(PlayerId, StringComparison.OrdinalIgnoreCase))
-        {
-            return PlayerId;
+            currentDirectory = Path.GetDirectoryName(currentDirectory);
         }
 
         return null;
+    }
+
+    private static string? ParseFromAssemblyMetadata()
+    {
+        var metadata = typeof(AppProfile).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute => string.Equals(attribute.Key, ProfileMetadataKey, StringComparison.OrdinalIgnoreCase));
+
+        return metadata == null ? null : Normalize(metadata.Value);
     }
 
     private static string Normalize(string? rawProfile)

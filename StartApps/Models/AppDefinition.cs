@@ -15,6 +15,7 @@ public class AppDefinition
     public string Arguments { get; set; } = string.Empty;
     public bool ShowWindow { get; set; } = false;
     public ProcessWindowStyle WindowStyle { get; set; } = ProcessWindowStyle.Hidden;
+    public bool? RunAsAdministrator { get; set; }
     public int? Port { get; set; }
     public string MsgHubPath { get; set; } = "/Data";
     public string PassivePortRange { get; set; } = "24000-24240";

@@ -4,6 +4,8 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Xml.Linq;
 using StartApps.Models;
 
@@ -26,11 +28,25 @@ public class AppDependencyService
     private const string DefaultWorkspaceFolderName = "Turtle Lab";
     private const string DefaultNewHyOnFolderName = "NewHyOn Manger";
     private const string DefaultDataFolderName = "Data";
+    private const string DefaultPlayerFolderName = "NewHyOn Player";
+    private const string MyDocumentsToken = "{MyDocuments}";
+    private static readonly JsonSerializerOptions ProfileDefaultsSerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+        Converters =
+        {
+            new JsonStringEnumConverter()
+        }
+    };
 
+    private readonly AppProfile _profile;
     public string StorageRoot { get; }
 
     public AppDependencyService(AppProfile profile)
     {
+        _profile = profile;
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         StorageRoot = Path.Combine(appData, profile.StorageFolderName, "Apps");
         Directory.CreateDirectory(StorageRoot);
@@ -53,11 +69,26 @@ public class AppDependencyService
     public string GetDefaultFtpHomeDirectory()
     {
         var myDocuments = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        var defaultPath = Path.Combine(
-            myDocuments,
-            DefaultWorkspaceFolderName,
-            DefaultNewHyOnFolderName,
-            DefaultDataFolderName);
+        var defaultPath = _profile.Id switch
+        {
+            AppProfile.ManagerId => Path.Combine(
+                myDocuments,
+                DefaultWorkspaceFolderName,
+                DefaultNewHyOnFolderName,
+                "Manager",
+                DefaultDataFolderName),
+            AppProfile.PlayerId => Path.Combine(
+                myDocuments,
+                DefaultWorkspaceFolderName,
+                DefaultNewHyOnFolderName,
+                "Player",
+                DefaultDataFolderName),
+            _ => Path.Combine(
+                myDocuments,
+                DefaultWorkspaceFolderName,
+                DefaultNewHyOnFolderName,
+                DefaultDataFolderName)
+        };
 
         Directory.CreateDirectory(defaultPath);
         return defaultPath;
@@ -65,47 +96,13 @@ public class AppDependencyService
 
     public IReadOnlyList<AppDefinition> CreateDefaultAppDefinitions()
     {
-        return
-        [
-            new AppDefinition
-            {
-                Name = "RDB",
-                Type = AppType.Rdb,
-                Zone = AppExecutionZone.Parallel,
-                IsEnabled = true,
-                Port = 28015,
-                ExecutablePath = GetExecutablePath(AppType.Rdb),
-                WorkingDirectory = Path.GetDirectoryName(GetExecutablePath(AppType.Rdb))
-            },
-            new AppDefinition
-            {
-                Name = "SignalR472",
-                Type = AppType.Msg472,
-                Zone = AppExecutionZone.Parallel,
-                IsEnabled = true,
-                Port = 5000,
-                MsgHubPath = "/Data",
-                ShowWindow = false,
-                WindowStyle = ProcessWindowStyle.Hidden,
-                RequireNetworkAvailable = true,
-                ExecutablePath = GetExecutablePath(AppType.Msg472),
-                WorkingDirectory = Path.GetDirectoryName(GetExecutablePath(AppType.Msg472))
-            },
-            new AppDefinition
-            {
-                Name = "FTP",
-                Type = AppType.Ftp,
-                Zone = AppExecutionZone.Parallel,
-                IsEnabled = true,
-                Port = DefaultFtpPort,
-                PassivePortRange = "24000-24240",
-                FtpHomeDirectory = GetDefaultFtpHomeDirectory(),
-                FtpAllowRead = true,
-                FtpAllowWrite = true,
-                ExecutablePath = GetExecutablePath(AppType.Ftp),
-                WorkingDirectory = Path.GetDirectoryName(GetExecutablePath(AppType.Ftp))
-            }
-        ];
+        var seededDefinitions = LoadProfileSeedDefinitions(_profile.Id)
+            ?? (!_profile.IsDefault ? LoadProfileSeedDefinitions(AppProfile.DefaultId) : null)
+            ?? CreateFallbackDefaultAppDefinitions();
+
+        return seededDefinitions
+            .Select((definition, index) => FinalizeSeedDefinition(definition, index))
+            .ToList();
     }
 
     public async Task EnsureDependenciesAsync(AppType type, CancellationToken cancellationToken = default)
@@ -297,6 +294,122 @@ public class AppDependencyService
         }
 
         return builder.ToString();
+    }
+
+    private List<AppDefinition>? LoadProfileSeedDefinitions(string profileId)
+    {
+        using var stream = TryOpenProfileSeedStream(profileId);
+        if (stream == null)
+        {
+            return null;
+        }
+
+        var definitions = JsonSerializer.Deserialize<List<AppDefinition>>(stream, ProfileDefaultsSerializerOptions);
+        return definitions ?? [];
+    }
+
+    private Stream? TryOpenProfileSeedStream(string profileId)
+    {
+        var assembly = typeof(AppDependencyService).Assembly;
+        var resourceName = assembly
+            .GetManifestResourceNames()
+            .FirstOrDefault(name => name.EndsWith($"Profiles.{profileId}.apps.json", StringComparison.OrdinalIgnoreCase));
+
+        return resourceName == null ? null : assembly.GetManifestResourceStream(resourceName);
+    }
+
+    private IReadOnlyList<AppDefinition> CreateFallbackDefaultAppDefinitions()
+    {
+        return
+        [
+            new AppDefinition
+            {
+                Name = "RDB",
+                Type = AppType.Rdb,
+                Zone = AppExecutionZone.Parallel,
+                IsEnabled = true,
+                RunAsAdministrator = true,
+                Port = 28015
+            },
+            new AppDefinition
+            {
+                Name = "SignalR472",
+                Type = AppType.Msg472,
+                Zone = AppExecutionZone.Parallel,
+                IsEnabled = true,
+                Port = 5000,
+                MsgHubPath = "/Data",
+                ShowWindow = false,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                RequireNetworkAvailable = true
+            },
+            new AppDefinition
+            {
+                Name = "FTP",
+                Type = AppType.Ftp,
+                Zone = AppExecutionZone.Parallel,
+                IsEnabled = true,
+                RunAsAdministrator = true,
+                Port = DefaultFtpPort,
+                PassivePortRange = "24000-24240",
+                FtpHomeDirectory = GetDefaultFtpHomeDirectory(),
+                FtpAllowRead = true,
+                FtpAllowWrite = true
+            }
+        ];
+    }
+
+    private AppDefinition FinalizeSeedDefinition(AppDefinition definition, int index)
+    {
+        if (definition.Id == Guid.Empty)
+        {
+            definition.Id = Guid.NewGuid();
+        }
+
+        if (string.IsNullOrWhiteSpace(definition.Name))
+        {
+            definition.Name = definition.Type.ToString();
+        }
+
+        if (definition.Type == AppType.Ftp && string.IsNullOrWhiteSpace(definition.FtpHomeDirectory))
+        {
+            definition.FtpHomeDirectory = GetDefaultFtpHomeDirectory();
+        }
+
+        definition.ExecutablePath = ResolveSeedPath(definition.ExecutablePath) ?? string.Empty;
+        definition.WorkingDirectory = ResolveSeedPath(definition.WorkingDirectory);
+        definition.FtpHomeDirectory = ResolveSeedPath(definition.FtpHomeDirectory) ?? string.Empty;
+
+        definition.DisplayOrder = index;
+        return definition;
+    }
+
+    private string? ResolveSeedPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return path;
+        }
+
+        if (path.Contains(MyDocumentsToken, StringComparison.OrdinalIgnoreCase))
+        {
+            path = ResolveDocumentsSeedPath(path);
+        }
+
+        return Environment.ExpandEnvironmentVariables(path);
+    }
+
+    private static string ResolveDocumentsSeedPath(string path)
+    {
+        var relativePath = path.Replace(MyDocumentsToken, string.Empty, StringComparison.OrdinalIgnoreCase)
+            .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var documentsRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Documents");
+
+        return string.IsNullOrWhiteSpace(relativePath)
+            ? documentsRoot
+            : Path.Combine(documentsRoot, relativePath);
     }
 
     private Task ExtractEmbeddedZipAsync(string resourceFileName, string destinationFolder, CancellationToken cancellationToken)

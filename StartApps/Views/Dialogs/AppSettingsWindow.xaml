@@ -50,16 +50,32 @@
                         </Style>
                     </CheckBox.Style>
                 </CheckBox>
-                
+
                 <Separator Margin="0,12,0,0" />
 
                 <StackPanel>
                     <TextBlock Text="공통 실행 옵션" FontSize="18" FontWeight="SemiBold" Margin="0,12,0,4" />
-                    <CheckBox Content="콘솔창 표시" IsChecked="{Binding ShowWindow}" />
+                    <CheckBox Content="콘솔/창 표시" IsChecked="{Binding ShowWindow}" />
+                    <CheckBox Content="관리자 권한으로 실행" IsChecked="{Binding RunAsAdministrator}" Margin="0,8,0,0" />
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                        <TextBlock Text="콘솔창 스타일" Width="100" VerticalAlignment="Center" />
+                        <TextBlock Text="창 스타일" Width="100" VerticalAlignment="Center" />
                         <ComboBox x:Name="WindowStyleCombo" SelectedItem="{Binding WindowStyle}" Width="200" Margin="12,0,0,0" />
                     </StackPanel>
+                    <TextBlock Text="관리자 권한 실행은 숨김 실행과 동시에 완전히 보장되지 않을 수 있습니다."
+                               Margin="0,6,0,0"
+                               Foreground="#FFB78C"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding RunAsAdministrator}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <TextBlock Text="실행 지연" Width="100" VerticalAlignment="Center" />
                         <StackPanel Orientation="Horizontal" Margin="12,0,0,0">
@@ -88,8 +104,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <TextBlock Text="패시브 포트 범위" Width="120" VerticalAlignment="Center" />
-                        <TextBox Width="200" Text="{Binding PassivePortRange}" Margin="12,0,0,0"
-                                 ToolTip="예: 24000-24240" />
+                        <TextBox Width="200" Text="{Binding PassivePortRange}" Margin="12,0,0,0" ToolTip="예: 24000-24240" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <TextBlock Text="사용자" Width="80" VerticalAlignment="Center" />
@@ -105,8 +120,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Margin="0,0,12,0" Padding="8,6" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4">
+                        <Border Grid.Column="0" Width="280" Margin="0,0,12,0" Padding="8,6" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4">
                             <TextBlock x:Name="FtpHomeDirectoryBox"
+                                       Width="260"
                                        TextTrimming="CharacterEllipsis"
                                        TextWrapping="NoWrap"
                                        TextAlignment="Left"
@@ -136,14 +152,23 @@
                 <StackPanel Visibility="{Binding Type, Converter={StaticResource AppTypeVisibilityConverter}, ConverterParameter=App}" Margin="0,16,0,0">
                     <TextBlock Text="실행 파일" FontSize="18" FontWeight="SemiBold" />
                     <DockPanel Margin="0,8,0,0">
-                        <TextBox x:Name="ExecutablePathBox" Text="{Binding ExecutablePath}" Margin="0,0,12,0" />
+                        <TextBox x:Name="ExecutablePathBox"
+                                 Width="320"
+                                 Margin="0,0,12,0"
+                                 GotFocus="OnExecutablePathBoxGotFocus"
+                                 LostFocus="OnExecutablePathBoxLostFocus" />
                         <Button Content="찾기" Width="80" DockPanel.Dock="Right" Click="OnBrowseExecutable" />
                     </DockPanel>
                     <TextBlock Text="인자" Margin="0,8,0,0" />
                     <TextBox Text="{Binding Arguments}" />
                     <TextBlock Text="작업 디렉터리" Margin="0,8,0,0" />
                     <DockPanel>
-                        <TextBox x:Name="WorkingDirectoryBox" Text="{Binding WorkingDirectory}" Margin="0,0,12,0" />
+                        <TextBox x:Name="WorkingDirectoryBox"
+                                 Width="320"
+                                 Margin="0,0,12,0"
+                                 Cursor="IBeam"
+                                 GotFocus="OnWorkingDirectoryBoxGotFocus"
+                                 LostFocus="OnWorkingDirectoryBoxLostFocus" />
                         <Button Content="선택" Width="80" DockPanel.Dock="Right" Click="OnBrowseWorkingDirectory" />
                     </DockPanel>
                 </StackPanel>

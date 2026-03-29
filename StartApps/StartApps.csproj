@@ -12,6 +12,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PackageIcon>startapps.png</PackageIcon>
     <Platforms>AnyCPU;x64</Platforms>
+    <StartAppsProfile Condition="'$(StartAppsProfile)' == ''">default</StartAppsProfile>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -37,6 +38,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>StartAppsProfile</_Parameter1>
+      <_Parameter2>$(StartAppsProfile)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="Assets\startapps.ico" />
     <None Remove="ftpsrv.zip" />
     <None Remove="signalr_net472.zip" />
@@ -59,6 +67,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="ftpsrv.zip" />
+    <EmbeddedResource Include="Profiles\*.apps.json" />
     <EmbeddedResource Include="rethinkdb.zip" />
     <EmbeddedResource Include="signalr_net472.zip" />
     <EmbeddedResource Include="signalr_net90.zip" />

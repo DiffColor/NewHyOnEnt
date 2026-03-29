@@ -430,6 +430,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (definition.Type == AppType.Ftp)
         {
+            changed |= ApplyRunAsAdministratorDefault(definition, defaultValue: true);
             if (definition.Port is null or 21)
             {
                 definition.Port = AppDependencyService.DefaultFtpPort;
@@ -454,6 +455,7 @@ public partial class MainWindowViewModel : ObservableObject
                  || definition.Type == AppType.Msg472
                  || definition.Type == AppType.Msg90)
         {
+            changed |= ApplyRunAsAdministratorDefault(definition, defaultValue: false);
             definition.Port ??= 5000;
             if (string.IsNullOrWhiteSpace(definition.MsgHubPath))
             {
@@ -464,10 +466,26 @@ public partial class MainWindowViewModel : ObservableObject
         }
         else if (definition.Type == AppType.Rdb && string.IsNullOrWhiteSpace(definition.ExecutablePath))
         {
+            changed |= ApplyRunAsAdministratorDefault(definition, defaultValue: true);
             definition.ExecutablePath = _dependencyService.GetExecutablePath(AppType.Rdb);
+        }
+        else if (definition.Type == AppType.App)
+        {
+            changed |= ApplyRunAsAdministratorDefault(definition, defaultValue: false);
         }
 
         return Task.FromResult(changed);
+    }
+
+    private static bool ApplyRunAsAdministratorDefault(AppDefinition definition, bool defaultValue)
+    {
+        if (definition.RunAsAdministrator.HasValue)
+        {
+            return false;
+        }
+
+        definition.RunAsAdministrator = defaultValue;
+        return true;
     }
 
     private async Task EnsureSequentialExecutionAsync(bool isUserInitiated = false)
