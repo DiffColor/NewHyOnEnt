@@ -66,13 +66,13 @@ namespace AndoW.Shared
         public string ManagerIP { get; set; } = string.Empty;
         public bool IsTestMode { get; set; }
         public bool IsAllDayPlay { get; set; }
-        public string EndTimeAction { get; set; } = "ApplicationClose";
+        public string EndTimeAction { get; set; } = "BlackScreen";
         public int NetworkChkInterval { get; set; } = 3000;
         public bool IsOnlyOnePage { get; set; }
         public bool IsLocalPlay { get; set; }
         public bool HideCursor { get; set; } = true;
         public bool IsCheckInternetForFlash { get; set; } = true;
-        public bool BlockMonitorOnEndTime { get; set; }
+        public bool BlockMonitorOnEndTime { get; set; } = true;
         public string TvSourceName { get; set; } = string.Empty;
         public int DisplayOrder { get; set; } = 0;
 

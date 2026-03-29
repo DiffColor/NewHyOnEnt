@@ -132,6 +132,7 @@ namespace NewHyOnPlayer.Services
                     {
                         lastOnAir = true;
                         RestoreFromOffAir();
+                        ProcessTools.ExecuteCommand("shutdown /r /t 0");
                     }
                     return;
                 }
