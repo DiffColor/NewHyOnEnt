@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Windows;
 using TurtleTools;
@@ -16,17 +17,27 @@ namespace NewHyOnPlayer
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            PlayerInfoManager g_PlayerInfoManager = new PlayerInfoManager();
+
+            if (CheckInvalidAuthKey(g_PlayerInfoManager.g_PlayerInfo.PIF_AuthKey))
+            {
+                //if (CheckDemoExpired())
+                //{
+                    MessageBox.Show("인증이 필요한 프로그램입니다.");
+                    Application.Current.Shutdown();
+                    return;
+                //}
+            }
+
             bool createdNew;
             _instanceMutex = new Mutex(true, procName, out createdNew);
-
+            
             if (!createdNew)
             {
                 _instanceMutex = null;
                 Application.Current.Shutdown();
                 return;
             }
-
-            EnsureAuthKey();
 
             base.OnStartup(e);
             StartupUri = new Uri("MainWindow.xaml", UriKind.Relative);
@@ -39,31 +50,73 @@ namespace NewHyOnPlayer
             base.OnExit(e);
         }
 
-        private void EnsureAuthKey()
+        private bool CheckInvalidAuthKey(string encodedKey)
         {
-            try
-            {
-                var playerRepo = new PlayerInfoManager();
-                var info = playerRepo.g_PlayerInfo;
+            if (string.IsNullOrEmpty(encodedKey))
+                return true;
 
-                if (string.IsNullOrWhiteSpace(info.PIF_AuthKey))
-                {
-                    List<string> nics = NetworkTools.GetAllMACAddressesBySystemNet();
-                    if (nics.Count > 0)
-                    {
-                        info.PIF_AuthKey = AuthTools.EncodeAuthKey(nics[0]);
-                    }
-                    else
-                    {
-                        info.PIF_AuthKey = string.Empty;
-                    }
-                    playerRepo.SaveData();
-                }
-            }
-            catch
+            // DB 기반 AuthKey 검증
+            List<string> nics = NetworkTools.GetAllMACAddressesBySystemNet();
+
+            foreach (string nic in nics)
             {
-                // auth 키 확보 실패 시에도 앱은 계속 진행
+                if (encodedKey.Equals(AuthTools.EncodeAuthKey(nic), StringComparison.CurrentCultureIgnoreCase))
+                    return false;
             }
+
+            if (nics.Count < 1)
+                if (encodedKey.Equals(AuthTools.EncodeAuthKey(AuthTools.getUUID12()), StringComparison.CurrentCultureIgnoreCase))
+                    return false;
+
+            return true;
+        }
+
+        // 데모 프로그램은 최초 설치 후 15일 동안 사용 가능
+        private bool CheckDemoExpired()
+        {
+            string subKey = "ILYcode";
+            string valueKey = "HyOnInstalled";
+
+            DateTime dt = DateTime.Now;
+            //DateTime expireTime = new DateTime(2015, 7, 28);
+
+            //DateTime createdTime = File.GetCreationTime(Assembly.GetExecutingAssembly().Location);
+
+            //if (dtTime.CompareTo(createdTime) >= 0 && dtTime.CompareTo(expireTime) > 0)
+            //{
+            //    return true;
+            //}
+
+            string keyValue = AuthTools.ReadRegKey(subKey, valueKey);
+
+            if (string.IsNullOrEmpty(keyValue))
+            {
+
+                string garbage_chars = "abceijklnopqvwxABCEIJLNOPQRSUVWXY";     //datetime ignore chars
+
+                string redun1 = LogicTools.RandomSizeString(4, 8, garbage_chars);
+                string redun2 = LogicTools.RandomSizeString(2, 8, garbage_chars);
+                string redun3 = LogicTools.RandomSizeString(2, 8, garbage_chars);
+                string redun4 = LogicTools.RandomSizeString(4, 8, garbage_chars);
+
+                string dtStr = String.Format("{5}{2}{3}-{4}{6}{5}-{3}{1}{4}-{6}{0}{5}", dt.Year, dt.Month, dt.Day, redun1, redun2, redun3, redun4);
+
+                AuthTools.WriteRegKey(subKey, valueKey, dtStr);
+                return false;
+            }
+
+            string[] keyValueArr = keyValue.Split('-');
+            int year = LogicTools.ConvertToUInt(keyValueArr[3]);
+            int month = LogicTools.ConvertToUInt(keyValueArr[2]);
+            int day = LogicTools.ConvertToUInt(keyValueArr[0]);
+            DateTime installedTime = new DateTime(year, month, day);
+
+            if (dt.CompareTo(installedTime) < 0 || dt.CompareTo(installedTime.AddDays(15)) > 0)
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }
