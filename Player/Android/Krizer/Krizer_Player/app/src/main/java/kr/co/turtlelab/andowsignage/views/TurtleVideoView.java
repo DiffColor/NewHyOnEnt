@@ -31,6 +31,7 @@ public class TurtleVideoView extends VideoView {
     private MediaPlayer.OnPreparedListener mUserPreparedListener;
     private MediaPlayer mPreparedPlayer;
     private int mDuration = 0;
+    private boolean mMuted = true;
 
     private final MediaPlayer.OnPreparedListener mInternalPreparedListener = new MediaPlayer.OnPreparedListener() {
         @Override
@@ -39,6 +40,7 @@ public class TurtleVideoView extends VideoView {
             try {
                 mDuration = mp.getDuration();
                 mp.setLooping(mLoop);
+                applyMutedState(mp);
             } catch (Exception ignored) {
             }
             if (mUserPreparedListener != null) {
@@ -171,6 +173,22 @@ public class TurtleVideoView extends VideoView {
                 player.setLooping(loop);
             } catch (Exception ignored) {
             }
+        }
+    }
+
+    public void setMuted(boolean muted) {
+        mMuted = muted;
+        applyMutedState(mPreparedPlayer);
+    }
+
+    private void applyMutedState(MediaPlayer player) {
+        if (player == null) {
+            return;
+        }
+        try {
+            float volume = mMuted ? 0f : 1f;
+            player.setVolume(volume, volume);
+        } catch (Exception ignored) {
         }
     }
 

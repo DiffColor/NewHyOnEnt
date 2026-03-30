@@ -398,6 +398,7 @@ namespace AndoW_Manager
         public int EIF_ZIndex = 0;
         public string EIF_DataFileName = string.Empty;
         public string EIF_DataFileFullPath = string.Empty;
+        public bool EIF_IsMuted = true;
         public List<ContentsInfoClass> EIF_ContentsInfoClassList = new List<ContentsInfoClass>();
 
         public void CopyData(ElementInfoClass tmpData)
@@ -415,6 +416,7 @@ namespace AndoW_Manager
             this.EIF_ZIndex = tmpData.EIF_ZIndex;
             this.EIF_DataFileName = tmpData.EIF_DataFileName;
             this.EIF_DataFileFullPath = tmpData.EIF_DataFileFullPath;
+            this.EIF_IsMuted = tmpData.EIF_IsMuted;
 
             this.EIF_ContentsInfoClassList.Clear();
 

@@ -73,6 +73,7 @@ namespace AndoW.Shared
         public int EIF_ZIndex { get; set; }
         public string EIF_DataFileName { get; set; } = string.Empty;
         public string EIF_DataFileFullPath { get; set; } = string.Empty;
+        public bool EIF_IsMuted { get; set; } = true;
         public List<ContentsInfoClass> EIF_ContentsInfoClassList { get; set; } = new List<ContentsInfoClass>();
 
         public void CopyData(ElementInfoClass tmpData)
@@ -92,6 +93,7 @@ namespace AndoW.Shared
             EIF_ZIndex = tmpData.EIF_ZIndex;
             EIF_DataFileName = tmpData.EIF_DataFileName;
             EIF_DataFileFullPath = tmpData.EIF_DataFileFullPath;
+            EIF_IsMuted = tmpData.EIF_IsMuted;
 
             EIF_ContentsInfoClassList = new List<ContentsInfoClass>();
             if (tmpData.EIF_ContentsInfoClassList?.Count > 0)

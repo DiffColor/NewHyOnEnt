@@ -55,6 +55,7 @@ public class MediaDataProvider {
                 mdm.setType(realmContent.getContentType());
                 mdm.setPlayTime(realmContent.getPlayMinute(), realmContent.getPlaySecond());
                 mdm.setValidState(String.valueOf(realmContent.isContentValid()));
+                mdm.setMuted(target.isMuted());
                 contentList.add(mdm);
             }
         } finally {

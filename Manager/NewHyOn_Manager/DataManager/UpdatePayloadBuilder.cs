@@ -95,6 +95,7 @@ namespace AndoW_Manager
                             PosLeft = element.EIF_PosLeft,
                             PosTop = element.EIF_PosTop,
                             ZIndex = element.EIF_ZIndex,
+                            Muted = element.EIF_IsMuted,
                             Contents = new List<ContractContentPayload>()
                         };
 

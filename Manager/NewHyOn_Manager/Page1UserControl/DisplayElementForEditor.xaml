@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              mc:Ignorable="d" 
              SizeChanged="UserControl_SizeChanged"
              d:DesignHeight="300" d:DesignWidth="400">
@@ -57,17 +58,33 @@
                         <GradientStop Color="#00000000" Offset="0.852"/>
                     </LinearGradientBrush>
                 </Border.BorderBrush>
-                <TextBlock x:Name="pxTBox" Height="48" HorizontalAlignment="Right" TextAlignment="Right" FontSize="14" TextWrapping="Wrap" Foreground="Black" Text="1920 x 1080" VerticalAlignment="Top" Width="189" Margin="0,9,18,0"/>
+                <TextBlock x:Name="pxTBox" Height="72" HorizontalAlignment="Right" TextAlignment="Right" FontSize="21" TextWrapping="Wrap" Foreground="Black" Text="1920 x 1080" VerticalAlignment="Top" Width="284" Margin="0,14,27,0" RenderTransformOrigin="1,0">
+                    <TextBlock.RenderTransform>
+                        <ScaleTransform x:Name="SizeTextScaleTransform"/>
+                    </TextBlock.RenderTransform>
+                </TextBlock>
             </Border>
-            <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Grid x:Name="CenterOverlayPanel" VerticalAlignment="Center" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <ScaleTransform x:Name="CenterOverlayScaleTransform"/>
+                </Grid.RenderTransform>
                 <Grid.RowDefinitions>
                     <RowDefinition/>
                     <RowDefinition/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <TextBlock x:Name="TextDisplayName" TextWrapping="Wrap" Text="TextBlock" FontSize="30" Foreground="#FFFF4848" Margin="0" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Malgun Gothic" FontWeight="Bold" />
-                <TextBlock x:Name="TextInputChannelName" TextWrapping="Wrap" Text="Contents : 2 개" FontSize="14" Foreground="#FF17389E" Grid.Row="1" HorizontalAlignment="Center" Margin="0" VerticalAlignment="Center" FontFamily="Malgun Gothic" />
+                <TextBlock x:Name="TextDisplayName" TextWrapping="Wrap" Text="TextBlock" FontSize="45" Foreground="#FFFF4848" Margin="0" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Malgun Gothic" FontWeight="Bold" />
+                <TextBlock x:Name="TextInputChannelName" TextWrapping="Wrap" Text="Contents : 2 개" FontSize="21" Foreground="#FF17389E" Grid.Row="1" HorizontalAlignment="Center" Margin="0" VerticalAlignment="Center" FontFamily="Malgun Gothic" />
+                <Button x:Name="MuteToggleButton" Grid.Row="2" Width="51" Height="51" Margin="0,12,0,0" Visibility="Collapsed" Background="Transparent" BorderBrush="{x:Null}" Padding="0">
+                    <Border x:Name="MuteToggleBadge" Background="#E6FFFFFF" BorderBrush="#663F63B5" BorderThickness="1.5" CornerRadius="26" Padding="10">
+                        <materialDesign:PackIcon x:Name="MuteToggleIcon" Kind="VolumeOff" Width="27" Height="27" Foreground="#FF17389E"/>
+                    </Border>
+                </Button>
             </Grid>
-            <Rectangle x:Name="resizingSpotRect" Width="40" Height="40" VerticalAlignment="Bottom" HorizontalAlignment="Right" d:LayoutOverrides="HorizontalAlignment, VerticalAlignment" Cursor="SizeNWSE" Margin="0,0,5,5">
+            <Rectangle x:Name="resizingSpotRect" Width="60" Height="60" VerticalAlignment="Bottom" HorizontalAlignment="Right" d:LayoutOverrides="HorizontalAlignment, VerticalAlignment" Cursor="SizeNWSE" Margin="0,0,8,8" RenderTransformOrigin="1,1">
+                <Rectangle.RenderTransform>
+                    <ScaleTransform x:Name="ResizeGripScaleTransform"/>
+                </Rectangle.RenderTransform>
                 <Rectangle.Fill>
                     <LinearGradientBrush EndPoint="0.979,0.971" StartPoint="0.146,0.146">
                         <GradientStop Color="White" Offset="0.874"/>

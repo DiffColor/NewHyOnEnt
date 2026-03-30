@@ -150,6 +150,8 @@ public final class RethinkModels {
         private String dataFileName;
         @SerializedName("EIF_DataFileFullPath")
         private String dataFileFullPath;
+        @SerializedName("EIF_IsMuted")
+        private boolean muted = true;
         @SerializedName("EIF_ContentsInfoClassList")
         private List<ContentInfoRecord> contents = new ArrayList<>();
 
@@ -187,6 +189,10 @@ public final class RethinkModels {
 
         public String getDataFileFullPath() {
             return dataFileFullPath;
+        }
+
+        public boolean isMuted() {
+            return muted;
         }
 
         public List<ContentInfoRecord> getContents() {

@@ -16,6 +16,7 @@ public class RealmElement extends RealmObject {
     private double posTop;
     private double posLeft;
     private int zIndex;
+    private boolean muted = true;
     private RealmList<RealmContent> contents;
 
     public String getElementId() {
@@ -88,6 +89,14 @@ public class RealmElement extends RealmObject {
 
     public void setzIndex(int zIndex) {
         this.zIndex = zIndex;
+    }
+
+    public boolean isMuted() {
+        return muted;
+    }
+
+    public void setMuted(boolean muted) {
+        this.muted = muted;
     }
 
     public RealmList<RealmContent> getContents() {

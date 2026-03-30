@@ -92,6 +92,7 @@ public final class UpdateQueueContract {
         public double posTop;
         public double posLeft;
         public int zIndex;
+        public boolean muted = true;
         public List<ContentPayload> contents = new ArrayList<>();
     }
 

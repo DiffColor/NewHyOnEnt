@@ -593,7 +593,7 @@ namespace AndoW_Manager
                 {
                     window.Dispatcher.Invoke(() =>
                     {
-                        MessageTools.ShowMessageBox("FTP connection failed. Check settings.", "OK");
+                        MessageTools.ShowMessageBox("서버 연결에 실패했습니다. 설정을 확인해주세요.", "확인");
                         window.RequestClose();
                     });
                 }
@@ -641,7 +641,7 @@ namespace AndoW_Manager
             {
                 window.Dispatcher.Invoke(() =>
                 {
-                    MessageTools.ShowMessageBox($"FTP download failed for {errors.Count} file(s). Check log.", "OK");
+                    MessageTools.ShowMessageBox($"파일 {errors.Count}건을 가져오지 못했습니다.\r\n로그를 확인해주세요.", "확인");
                 });
             }
 
@@ -704,6 +704,11 @@ namespace AndoW_Manager
             GuideGrid.RenderTransform = scale;
             ScreenGuideGrid.RenderTransform = scale;
             ResolutionGuideGrid.RenderTransform = scale;
+
+            foreach (DisplayElementForEditor element in g_DspElmtList)
+            {
+                element.RefreshOverlayScale();
+            }
 
             /*
             if (DesignerCanvas.ActualWidth > DesignerCanvas.ActualHeight)
@@ -1922,6 +1927,7 @@ namespace AndoW_Manager
             DesignerCanvas.Children.Add(dspElement);
 
             dspElement.UpdateElemenetnInfoCls(paramCls);
+            dspElement.RefreshOverlayScale();
 
             g_DspElmtList.Add(dspElement);
         }

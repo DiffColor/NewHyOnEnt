@@ -279,7 +279,13 @@ public class MediaView extends RelativeLayout {
 
                     playTime = cdmList.get(contentIdx).getPlayTimeSec();
 
-                    publishProgress(new String[]{cdmList.get(contentIdx).getType(), cdmList.get(contentIdx).getFilePath(), cdmList.get(j).getType(), cdmList.get(j).getFilePath()});
+                    publishProgress(new String[]{
+                            cdmList.get(contentIdx).getType(),
+                            cdmList.get(contentIdx).getFilePath(),
+                            String.valueOf(cdmList.get(contentIdx).isMuted()),
+                            cdmList.get(j).getType(),
+                            cdmList.get(j).getFilePath()
+                    });
 
                     try {
                         synchronized (mLoopPlay) {
@@ -314,7 +320,8 @@ public class MediaView extends RelativeLayout {
 
                     try {
                         CONTENT_TYPE type1 = CONTENT_TYPE.valueOf(contentData[0]);
-                        CONTENT_TYPE type2 = CONTENT_TYPE.valueOf(contentData[2]);
+                        boolean muted1 = Boolean.parseBoolean(contentData[2]);
+                        CONTENT_TYPE type2 = CONTENT_TYPE.valueOf(contentData[3]);
 
                         switch (type1) {
                             case Image:
@@ -324,7 +331,7 @@ public class MediaView extends RelativeLayout {
                                         contentData[1],
                                         s_isFirst,
                                         type2,
-                                        contentData[3],
+                                        contentData[4],
                                         deferVideoStop,
                                         deferVideoStop ? new Runnable() {
                                             @Override
@@ -338,7 +345,7 @@ public class MediaView extends RelativeLayout {
                             case Video:
                                 boolean deferImageHide = usedType == CONTENT_TYPE.Image;
                                 releaseUsedResources(usedType, type1, deferImageHide, false);
-                                showVideoWithImageFade(contentData[1], type2, contentData[3]);
+                                showVideoWithImageFade(contentData[1], muted1, type2, contentData[4]);
                                 break;
 
                             case Flash:
@@ -667,7 +674,7 @@ public class MediaView extends RelativeLayout {
         }
     }
 
-    private void showVideoWithImageFade(final String videoPath, final CONTENT_TYPE nextType, final String nextPath) {
+    private void showVideoWithImageFade(final String videoPath, final boolean muted, final CONTENT_TYPE nextType, final String nextPath) {
         final ImageView overlay = getVisibleImageView();
         final boolean useFakeOverlay = overlay == null;
         final ImageView fakeOverlay;
@@ -700,6 +707,7 @@ public class MediaView extends RelativeLayout {
         }
 
         videoView.setVisibility(View.VISIBLE);
+        videoView.setMuted(muted);
         videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
             @Override
             public void onPrepared(MediaPlayer mp) {

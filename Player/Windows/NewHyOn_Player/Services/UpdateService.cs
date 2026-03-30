@@ -1101,6 +1101,7 @@ namespace NewHyOnPlayer
                             posLeft = element.EIF_PosLeft,
                             posTop = element.EIF_PosTop,
                             zIndex = element.EIF_ZIndex,
+                            muted = element.EIF_IsMuted,
                             contents = new List<ContractContentPayload>()
                         };
 
@@ -2370,6 +2371,7 @@ namespace NewHyOnPlayer
         public double posTop { get; set; }
         public double posLeft { get; set; }
         public int zIndex { get; set; }
+        public bool muted { get; set; } = true;
         public List<ContractContentPayload> contents { get; set; } = new List<ContractContentPayload>();
     }
 

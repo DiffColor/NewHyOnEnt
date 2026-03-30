@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using MaterialDesignThemes.Wpf;
 using TurtleTools;
 
 
@@ -28,6 +29,7 @@ namespace AndoW_Manager
         {
             InitializeComponent();
             InitEventHandler();
+            RefreshOverlayScale();
         }
 
         public void InitEventHandler()
@@ -46,6 +48,7 @@ namespace AndoW_Manager
             MenuBringToBack.Click += MenuBringToBack_Click;
             MenuBringToFrontOneStep.Click += MenuBringToFrontOneStep_Click;
             MenuBringToBackOneStep.Click += MenuBringToBackOneStep_Click;
+            MuteToggleButton.Click += MuteToggleButton_Click;
         }
 
         void MenuSetManualPos_Click(object sender, RoutedEventArgs e)
@@ -135,10 +138,24 @@ namespace AndoW_Manager
         {
             g_ElementInfoClass.CopyData(paramCls);
             DisplayContentsListCount();
+            RefreshOverlayScale();
+        }
+
+        void MuteToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            g_ElementInfoClass.EIF_IsMuted = !g_ElementInfoClass.EIF_IsMuted;
+            DisplayContentsListCount();
+            ChooseThisElement();
         }
 
         void DisplayElementForEditor_PreviewMouseUp(object sender, MouseButtonEventArgs e)
         {
+            if (IsMuteToggleInteraction(e.OriginalSource))
+            {
+                this.ReleaseMouseCapture();
+                return;
+            }
+
             if (Page1.Instance.CheckStackObjects(Canvas.GetLeft(this), Canvas.GetTop(this), this.ActualWidth, this.ActualHeight, this.g_ElementInfoClass.EIF_Name))
             {
                 Canvas.SetLeft(this, g_PrevPos.Left);
@@ -416,6 +433,11 @@ namespace AndoW_Manager
 
         void MoveTopRectangle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if (IsMuteToggleInteraction(e.OriginalSource))
+            {
+                return;
+            }
+
             Page1.Instance.SetCurrentSelectedElementMovable(true, e.GetPosition(this));
             ChooseThisElement();
 
@@ -438,6 +460,22 @@ namespace AndoW_Manager
             g_PrevPos.Top = Canvas.GetTop(this);
             g_PrevPos.Width = this.ActualWidth;
             g_PrevPos.Height = this.ActualHeight;
+        }
+
+        bool IsMuteToggleInteraction(object originalSource)
+        {
+            DependencyObject current = originalSource as DependencyObject;
+            while (current != null)
+            {
+                if (current == MuteToggleButton)
+                {
+                    return true;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return false;
         }
 
         void contentsGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -489,13 +527,65 @@ namespace AndoW_Manager
         public void DisplayContentsListCount()
         {
             TextInputChannelName.Text = string.Format("Contents: {0}ea", g_ElementInfoClass.EIF_ContentsInfoClassList.Count);
+            bool showMuteToggle = g_ElementInfoClass.EIF_Type == DisplayType.Media.ToString();
+            MuteToggleButton.Visibility = showMuteToggle ? Visibility.Visible : Visibility.Collapsed;
+            MuteToggleButton.ToolTip = g_ElementInfoClass.EIF_IsMuted ? "현재 음소거 상태" : "현재 소리 출력 상태";
+            MuteToggleIcon.Kind = g_ElementInfoClass.EIF_IsMuted ? PackIconKind.VolumeOff : PackIconKind.VolumeHigh;
+            MuteToggleIcon.Foreground = g_ElementInfoClass.EIF_IsMuted ? new SolidColorBrush(Color.FromRgb(0x17, 0x38, 0x9E)) : new SolidColorBrush(Color.FromRgb(0x1C, 0x8A, 0x4B));
+            MuteToggleBadge.BorderBrush = g_ElementInfoClass.EIF_IsMuted ? new SolidColorBrush(Color.FromArgb(0x66, 0x3F, 0x63, 0xB5)) : new SolidColorBrush(Color.FromArgb(0x66, 0x1C, 0x8A, 0x4B));
+            MuteToggleBadge.Background = g_ElementInfoClass.EIF_IsMuted ? new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF)) : new SolidColorBrush(Color.FromArgb(0xE6, 0xF2, 0xFB, 0xF5));
+        }
+
+        public void RefreshOverlayScale()
+        {
+            double scaleX = 1.0;
+            double scaleY = 1.0;
+
+            Page1 page = Page1.Instance;
+            if (page == null)
+            {
+                return;
+            }
+
+            ScaleTransform canvasScale = Page1.Instance?.DesignerCanvas?.RenderTransform as ScaleTransform;
+            if (canvasScale != null)
+            {
+                if (Math.Abs(canvasScale.ScaleX) > 0.0001)
+                {
+                    scaleX = canvasScale.ScaleX;
+                }
+
+                if (Math.Abs(canvasScale.ScaleY) > 0.0001)
+                {
+                    scaleY = canvasScale.ScaleY;
+                }
+            }
+
+            double designWidth = Math.Max(1.0, page.DesignGrid.Width);
+            double designHeight = Math.Max(1.0, page.DesignGrid.Height);
+            double viewboxScaleX = page.DesignViewBox.ActualWidth > 0 ? page.DesignViewBox.ActualWidth / designWidth : 1.0;
+            double viewboxScaleY = page.DesignViewBox.ActualHeight > 0 ? page.DesignViewBox.ActualHeight / designHeight : 1.0;
+
+            scaleX *= viewboxScaleX;
+            scaleY *= viewboxScaleY;
+
+            double inverseScaleX = 1.0 / scaleX;
+            double inverseScaleY = 1.0 / scaleY;
+
+            CenterOverlayScaleTransform.ScaleX = inverseScaleX;
+            CenterOverlayScaleTransform.ScaleY = inverseScaleY;
+            SizeTextScaleTransform.ScaleX = inverseScaleX;
+            SizeTextScaleTransform.ScaleY = inverseScaleY;
+            ResizeGripScaleTransform.ScaleX = inverseScaleX;
+            ResizeGripScaleTransform.ScaleY = inverseScaleY;
         }
 
         private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            if (e.NewSize.Width <= 160) this.Width = 160;
-            if (e.NewSize.Height <= 107) this.Height = 107;
+            if (e.NewSize.Width <= 240) this.Width = 240;
+            if (e.NewSize.Height <= 161) this.Height = 161;
             pxTBox.Text = string.Format("{0:F0} x {1:F0}", e.NewSize.Width, e.NewSize.Height);
+            RefreshOverlayScale();
         }   
     }
 }

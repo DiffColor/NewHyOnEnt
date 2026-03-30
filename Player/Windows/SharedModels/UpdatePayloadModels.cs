@@ -156,6 +156,8 @@ namespace AndoW.Shared
 
         public int ZIndex { get; set; }
 
+        public bool Muted { get; set; } = true;
+
         public List<ContractContentPayload> Contents { get; set; } = new List<ContractContentPayload>();
     }
 

@@ -14,6 +14,7 @@ public class MediaDataModel {
 	String type;
 	long playTime;
 	boolean isValid;
+	boolean isMuted = true;
 	
 	/*
 	 * Setter Methods
@@ -59,6 +60,10 @@ public class MediaDataModel {
 	public void setValidState(String valid) {
 		isValid = Boolean.parseBoolean(valid);
 	}
+
+	public void setMuted(boolean muted) {
+		isMuted = muted;
+	}
 	
 	/*
 	 * Getter Methods
@@ -92,6 +97,10 @@ public class MediaDataModel {
 	
 	public boolean getValidState() {
 		return isValid;
+	}
+
+	public boolean isMuted() {
+		return isMuted;
 	}
 
 }

@@ -327,6 +327,7 @@ namespace NewHyOnPlayer
         public void PlayContents(SharedContentsInfoClass cic)
         {
             current_fpath = FNDTools.GetContentsFilePath(cic.CIF_FileName);
+            MPVPlayer.Muted = g_ElementInfoClass.EIF_IsMuted;
 
             //StopVisibleContents(cic.CIF_ContentType == ContentType.Image.ToString());
 
@@ -421,6 +422,7 @@ namespace NewHyOnPlayer
                 if (angle > 0)
                     MPVPlayer.LayoutTransform = new RotateTransform(angle);
 
+                MPVPlayer.Muted = g_ElementInfoClass.EIF_IsMuted;
                 MPVPlayer.Load(contentPath);
                 MPVPlayer.Loop = needLoop;
                 MPVPlayer.Play();

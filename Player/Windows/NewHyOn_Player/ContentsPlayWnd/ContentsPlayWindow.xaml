@@ -9,7 +9,7 @@
     Title="ContentsPlayWindow" WindowStyle="None" ResizeMode="NoResize" Background="Black" IsHitTestVisible="False">
     <Grid x:Name="ContentGrid">
         <Grid x:Name="OverlayRoot">
-            <local:MPVLibControl Width="{Binding ElementName=ContentGrid, Path=ActualWidth}" Height="{Binding ElementName=ContentGrid, Path=ActualHeight}" x:Name="MPVPlayer" Volume="80" Loop="False" Stretch="Fill" AutoPlay="True" FileEndedEvent="Player_FileEndedEvent" FileLoadedEvent="Player_FileLoadedEvent" Visibility="Hidden" />
+            <local:MPVLibControl Width="{Binding ElementName=ContentGrid, Path=ActualWidth}" Height="{Binding ElementName=ContentGrid, Path=ActualHeight}" x:Name="MPVPlayer" Volume="80" Muted="True" Loop="False" Stretch="Fill" AutoPlay="True" FileEndedEvent="Player_FileEndedEvent" FileLoadedEvent="Player_FileLoadedEvent" Visibility="Hidden" />
             <TurtleMediaControl:TransImageControl x:Name="TransImgCtrl" AspectRatioMode="DependOnOwner" Visibility="Hidden"/>
         </Grid>
     </Grid>

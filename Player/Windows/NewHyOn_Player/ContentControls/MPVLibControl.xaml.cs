@@ -236,6 +236,44 @@ namespace NewHyOnPlayer
             }
         }
 
+        public bool Muted
+        {
+            set
+            {
+                SetValue(MutedProperty, value);
+            }
+
+            get
+            {
+                return (bool)GetValue(MutedProperty);
+            }
+        }
+
+        public static readonly DependencyProperty MutedProperty = DependencyProperty.Register
+            (
+                "Muted",
+                typeof(bool),
+                typeof(MPVLibControl),
+                new PropertyMetadata(true, OnMutedChanged)
+            );
+
+        private static void OnMutedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            MPVLibControl mpv = d as MPVLibControl;
+            mpv.MutedChanged((bool)e.NewValue);
+        }
+
+        private void MutedChanged(bool value)
+        {
+            if (sPlayer != null)
+            {
+                lock (mpvLock)
+                {
+                    sPlayer.API.SetPropertyString("mute", value ? "yes" : "no");
+                }
+            }
+        }
+
         public TimeSpan Position
         {
             get
@@ -286,6 +324,7 @@ namespace NewHyOnPlayer
             sPlayer.KeepOpen = KeepOpen.Always;
             sPlayer.MediaLoaded += Player_MediaLoaded;
             sPlayer.MediaFinished += Player_MediaFinished;
+            MutedChanged(Muted);
         }
 
         private void Player_MediaLoaded(object sender, System.EventArgs e)

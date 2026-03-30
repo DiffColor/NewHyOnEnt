@@ -379,10 +379,11 @@ public class DataSyncManager {
                                 realmElement.setName(element.getName());
                         realmElement.setType(element.getType());
                         realmElement.setWidth(element.getWidth());
-                        realmElement.setHeight(element.getHeight());
-                        realmElement.setPosLeft(element.getPosLeft());
-                        realmElement.setPosTop(element.getPosTop());
-                        realmElement.setzIndex(element.getzIndex());
+                                realmElement.setHeight(element.getHeight());
+                                realmElement.setPosLeft(element.getPosLeft());
+                                realmElement.setPosTop(element.getPosTop());
+                                realmElement.setzIndex(element.getzIndex());
+                                realmElement.setMuted(element.isMuted());
 
                         RealmList<RealmContent> contents = new RealmList<>();
                                 List<RethinkModels.ContentInfoRecord> contentRecords = element.getContents();
@@ -482,6 +483,7 @@ public class DataSyncManager {
                     elementEntry.EIF_PosLeft = element.getPosLeft();
                     elementEntry.EIF_PosTop = element.getPosTop();
                     elementEntry.EIF_ZIndex = element.getzIndex();
+                    elementEntry.EIF_IsMuted = element.isMuted();
                     elementEntry.EIF_DataFileName = element.getDataFileName();
                     elementEntry.EIF_DataFileFullPath = element.getDataFileFullPath();
                     elementEntry.EIF_ContentsInfoClassList = new ArrayList<>();
@@ -565,6 +567,7 @@ public class DataSyncManager {
                         elementEntry.PosLeft = element.getPosLeft();
                         elementEntry.PosTop = element.getPosTop();
                         elementEntry.ZIndex = element.getzIndex();
+                        elementEntry.Muted = element.isMuted();
                         elementEntry.Contents = new ArrayList<>();
 
                         List<RethinkModels.ContentInfoRecord> contents = element.getContents();
@@ -677,6 +680,7 @@ public class DataSyncManager {
                             elementEntry.posLeft = element.PosLeft;
                             elementEntry.posTop = element.PosTop;
                             elementEntry.zIndex = element.ZIndex;
+                            elementEntry.muted = element.Muted;
                             if (element.Contents != null) {
                                 for (UpdatePayloadModels.ContractContentPayload content : element.Contents) {
                                     UpdateQueueContract.ContentPayload contentEntry = new UpdateQueueContract.ContentPayload();
@@ -749,6 +753,7 @@ public class DataSyncManager {
                     elementEntry.posLeft = element.EIF_PosLeft;
                     elementEntry.posTop = element.EIF_PosTop;
                     elementEntry.zIndex = element.EIF_ZIndex;
+                    elementEntry.muted = element.EIF_IsMuted;
                     if (element.EIF_ContentsInfoClassList != null) {
                         for (int idx = 0; idx < element.EIF_ContentsInfoClassList.size(); idx++) {
                             UpdatePayloadModels.ContentsInfoClass content = element.EIF_ContentsInfoClassList.get(idx);
@@ -1231,6 +1236,7 @@ public class DataSyncManager {
                         realmElement.setPosLeft(element.posLeft);
                         realmElement.setPosTop(element.posTop);
                         realmElement.setzIndex(element.zIndex);
+                        realmElement.setMuted(element.muted);
 
                         RealmList<RealmContent> contents = new RealmList<>();
                             if (element.contents != null) {

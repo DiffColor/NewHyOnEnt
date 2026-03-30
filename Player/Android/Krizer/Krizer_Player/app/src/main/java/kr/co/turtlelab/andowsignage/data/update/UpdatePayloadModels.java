@@ -91,6 +91,7 @@ public final class UpdatePayloadModels {
         public double PosTop;
         public double PosLeft;
         public int ZIndex;
+        public boolean Muted = true;
         public List<ContractContentPayload> Contents = new ArrayList<>();
     }
 
@@ -149,6 +150,7 @@ public final class UpdatePayloadModels {
         public double EIF_PosTop;
         public double EIF_PosLeft;
         public int EIF_ZIndex;
+        public boolean EIF_IsMuted = true;
         public String EIF_DataFileName = "";
         public String EIF_DataFileFullPath = "";
         public List<ContentsInfoClass> EIF_ContentsInfoClassList = new ArrayList<>();
