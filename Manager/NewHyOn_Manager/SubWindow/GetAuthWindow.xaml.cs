@@ -125,12 +125,12 @@ namespace AndoW_Manager
         {
             if (state)
             {
-                AuthGroup.Header = "현재 인증 상태 : 정품 인증 완료";
+                AuthGroup.Header = "현재 등록 상태 : 등록 완료";
                 AuthGroup.Foreground = new SolidColorBrush(Colors.DarkGreen);
             }
             else
             {
-                AuthGroup.Header = "현재 인증 상태 : 미인증";
+                AuthGroup.Header = "현재 등록 상태 : 미등록";
                 AuthGroup.Foreground = new SolidColorBrush(Colors.DarkRed);
             }
 
@@ -143,7 +143,7 @@ namespace AndoW_Manager
             SetAuthState(true);
 
             PersistAuthKey(normalizedAuthKey);
-            MessageTools.ShowMessageBox("인증키 생성에 성공했습니다.", "확인");
+            MessageTools.ShowMessageBox("기기 등록을 완료했습니다.", "확인");
         }
 
         private void AuthBtn_Click(object sender, RoutedEventArgs e)
@@ -166,7 +166,7 @@ namespace AndoW_Manager
 
             if (string.IsNullOrEmpty(passwd))
             {
-                MessageTools.ShowMessageBox("인증 비밀번호를 입력해주세요.", "확인");
+                MessageTools.ShowMessageBox("확인 번호를 입력해주세요.", "확인");
                 return;
             }
 
@@ -175,7 +175,7 @@ namespace AndoW_Manager
                 string macStr = AuthTools.NormalizeMacAddress(MacAddress.Text);
                 if (string.IsNullOrEmpty(macStr))
                 {
-                    MessageTools.ShowMessageBox("소스키가 없습니다. 플레이어 정보를 확인해주세요.", "확인");
+                    MessageTools.ShowMessageBox("기기 코드가 없습니다. 플레이어 정보를 확인해주세요.", "확인");
                     return;
                 }
                 string checkVal = AuthTools.GetPasswd2(macStr);

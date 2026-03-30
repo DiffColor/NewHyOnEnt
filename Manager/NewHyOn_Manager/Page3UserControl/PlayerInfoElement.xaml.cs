@@ -116,7 +116,7 @@ namespace AndoW_Manager
 
             if (string.IsNullOrWhiteSpace(target))
             {
-                MessageTools.ShowMessageBox("Remote ID 또는 플레이어 IP주소를 입력해주세요.", "확인");
+                MessageTools.ShowMessageBox("원격 번호 또는 기기 주소를 입력해주세요.", "확인");
                 return;
             }
 
@@ -143,7 +143,7 @@ namespace AndoW_Manager
         {
             Microsoft.Win32.OpenFileDialog openFileDialog = new Microsoft.Win32.OpenFileDialog();
 
-            openFileDialog.Filter = "APK Files|*.apk";
+            openFileDialog.Filter = "설치 파일|*.apk";
 
             try
             {
@@ -194,7 +194,7 @@ namespace AndoW_Manager
             List<string> authKeys = DataShop.Instance.g_PlayerInfoManager.GetAllAuthKeys();
             if (authKeys == null || authKeys.Count == 0)
             {
-                MessageTools.ShowMessageBox("등록된 인증키가 없습니다.", "확인");
+                MessageTools.ShowMessageBox("등록된 기기 정보가 없습니다.", "확인");
                 return;
             }
 
@@ -255,7 +255,7 @@ namespace AndoW_Manager
             if(authorized)
                 ChangePlayList();
             else
-                MessageTools.ShowMessageBox("미인증 플레이어입니다. 인증 후에 전송이 가능합니다.", "확인");
+                MessageTools.ShowMessageBox("등록되지 않은 플레이어입니다. 등록 후에 전송할 수 있습니다.", "확인");
         }
 
         void PlayerInfoElement_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)

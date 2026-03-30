@@ -37,7 +37,7 @@ namespace TurtleTools
             }
             catch (Exception ex)
             {
-                error = $"FTP 연결 실패: {ex.Message}";
+                error = $"전송 서버 연결 실패: {ex.Message}";
                 return false;
             }
         }
@@ -76,7 +76,7 @@ namespace TurtleTools
             }
             catch (Exception ex)
             {
-                return $"FTP 업로드 실패: {ex.Message}";
+                return $"서버 전송 실패: {ex.Message}";
             }
         }
 
@@ -133,11 +133,11 @@ namespace TurtleTools
             }
             catch (OperationCanceledException)
             {
-                return "FTP 업로드가 취소되었습니다.";
+                return "서버 전송이 취소되었습니다.";
             }
             catch (Exception ex)
             {
-                return $"FTP 업로드 실패: {ex.Message}";
+                return $"서버 전송 실패: {ex.Message}";
             }
         }
 
@@ -181,11 +181,11 @@ namespace TurtleTools
             }
             catch (OperationCanceledException)
             {
-                return "FTP download canceled.";
+                return "서버에서 받기가 취소되었습니다.";
             }
             catch (Exception ex)
             {
-                return $"FTP download failed: {ex.Message}";
+                return $"서버에서 받기 실패: {ex.Message}";
             }
         }
 
@@ -263,20 +263,20 @@ namespace TurtleTools
 
             if (settings == null)
             {
-                error = "FTP 설정을 불러올 수 없습니다.";
+                error = "전송 설정을 불러올 수 없습니다.";
                 return false;
             }
 
             if (string.IsNullOrWhiteSpace(settings.Host))
             {
-                error = "FTP 호스트를 설정해 주세요.";
+                error = "서버 주소를 설정해 주세요.";
                 return false;
             }
 
             int port = settings.Port > 0 ? settings.Port : DefaultPort;
             if (port <= 0 || port > 65535)
             {
-                error = "FTP 포트 설정이 올바르지 않습니다.";
+                error = "전송 포트 설정이 올바르지 않습니다.";
                 return false;
             }
 
@@ -284,13 +284,13 @@ namespace TurtleTools
 
             if (!string.IsNullOrWhiteSpace(settings.User) == false)
             {
-                error = "FTP 계정을 설정해 주세요.";
+                error = "전송 계정을 설정해 주세요.";
                 return false;
             }
 
             if (settings.PasvMinPort > 0 && settings.PasvMaxPort > 0 && settings.PasvMinPort > settings.PasvMaxPort)
             {
-                error = "FTP 패시브 포트 범위가 올바르지 않습니다.";
+                error = "전송 포트 범위가 올바르지 않습니다.";
                 return false;
             }
 

@@ -59,7 +59,7 @@ namespace AndoW_Manager
             UsbDiskCollection usbcol = Page2.Instance.g_USBManager.GetAvailableDisks();
 
             if (usbcol.Count < 1)
-                MessageTools.ShowMessageBox("USB 드라이브가 없습니다.");
+                MessageTools.ShowMessageBox("이동 저장소가 없습니다.");
 
             List<string> usblist = new List<string>();
             foreach(UsbDisk usb in usbcol) 

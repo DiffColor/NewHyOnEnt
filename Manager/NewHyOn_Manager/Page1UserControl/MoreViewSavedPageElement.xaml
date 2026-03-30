@@ -174,7 +174,7 @@
     	</Grid.ColumnDefinitions>
         <Grid.ContextMenu>
             <ContextMenu x:Name="DisplayCotextMenu">
-                <MenuItem Visibility="Collapsed" Header="USB로 데이터 추출" ToolTip="플레이리스트 업데이트를 위해 USB로 데이터를 추출합니다." x:Name="MC_CopyToUSB"/>
+                <MenuItem Visibility="Collapsed" Header="이동 저장소로 데이터 내보내기" ToolTip="플레이리스트 업데이트를 위해 이동 저장소로 데이터를 내보냅니다." x:Name="MC_CopyToUSB"/>
                 <Separator x:Name="SepUSB" Visibility="Collapsed" />
                 <MenuItem Header="Delete" ToolTip="Delete Page."  x:Name="MC_DeletePage"/>
             </ContextMenu>

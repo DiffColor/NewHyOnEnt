@@ -76,7 +76,7 @@
                        Fill="#005252AB"/>
 
             <StackPanel Orientation="Horizontal" Margin="11,0,0,0">
-                <TextBlock Text="인증 설정"
+                <TextBlock Text="기기 등록"
                            TextWrapping="Wrap"
                            FontFamily="Arial"
                            HorizontalAlignment="Center"
@@ -132,7 +132,7 @@
         </Grid>
 
         <Grid x:Name="LayoutRoot" Grid.Row="1" Background="#FFE4E8F1">
-            <GroupBox x:Name="AuthGroup" Header=" 현재 인증 상태 : 미인증 " Margin="10,7,10,10" FontWeight="Bold" Foreground="#FFED3F3F" FontSize="16" BorderThickness="1" BorderBrush="#FF494998">
+            <GroupBox x:Name="AuthGroup" Header=" 현재 등록 상태 : 미등록 " Margin="10,7,10,10" FontWeight="Bold" Foreground="#FFED3F3F" FontSize="16" BorderThickness="1" BorderBrush="#FF494998">
                 <Grid Margin="15,10,22,10">
                     <Grid.RowDefinitions>
                         <RowDefinition/>
@@ -145,11 +145,11 @@
                     </Grid.ColumnDefinitions>
                     <Rectangle Grid.ColumnSpan="4" Fill="White" Height="36" StrokeThickness="0" RadiusX="6" RadiusY="6" Margin="0,0,-5,0"/>
                     <Rectangle Grid.ColumnSpan="4" Fill="White" Height="36" StrokeThickness="0" RadiusX="6" RadiusY="6" Grid.Row="3" Margin="0,0,-5,0"/>
-                    <Label Content="소스키 : " Margin="0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="14.667"/>
-                    <Label Content="인증번호 : " HorizontalAlignment="Right" Margin="0" Grid.Row="1" VerticalAlignment="Center" FontSize="14.667"/>
+                    <Label Content="기기 코드 : " Margin="0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="14.667"/>
+                    <Label Content="확인 번호 : " HorizontalAlignment="Right" Margin="0" Grid.Row="1" VerticalAlignment="Center" FontSize="14.667"/>
                     <TextBox x:Name="MacAddress" Grid.Column="1" Margin="0,0,5,0" TextWrapping="Wrap" VerticalAlignment="Center" FontSize="18" Grid.ColumnSpan="2" BorderThickness="0" Background="White" BorderBrush="Black" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
                     <PasswordBox x:Name="Passwd" Grid.Column="1" Margin="0" Grid.Row="1" BorderThickness="0" VerticalAlignment="Center" FontSize="18" BorderBrush="{x:Null}" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
-                    <Button x:Name="AuthBtn" Click="AuthBtn_Click" Content="인   증" Grid.Column="2" Margin="7,7,0,7" Grid.Row="1" Style="{DynamicResource Btn_defaultSW}" Height="28"/>
+                    <Button x:Name="AuthBtn" Click="AuthBtn_Click" Content="등   록" Grid.Column="2" Margin="7,7,0,7" Grid.Row="1" Style="{DynamicResource Btn_defaultSW}" Height="28"/>
                 </Grid>
             </GroupBox>
         </Grid>

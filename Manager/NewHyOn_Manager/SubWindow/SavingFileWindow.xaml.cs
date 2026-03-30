@@ -51,7 +51,7 @@ namespace AndoW_Manager
             }
 
             string subtitle = g_EnableFtpUpload
-                ? "로컬 보존과 FTP 업로드를 함께 진행합니다."
+                ? "로컬 보존과 서버 전송을 함께 진행합니다."
                 : "파일 복사를 진행합니다.";
 
             if (WindowTitleText != null)
@@ -195,12 +195,12 @@ namespace AndoW_Manager
                 Logger.WriteErrorLog($"FTP connection failed: {error}", Logger.GetLogFileName());
                 Dispatcher.Invoke(() =>
                 {
-                    MessageTools.ShowMessageBox("FTP 서버에 연결할 수 없습니다.\r\n설정을 확인해주세요.", "확인");
+                    MessageTools.ShowMessageBox("전송 서버에 연결할 수 없습니다.\r\n설정을 확인해주세요.", "확인");
                 });
                 return;
             }
 
-            SetStage("FTP 업로드 중입니다.", "플레이어용 콘텐츠를 서버로 전송합니다.");
+            SetStage("서버 전송 중입니다.", "플레이어용 콘텐츠를 서버로 전송합니다.");
 
             HashSet<string> remoteNames = await FtpTransferTools.GetRemoteFileNameSetAsync("Contents", uploadCancellation.Token);
             if (remoteNames == null)
@@ -254,7 +254,7 @@ namespace AndoW_Manager
             {
                 Dispatcher.Invoke(() =>
                 {
-                    MessageTools.ShowMessageBox($"FTP 업로드 중 {errors.Count}건 오류가 발생했습니다.\r\n로그를 확인해주세요.", "확인");
+                    MessageTools.ShowMessageBox($"서버 전송 중 {errors.Count}건 오류가 발생했습니다.\r\n로그를 확인해주세요.", "확인");
                 });
             }
         }

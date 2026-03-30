@@ -61,7 +61,7 @@ namespace HyonManager.SubWindow
 
             if (TextBoxNewPlayerName1.Text == string.Empty)
             {
-                UtilityClass.ShowMessageBox("플레이어IP를 입력해주세요.");
+                UtilityClass.ShowMessageBox("기기 주소를 입력해주세요.");
                 return;
             }
 

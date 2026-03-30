@@ -297,7 +297,7 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock x:Name="MainStatusText" Text="화면구성을 저장 중입니다." FontFamily="Malgun Gothic" FontSize="16" FontWeight="Bold" Foreground="#FF1D2B53"/>
-                    <TextBlock x:Name="SubStatusText" Grid.Row="1" Text="로컬 보존과 FTP 업로드를 함께 진행합니다." FontFamily="Malgun Gothic" FontSize="12" Foreground="#FF5B6B86" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="SubStatusText" Grid.Row="1" Text="로컬 보존과 서버 전송을 함께 진행합니다." FontFamily="Malgun Gothic" FontSize="12" Foreground="#FF5B6B86" Margin="0,4,0,0"/>
 
                     <StackPanel x:Name="CopySection" Grid.Row="2" Margin="0,14,0,0">
                         <TextBlock Text="로컬 복사" FontFamily="Malgun Gothic" FontSize="12" Foreground="#FF3B4B6A" FontWeight="SemiBold"/>
@@ -306,7 +306,7 @@
                     </StackPanel>
 
                     <StackPanel x:Name="UploadSection" Grid.Row="3" Margin="0,12,0,0">
-                        <TextBlock Text="FTP 업로드" FontFamily="Malgun Gothic" FontSize="12" Foreground="#FF3B4B6A" FontWeight="SemiBold"/>
+                        <TextBlock Text="서버 전송" FontFamily="Malgun Gothic" FontSize="12" Foreground="#FF3B4B6A" FontWeight="SemiBold"/>
                         <ProgressBar x:Name="UploadProgressBar" Style="{StaticResource ModernProgressBar}" Margin="0,6,0,0" Maximum="100"/>
                         <TextBlock x:Name="UploadProgressText" Text="0 / 0" FontFamily="Malgun Gothic" FontSize="11" Foreground="#FF6B7B96" Margin="0,4,0,0"/>
                     </StackPanel>

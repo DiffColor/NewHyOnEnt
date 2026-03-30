@@ -91,9 +91,9 @@
                     <!--<MenuItem Header="미리보기" ToolTip="컨텐츠의 미리보기를 실행합니다."  x:Name="MC_PreviewContents"/>-->
                     <MenuItem Header="복사하기" ToolTip="플레이리스트 항목을 복사합니다."  x:Name="MC_CopyPlayList"/>
                     <Separator x:Name="Sep1" Visibility="Collapsed" />
-                    <MenuItem Visibility="Collapsed" Header="USB로 데이터 추출" ToolTip="플레이리스트 업데이트를 위해 USB로 데이터를 추출합니다." x:Name="MC_CopyToUSB"/>
+                    <MenuItem Visibility="Collapsed" Header="이동 저장소로 데이터 내보내기" ToolTip="플레이리스트 업데이트를 위해 이동 저장소로 데이터를 내보냅니다." x:Name="MC_CopyToUSB"/>
                     <Separator x:Name="Sep2" Visibility="Collapsed" />
-                    <MenuItem Visibility="Collapsed" Header="USB데이터 정리" ToolTip="USB에 누적된 컨텐츠 파일들을 정리합니다."  x:Name="MC_CleanUSB"/>
+                    <MenuItem Visibility="Collapsed" Header="이동 저장소 데이터 정리" ToolTip="이동 저장소에 누적된 콘텐츠 파일을 정리합니다."  x:Name="MC_CleanUSB"/>
                 </ContextMenu>
             </Grid.ContextMenu>
             <Grid.ColumnDefinitions>

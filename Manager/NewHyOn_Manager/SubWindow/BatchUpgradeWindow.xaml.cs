@@ -122,7 +122,7 @@ namespace AndoW_Manager
         {
             if (string.IsNullOrEmpty(APKFilePathTBox.Text) || File.Exists(APKFilePathTBox.Text) == false)
             {
-                MessageTools.ShowMessageBox("플레이어 APK를 선택해주세요.", "확인");
+                MessageTools.ShowMessageBox("플레이어 설치 파일을 선택해주세요.", "확인");
             }
             else
             {
@@ -240,7 +240,7 @@ namespace AndoW_Manager
         {
             Microsoft.Win32.OpenFileDialog _ofd = new Microsoft.Win32.OpenFileDialog();
 
-            _ofd.Filter = "APK File|*.apk";
+            _ofd.Filter = "설치 파일|*.apk";
             _ofd.RestoreDirectory = true;
             _ofd.Multiselect = false;
 
@@ -254,7 +254,7 @@ namespace AndoW_Manager
             }
             catch (System.Exception ex)
             {
-                MessageTools.ShowMessageBox("APK 파일 오류 : " + ex.Message);
+                MessageTools.ShowMessageBox("설치 파일 오류 : " + ex.Message);
             }
         }
     }

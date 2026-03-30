@@ -77,7 +77,7 @@ namespace AndoW_Manager
 
             if (usbcol == null || usbcol.Count < 1)
             {
-                MessageTools.ShowMessageBox("USB 드라이브가 없습니다.");
+                MessageTools.ShowMessageBox("이동 저장소가 없습니다.");
                 return;
             }
 

@@ -231,7 +231,7 @@ namespace AndoW_Manager
             RethinkDbConfigurator.EnsureConfigured();
 
             DbLoadingWindow loadingWindow = new DbLoadingWindow();
-            loadingWindow.SetStatus("DB 연결 확인", "RethinkDB 서버에 연결 중입니다.");
+            loadingWindow.SetStatus("데이터 연결 확인", "데이터 서버에 연결 중입니다.");
             loadingWindow.Show();
             loadingWindow.Activate();
             await Dispatcher.Yield(DispatcherPriority.Background);
@@ -659,15 +659,15 @@ namespace AndoW_Manager
 
                 Logger.WriteErrorLog("RethinkDB 연결 실패. 15초 후 재시도합니다.", Logger.GetLogFileName());
                 loadingWindow?.SetStatus(
-                    "DB 연결 실패",
-                    "RethinkDB 연결이 필요합니다.\r\n설정 확인 후 15초마다 재시도합니다.");
+                    "데이터 연결 실패",
+                    "데이터 서버 연결이 필요합니다.\r\n설정 확인 후 15초마다 재시도합니다.");
                 await Task.Delay(TimeSpan.FromSeconds(15));
             }
         }
 
         private async Task WaitForSignalRReadyAsync(DbLoadingWindow loadingWindow)
         {
-            loadingWindow?.SetStatus("SignalR 연결 확인", "SignalR 서버에 연결 중입니다.");
+            loadingWindow?.SetStatus("실시간 연결 확인", "실시간 제어 서버에 연결 중입니다.");
             var initialWaitUntil = DateTime.Now.AddSeconds(1);
 
             while (!SignalRClientTools.IsConnected())
@@ -686,8 +686,8 @@ namespace AndoW_Manager
 
                 Logger.WriteErrorLog("SignalR 연결 실패. 15초 후 재시도합니다.", Logger.GetLogFileName());
                 loadingWindow?.SetStatus(
-                    "SignalR 연결 실패",
-                    "SignalR 서버 연결이 필요합니다.\r\n설정 확인 후 15초마다 재시도합니다.");
+                    "실시간 연결 실패",
+                    "실시간 제어 서버 연결이 필요합니다.\r\n설정 확인 후 15초마다 재시도합니다.");
                 await Task.Delay(TimeSpan.FromSeconds(15));
             }
         }

@@ -145,7 +145,7 @@ namespace AndoW_Manager
         {
             if (!MainWindow.Instance.CheckFTPServerAlive())
             {
-                MessageTools.ShowMessageBox("FTP 서버에 연결할 수 없습니다.\r\n설정을 확인해주세요.", "확인");
+                MessageTools.ShowMessageBox("전송 서버에 연결할 수 없습니다.\r\n설정을 확인해주세요.", "확인");
                 return;
             }
 

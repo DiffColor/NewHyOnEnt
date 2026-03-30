@@ -38,7 +38,7 @@ namespace TurtleTools
         {
             if (USBCombo.SelectedValue == null)
             {
-                MessageTools.ShowMessageBox("USB 드라이브를 선택해주세요.", "확인");
+                MessageTools.ShowMessageBox("저장 위치를 선택해주세요.", "확인");
                 return;
             }
 
@@ -91,7 +91,7 @@ namespace TurtleTools
             catch (Exception ex)
             {
                 Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-                MessageTools.ShowMessageBox("USB로 내보내는 중 오류가 발생했습니다.", "확인");
+                MessageTools.ShowMessageBox("선택한 저장 위치로 내보내는 중 오류가 발생했습니다.", "확인");
             }
         }
 

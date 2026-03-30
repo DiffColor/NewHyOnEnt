@@ -221,7 +221,7 @@ namespace AndoW_Manager
             }
             
             if (string.IsNullOrEmpty(_data))
-                MessageTools.ShowMessageBox("인증할 기기가 없습니다.", "확인");
+                MessageTools.ShowMessageBox("등록할 기기가 없습니다.", "확인");
             else
             {
                 CommonOpenFileDialog dialog = new CommonOpenFileDialog();
@@ -229,7 +229,7 @@ namespace AndoW_Manager
                 if (dialog.ShowDialog() == CommonFileDialogResult.OK)
                 {
                     FileTools.WriteNewTextFile(Path.Combine(dialog.FileName, "SourceKeys"), _data);
-                    MessageTools.ShowMessageBox("소스파일을 저장하였습니다.", "확인");
+                    MessageTools.ShowMessageBox("기기 코드 파일을 저장했습니다.", "확인");
                 }
 
                 this.Focus();
@@ -239,7 +239,7 @@ namespace AndoW_Manager
         private void UploadAuthKeyBtn_Click(object sender, RoutedEventArgs e)
         {
             CommonOpenFileDialog dialog = new CommonOpenFileDialog();
-            dialog.Filters.Add(new CommonFileDialogFilter("AuthKeys", "*"));
+            dialog.Filters.Add(new CommonFileDialogFilter("등록 정보", "*"));
 
             if (dialog.ShowDialog() == CommonFileDialogResult.OK)
             {
@@ -251,15 +251,15 @@ namespace AndoW_Manager
                     if (applied > 0)
                     {
                         RefreshPlayerInfoList();
-                        MessageTools.ShowMessageBox("기기 인증을 완료하였습니다.", "확인");
+                        MessageTools.ShowMessageBox("기기 등록을 완료했습니다.", "확인");
                     }
                     else
                     {
-                        MessageTools.ShowMessageBox("적용 가능한 인증키가 없습니다.", "확인");
+                        MessageTools.ShowMessageBox("적용 가능한 등록 정보가 없습니다.", "확인");
                     }
                 } else
                 {
-                    MessageTools.ShowMessageBox("인증키 파일이 아닙니다.", "확인");
+                    MessageTools.ShowMessageBox("등록 정보 파일이 아닙니다.", "확인");
                 }
             }
 
@@ -271,7 +271,7 @@ namespace AndoW_Manager
 #if LIMIT
             if (ContentsElementsStackPannel1.Children.Count > 4)
             {
-                MessageTools.ShowMessageBox("추가 인증이 필요합니다.", "확인");
+                MessageTools.ShowMessageBox("추가 등록이 필요합니다.", "확인");
                 return;
             }
 #endif

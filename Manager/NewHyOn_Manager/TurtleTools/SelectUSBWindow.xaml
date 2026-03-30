@@ -234,7 +234,7 @@
                     <TextBlock HorizontalAlignment="Left" TextWrapping="Wrap" FontFamily="Malgun Gothic" FontSize="13.333" IsEnabled="False" Text="알림창" VerticalAlignment="Center" Padding="0,0,0,3" Margin="0,0,0,1" FontWeight="Bold" Foreground="#FFFFFFFF"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Grid.Row="1" HorizontalAlignment="Right" Margin="12">
-                    <Label Content="USB 저장소 선택 :" Foreground="#FF131933" Width="120" Height="30"/>
+                    <Label Content="저장 위치 선택 :" Foreground="#FF131933" Width="120" Height="30"/>
                     <ComboBox x:Name="USBCombo" Width="120" Height="24" />
                     <Button x:Name="ConfirmBtn" Click="ConfirmBtn_Click" Style="{DynamicResource ButtonStyle2}" Margin="8,0,0,0" MinWidth="88">
                         <TextBlock x:Name="RBtn_Text" TextWrapping="Wrap" Text="저 장" Foreground="#FFFFFFFF" VerticalAlignment="Center" HorizontalAlignment="Center" FontFamily="Malgun Gothic" FontSize="13.333" FontWeight="Bold"/>

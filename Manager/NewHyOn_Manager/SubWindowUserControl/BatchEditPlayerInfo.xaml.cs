@@ -103,13 +103,13 @@ namespace AndoW_Manager
         {
             if (state)
             {
-                AuthBtn.Content = "인증 완료";
+                AuthBtn.Content = "등록 완료";
                 AuthBtn.Background = ColorTools.GetSolidBrushByColorString(AuthDoneColor);
                 PWKeyTBox.IsEnabled = false;
             }
             else
             {
-                AuthBtn.Content = "인증 필요";
+                AuthBtn.Content = "등록 필요";
                 AuthBtn.Background = ColorTools.GetSolidBrushByColorString(AuthPendingColor);
                 PWKeyTBox.IsEnabled = true;
             }
@@ -209,7 +209,7 @@ namespace AndoW_Manager
 
             if (string.IsNullOrEmpty(passwd))
             {
-                MessageTools.ShowMessageBox("인증 비밀번호를 입력해주세요.", "확인");
+                MessageTools.ShowMessageBox("확인 번호를 입력해주세요.", "확인");
                 return;
             }
 
@@ -218,7 +218,7 @@ namespace AndoW_Manager
                 string macStr = AuthTools.NormalizeMacAddress(SourceKeyTBox.Text);
                 if (string.IsNullOrEmpty(macStr))
                 {
-                    MessageTools.ShowMessageBox("소스키가 없습니다. 플레이어 정보를 확인해주세요.", "확인");
+                    MessageTools.ShowMessageBox("기기 코드가 없습니다. 플레이어 정보를 확인해주세요.", "확인");
                     return;
                 }
                 string checkVal = AuthTools.GetPasswd2(macStr);
