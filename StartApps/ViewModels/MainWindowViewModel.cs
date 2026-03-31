@@ -106,6 +106,7 @@ public partial class MainWindowViewModel : ObservableObject
             var entry = AddEntry(definition);
             if (_appManager.TryAttachToRunningProcess(definition))
             {
+                await SyncFirewallForAttachedProcessAsync(definition);
                 entry.IsRunning = true;
                 entry.IsExternallyRunning = true;
                 entry.Status = "실행 중";
@@ -546,6 +547,18 @@ public partial class MainWindowViewModel : ObservableObject
         finally
         {
             _isSequentialQueueProcessing = false;
+        }
+    }
+
+    private async Task SyncFirewallForAttachedProcessAsync(AppDefinition definition)
+    {
+        try
+        {
+            await _appManager.EnsureFirewallRulesAsync(definition);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Firewall rule sync failed for attached process {definition.Name}: {ex}");
         }
     }
 

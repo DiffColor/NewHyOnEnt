@@ -200,12 +200,13 @@ namespace ConfigPlayer
                 g_PortInfoManager.g_DataClassList[0].AIF_FTP = FTPPortNum;
                 g_PortInfoManager.g_DataClassList[0].AIF_SYNC = syncPortNum;
                 g_PortInfoManager.SaveData();
+                FirewallRuleBootstrap.EnsureSyncPortRule(syncPortNum);
 
                 MessageBox.Show("포트번호를 저장했습니다.");
             }
             catch (Exception ex)
             {
-                MessageBox.Show("포트번호가 제대로 입력되지 않았습니다.");
+                MessageBox.Show("포트 저장 또는 sync 방화벽 적용에 실패했습니다.\r\n" + ex.Message);
             }
 
 

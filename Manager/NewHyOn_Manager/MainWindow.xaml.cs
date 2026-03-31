@@ -266,8 +266,6 @@ namespace AndoW_Manager
 
             GotoPageByName("Page3");
 
-            CheckAndAddSecurityRules();
-
             checkTimer.Tick += new EventHandler(checkTimer_Tick);
             checkTimer.Interval = new TimeSpan(0, 0, 4);
             checkTimer.Start();
@@ -490,20 +488,6 @@ namespace AndoW_Manager
                 PeriodEndMonth = schedule.PeriodEndMonth,
                 PeriodEndDay = schedule.PeriodEndDay
             };
-        }
-
-        void CheckAndAddSecurityRules()
-        {
-            Dictionary<string, string> progDic = new Dictionary<string, string>();
-            Dictionary<string, int> portDic = new Dictionary<string, int>();
-
-            SecurityTools.SetICMP();
-
-            if (SecurityTools.NeedToAddRule("signage_manager"))
-                progDic["signage_manager"] = FNDTools.GetManagerExeFilePath();
-            
-            SecurityTools.ReleaseFirewallRules(SecurityTools.CreateAuthorAppNetshCmdList(progDic));
-            SecurityTools.ReleaseFirewallRules(SecurityTools.CreateOpenPortNetshCmdList(portDic));
         }
 
         void LeftMenuBTN1_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

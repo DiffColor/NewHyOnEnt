@@ -11,21 +11,8 @@ public sealed class FirewallRuleService
     private const int VistaMajorVersion = 6;
     private const int DefaultRethinkPort = 28015;
     private const int DefaultSignalRPort = 5000;
-    private static readonly string[] LegacyRuleNames =
-    [
-        "vnc",
-        "vnc1_port",
-        "vnc2_port",
-        "ftp_ports",
-        "agent_port",
-        "op_port",
-        "sync_port",
-        "agent"
-    ];
 
     private readonly AppProfile _profile;
-    private readonly object _cleanupGate = new();
-    private bool _legacyCleanupCompleted;
 
     public FirewallRuleService(AppProfile profile)
     {
@@ -44,45 +31,28 @@ public sealed class FirewallRuleService
             throw new InvalidOperationException("방화벽 규칙에 사용할 실행 파일 경로가 비어 있습니다.");
         }
 
-        var normalizedPath = Path.GetFullPath(executablePath);
+        string normalizedPath = Path.GetFullPath(executablePath);
         if (!File.Exists(normalizedPath))
         {
             throw new FileNotFoundException("방화벽 규칙에 사용할 실행 파일을 찾을 수 없습니다.", normalizedPath);
         }
 
-        await CleanupLegacyRulesAsync(cancellationToken);
-
-        foreach (var rule in BuildRules(definition, normalizedPath))
+        foreach (FirewallRuleSpec rule in BuildRules(definition, normalizedPath))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!await NeedToApplyRuleAsync(rule, cancellationToken))
+            RuleSyncMode syncMode = await GetRuleSyncModeAsync(rule, cancellationToken);
+            switch (syncMode)
             {
-                continue;
+                case RuleSyncMode.None:
+                    continue;
+                case RuleSyncMode.Add:
+                    await ExecuteNetshAsync(rule.AddArguments, cancellationToken, throwOnError: true);
+                    break;
+                case RuleSyncMode.Update:
+                    await ExecuteNetshAsync(rule.SetArguments, cancellationToken, throwOnError: true);
+                    break;
             }
-
-            await DeleteRuleAsync(rule.Name, cancellationToken);
-            await ExecuteNetshAsync(rule.AddArguments, cancellationToken, throwOnError: true);
-        }
-    }
-
-    private async Task CleanupLegacyRulesAsync(CancellationToken cancellationToken)
-    {
-        lock (_cleanupGate)
-        {
-            if (_legacyCleanupCompleted)
-            {
-                return;
-            }
-
-            _legacyCleanupCompleted = true;
-        }
-
-        await CleanupManagedRulesAsync(cancellationToken);
-
-        foreach (var ruleName in LegacyRuleNames)
-        {
-            await DeleteRuleAsync(ruleName, cancellationToken);
         }
     }
 
@@ -92,7 +62,7 @@ public sealed class FirewallRuleService
             BuildProgramRuleName(definition),
             executablePath);
 
-        var mainPort = ResolveMainPort(definition);
+        int mainPort = ResolveMainPort(definition);
         if (mainPort > 0)
         {
             yield return FirewallRuleSpec.CreatePortRule(
@@ -128,9 +98,9 @@ public sealed class FirewallRuleService
             return (defaultMin, defaultMax);
         }
 
-        var parts = range.Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var minPort = parts.Length > 0 && int.TryParse(parts[0], out var parsedMin) ? parsedMin : defaultMin;
-        var maxPort = parts.Length > 1 && int.TryParse(parts[1], out var parsedMax) ? parsedMax : minPort;
+        string[] parts = range.Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        int minPort = parts.Length > 0 && int.TryParse(parts[0], out int parsedMin) ? parsedMin : defaultMin;
+        int maxPort = parts.Length > 1 && int.TryParse(parts[1], out int parsedMax) ? parsedMax : minPort;
 
         if (minPort <= 0 || minPort > 65535)
         {
@@ -151,30 +121,30 @@ public sealed class FirewallRuleService
     }
 
     private string BuildProgramRuleName(AppDefinition definition) =>
-        $"StartApps|{_profile.Id}|{BuildServiceKey(definition)}|Program";
+        $"startapps_{BuildServiceKey(definition)}_app";
 
     private string BuildMainPortRuleName(AppDefinition definition) =>
-        $"StartApps|{_profile.Id}|{BuildServiceKey(definition)}|MainPort";
+        $"startapps_{BuildServiceKey(definition)}_port";
 
     private string BuildPassivePortRuleName(AppDefinition definition) =>
-        $"StartApps|{_profile.Id}|{BuildServiceKey(definition)}|PassivePort";
+        $"startapps_{BuildServiceKey(definition)}_passive_port";
 
     private static string BuildServiceKey(AppDefinition definition) =>
         definition.Type switch
         {
-            AppType.Rdb => "rdb",
+            AppType.Rdb => "rethinkdb",
             AppType.Ftp => "ftp",
-            AppType.Msg => "msg",
-            AppType.Msg472 => "msg472",
-            AppType.Msg90 => "msg90",
+            AppType.Msg => "signalr",
+            AppType.Msg472 => "signalr472",
+            AppType.Msg90 => "signalr90",
             _ => "app"
         };
 
-    private async Task<bool> NeedToApplyRuleAsync(FirewallRuleSpec rule, CancellationToken cancellationToken)
+    private async Task<RuleSyncMode> GetRuleSyncModeAsync(FirewallRuleSpec rule, CancellationToken cancellationToken)
     {
         if (Environment.OSVersion.Version.Major < VistaMajorVersion)
         {
-            return true;
+            return RuleSyncMode.Add;
         }
 
         var (exitCode, output, error) = await ExecuteNetshAsync(
@@ -184,48 +154,70 @@ public sealed class FirewallRuleService
 
         if (exitCode != 0)
         {
-            return true;
+            return RuleSyncMode.Add;
         }
 
-        var combined = string.Join(
+        string combined = string.Join(
             Environment.NewLine,
             new[] { output, error }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
         if (string.IsNullOrWhiteSpace(combined))
         {
-            return true;
+            return RuleSyncMode.Add;
         }
 
-        var normalizedOutput = Normalize(combined);
+        string normalizedOutput = Normalize(combined);
         if (normalizedOutput.Contains("norulesmatchthespecifiedcriteria", StringComparison.OrdinalIgnoreCase)
             || normalizedOutput.Contains("지정한규칙을찾을수없습니다", StringComparison.OrdinalIgnoreCase)
             || normalizedOutput.Contains("지정한조건과일치하는규칙이없습니다", StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return RuleSyncMode.Add;
         }
 
         if (!IsRuleEnabled(normalizedOutput))
         {
-            return true;
+            return RuleSyncMode.Update;
+        }
+
+        if (!IsRuleProfilesCompatible(normalizedOutput))
+        {
+            return RuleSyncMode.Update;
         }
 
         if (rule.ProgramPath != null && !normalizedOutput.Contains(Normalize(rule.ProgramPath), StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return RuleSyncMode.Update;
         }
 
-        if (rule.LocalPort != null && !normalizedOutput.Contains($"localport:{Normalize(rule.LocalPort)}", StringComparison.OrdinalIgnoreCase)
+        if (rule.LocalPort != null
+            && !normalizedOutput.Contains($"localport:{Normalize(rule.LocalPort)}", StringComparison.OrdinalIgnoreCase)
             && !normalizedOutput.Contains($"로컬포트:{Normalize(rule.LocalPort)}", StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return RuleSyncMode.Update;
         }
 
-        return false;
+        return RuleSyncMode.None;
     }
 
     private static bool IsRuleEnabled(string normalizedOutput) =>
         normalizedOutput.Contains("enabled:yes", StringComparison.OrdinalIgnoreCase)
         || normalizedOutput.Contains("사용:예", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRuleProfilesCompatible(string normalizedOutput)
+    {
+        if (normalizedOutput.Contains("profiles:any", StringComparison.OrdinalIgnoreCase)
+            || normalizedOutput.Contains("프로필:모두", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        bool hasPrivate = normalizedOutput.Contains("private", StringComparison.OrdinalIgnoreCase)
+            || normalizedOutput.Contains("개인", StringComparison.OrdinalIgnoreCase);
+        bool hasPublic = normalizedOutput.Contains("public", StringComparison.OrdinalIgnoreCase)
+            || normalizedOutput.Contains("공용", StringComparison.OrdinalIgnoreCase);
+
+        return hasPrivate && hasPublic;
+    }
 
     private static async Task DeleteRuleAsync(string ruleName, CancellationToken cancellationToken)
     {
@@ -235,23 +227,12 @@ public sealed class FirewallRuleService
             throwOnError: false);
     }
 
-    private async Task CleanupManagedRulesAsync(CancellationToken cancellationToken)
-    {
-        var prefix = $"StartApps|{_profile.Id}|";
-        var command = "$prefix = '" + EscapePowerShell(prefix) + "';"
-            + "Get-NetFirewallRule -ErrorAction SilentlyContinue | "
-            + "Where-Object { $_.DisplayName -like ($prefix + '*') } | "
-            + "Remove-NetFirewallRule -ErrorAction SilentlyContinue;";
-
-        await ExecutePowerShellAsync(command, cancellationToken, throwOnError: false);
-    }
-
     private static async Task<(int ExitCode, string Output, string Error)> ExecuteNetshAsync(
         string arguments,
         CancellationToken cancellationToken,
         bool throwOnError)
     {
-        using var process = new Process
+        using Process process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
@@ -271,66 +252,24 @@ public sealed class FirewallRuleService
 
         await process.WaitForExitAsync(cancellationToken);
 
-        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+        string output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        string error = await process.StandardError.ReadToEndAsync(cancellationToken);
 
         if (throwOnError && process.ExitCode != 0)
         {
-            var message = string.IsNullOrWhiteSpace(error) ? output : error;
+            string message = string.IsNullOrWhiteSpace(error) ? output : error;
             throw new InvalidOperationException($"방화벽 규칙 적용에 실패했습니다. {message}".Trim());
         }
 
         return (process.ExitCode, output, error);
     }
 
-    private static async Task ExecutePowerShellAsync(
-        string command,
-        CancellationToken cancellationToken,
-        bool throwOnError)
-    {
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            }
-        };
-
-        process.StartInfo.ArgumentList.Add("-NoProfile");
-        process.StartInfo.ArgumentList.Add("-NonInteractive");
-        process.StartInfo.ArgumentList.Add("-ExecutionPolicy");
-        process.StartInfo.ArgumentList.Add("Bypass");
-        process.StartInfo.ArgumentList.Add("-Command");
-        process.StartInfo.ArgumentList.Add(command);
-
-        if (!process.Start())
-        {
-            throw new InvalidOperationException("방화벽 정리 명령을 시작하지 못했습니다.");
-        }
-
-        await process.WaitForExitAsync(cancellationToken);
-
-        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
-        if (throwOnError && process.ExitCode != 0)
-        {
-            var message = string.IsNullOrWhiteSpace(error) ? output : error;
-            throw new InvalidOperationException($"방화벽 정리에 실패했습니다. {message}".Trim());
-        }
-    }
-
     private static string EscapeArgument(string value) => value.Replace("\"", "\"\"", StringComparison.Ordinal);
-
-    private static string EscapePowerShell(string value) => value.Replace("'", "''", StringComparison.Ordinal);
 
     private static string Normalize(string value)
     {
-        var builder = new StringBuilder(value.Length);
-        foreach (var ch in value)
+        StringBuilder builder = new StringBuilder(value.Length);
+        foreach (char ch in value)
         {
             if (!char.IsWhiteSpace(ch) && ch != '"')
             {
@@ -348,18 +287,27 @@ public sealed class FirewallRuleService
         || type == AppType.Msg472
         || type == AppType.Msg90;
 
-    private sealed record FirewallRuleSpec(string Name, string AddArguments, string? ProgramPath, string? LocalPort)
+    private enum RuleSyncMode
+    {
+        None,
+        Add,
+        Update
+    }
+
+    private sealed record FirewallRuleSpec(string Name, string AddArguments, string SetArguments, string? ProgramPath, string? LocalPort)
     {
         public static FirewallRuleSpec CreateProgramRule(string name, string programPath)
         {
-            var args = $"advfirewall firewall add rule name=\"{EscapeArgument(name)}\" dir=in action=allow program=\"{EscapeArgument(programPath)}\" enable=yes";
-            return new FirewallRuleSpec(name, args, programPath, null);
+            string addArgs = $"advfirewall firewall add rule name=\"{EscapeArgument(name)}\" dir=in action=allow program=\"{EscapeArgument(programPath)}\" enable=yes profile=private,public";
+            string setArgs = $"advfirewall firewall set rule name=\"{EscapeArgument(name)}\" new dir=in action=allow program=\"{EscapeArgument(programPath)}\" enable=yes profile=private,public";
+            return new FirewallRuleSpec(name, addArgs, setArgs, programPath, null);
         }
 
         public static FirewallRuleSpec CreatePortRule(string name, string localPort)
         {
-            var args = $"advfirewall firewall add rule name=\"{EscapeArgument(name)}\" dir=in action=allow protocol=TCP localport={EscapeArgument(localPort)}";
-            return new FirewallRuleSpec(name, args, null, localPort);
+            string addArgs = $"advfirewall firewall add rule name=\"{EscapeArgument(name)}\" dir=in action=allow protocol=TCP localport={EscapeArgument(localPort)} enable=yes profile=private,public";
+            string setArgs = $"advfirewall firewall set rule name=\"{EscapeArgument(name)}\" new dir=in action=allow protocol=TCP localport={EscapeArgument(localPort)} enable=yes profile=private,public";
+            return new FirewallRuleSpec(name, addArgs, setArgs, null, localPort);
         }
     }
 }

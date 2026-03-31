@@ -82,6 +82,12 @@ public class AppManager
         RuntimeStateChanged?.Invoke(this, new AppRuntimeState(definition.Id, true));
     }
 
+    public async Task EnsureFirewallRulesAsync(AppDefinition definition, CancellationToken cancellationToken = default)
+    {
+        var processInfo = BuildProcessStartInfo(definition);
+        await _firewallRuleService.EnsureRulesAsync(definition, processInfo.FileName, cancellationToken);
+    }
+
     public void Stop(AppDefinition definition, bool forceKill = false)
     {
         lock (_gate)
