@@ -78,6 +78,8 @@ public sealed class FirewallRuleService
             _legacyCleanupCompleted = true;
         }
 
+        await CleanupManagedRulesAsync(cancellationToken);
+
         foreach (var ruleName in LegacyRuleNames)
         {
             await DeleteRuleAsync(ruleName, cancellationToken);
@@ -149,13 +151,24 @@ public sealed class FirewallRuleService
     }
 
     private string BuildProgramRuleName(AppDefinition definition) =>
-        $"StartApps|{_profile.Id}|{definition.Id}|Program";
+        $"StartApps|{_profile.Id}|{BuildServiceKey(definition)}|Program";
 
     private string BuildMainPortRuleName(AppDefinition definition) =>
-        $"StartApps|{_profile.Id}|{definition.Id}|MainPort";
+        $"StartApps|{_profile.Id}|{BuildServiceKey(definition)}|MainPort";
 
     private string BuildPassivePortRuleName(AppDefinition definition) =>
-        $"StartApps|{_profile.Id}|{definition.Id}|PassivePort";
+        $"StartApps|{_profile.Id}|{BuildServiceKey(definition)}|PassivePort";
+
+    private static string BuildServiceKey(AppDefinition definition) =>
+        definition.Type switch
+        {
+            AppType.Rdb => "rdb",
+            AppType.Ftp => "ftp",
+            AppType.Msg => "msg",
+            AppType.Msg472 => "msg472",
+            AppType.Msg90 => "msg90",
+            _ => "app"
+        };
 
     private async Task<bool> NeedToApplyRuleAsync(FirewallRuleSpec rule, CancellationToken cancellationToken)
     {
@@ -222,6 +235,17 @@ public sealed class FirewallRuleService
             throwOnError: false);
     }
 
+    private async Task CleanupManagedRulesAsync(CancellationToken cancellationToken)
+    {
+        var prefix = $"StartApps|{_profile.Id}|";
+        var command = "$prefix = '" + EscapePowerShell(prefix) + "';"
+            + "Get-NetFirewallRule -ErrorAction SilentlyContinue | "
+            + "Where-Object { $_.DisplayName -like ($prefix + '*') } | "
+            + "Remove-NetFirewallRule -ErrorAction SilentlyContinue;";
+
+        await ExecutePowerShellAsync(command, cancellationToken, throwOnError: false);
+    }
+
     private static async Task<(int ExitCode, string Output, string Error)> ExecuteNetshAsync(
         string arguments,
         CancellationToken cancellationToken,
@@ -259,7 +283,49 @@ public sealed class FirewallRuleService
         return (process.ExitCode, output, error);
     }
 
+    private static async Task ExecutePowerShellAsync(
+        string command,
+        CancellationToken cancellationToken,
+        bool throwOnError)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            }
+        };
+
+        process.StartInfo.ArgumentList.Add("-NoProfile");
+        process.StartInfo.ArgumentList.Add("-NonInteractive");
+        process.StartInfo.ArgumentList.Add("-ExecutionPolicy");
+        process.StartInfo.ArgumentList.Add("Bypass");
+        process.StartInfo.ArgumentList.Add("-Command");
+        process.StartInfo.ArgumentList.Add(command);
+
+        if (!process.Start())
+        {
+            throw new InvalidOperationException("방화벽 정리 명령을 시작하지 못했습니다.");
+        }
+
+        await process.WaitForExitAsync(cancellationToken);
+
+        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+        if (throwOnError && process.ExitCode != 0)
+        {
+            var message = string.IsNullOrWhiteSpace(error) ? output : error;
+            throw new InvalidOperationException($"방화벽 정리에 실패했습니다. {message}".Trim());
+        }
+    }
+
     private static string EscapeArgument(string value) => value.Replace("\"", "\"\"", StringComparison.Ordinal);
+
+    private static string EscapePowerShell(string value) => value.Replace("'", "''", StringComparison.Ordinal);
 
     private static string Normalize(string value)
     {
