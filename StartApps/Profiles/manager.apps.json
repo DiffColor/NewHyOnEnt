@@ -12,6 +12,7 @@
     "type": "Msg472",
     "zone": "Parallel",
     "isEnabled": true,
+    "runAsAdministrator": true,
     "port": 5000,
     "msgHubPath": "/Data",
     "showWindow": false,

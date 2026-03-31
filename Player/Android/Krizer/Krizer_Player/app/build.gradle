@@ -1,7 +1,8 @@
 apply plugin: 'com.android.application'
 apply plugin: 'realm-android'
 
-def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: "${projectDir}/libs/platform.jks"
+def defaultKeystoreFile = rootProject.file("../../_shared/platformkeys/android/platform.jks")
+def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: defaultKeystoreFile.path
 def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "android"
 def keyAliasValue = System.getenv("ANDROID_KEY_ALIAS") ?: "androiddebugkey"
 def keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD") ?: "android"

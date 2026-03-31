@@ -1,6 +1,7 @@
 apply plugin: 'com.android.application'
 
-def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: "${projectDir}/libs/platform.jks"
+def defaultKeystoreFile = rootProject.file("../../_shared/platformkeys/quber/platform.jks")
+def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: defaultKeystoreFile.path
 def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "zbqj2636"
 def keyAliasValue = System.getenv("ANDROID_KEY_ALIAS") ?: "quber"
 def keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD") ?: "zbqj2636"
