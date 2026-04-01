@@ -110,13 +110,15 @@ build_quber_and_krizer_pair() {
   local quber_root="$1"
   local krizer_root="$2"
   local pair_prefix="$3"
+  local quber_keystore="Player/Android/_shared/platformkeys/quber/platform.jks"
+  local krizer_keystore="Player/Android/_shared/platformkeys/krizer/platform.jks"
 
   build_gradle_release \
     "$quber_root" \
     ":app:assembleRelease" \
     "app/build/outputs/apk/release/app-release.apk" \
     "${pair_prefix}-quber.apk" \
-    "$quber_root/app/libs/platform.jks" \
+    "$quber_keystore" \
     "zbqj2636" \
     "quber" \
     "zbqj2636"
@@ -126,7 +128,7 @@ build_quber_and_krizer_pair() {
     ":app:assembleRelease" \
     "app/build/outputs/apk/release/app-release.apk" \
     "${pair_prefix}-krizer.apk" \
-    "$krizer_root/app/libs/platform.jks" \
+    "$krizer_keystore" \
     "android" \
     "androiddebugkey" \
     "android"
@@ -154,10 +156,10 @@ case "$target" in
   launcher)
     build_gradle_release_from_find \
       "Player/Android/TurtleLauncher" \
-      ":LaLauncher:assembleRelease" \
-      "Player/Android/TurtleLauncher/LaLauncher/build/outputs/apk/release" \
+      ":TurtleLauncher:assembleRelease" \
+      "Player/Android/TurtleLauncher/TurtleLauncher/build/outputs/apk/release" \
       "${artifact_prefix}.apk" \
-      "Player/Android/Quber/Quber_Player/app/libs/platform.jks" \
+      "Player/Android/_shared/platformkeys/quber/platform.jks" \
       "zbqj2636" \
       "quber" \
       "zbqj2636"
@@ -168,7 +170,7 @@ case "$target" in
       ":app:assembleRelease" \
       "Player/Android/WatchDog_4launcher/app/build/outputs/apk/release" \
       "${artifact_prefix}.apk" \
-      "Player/Android/Quber/Quber_Player/app/libs/platform.jks" \
+      "Player/Android/_shared/platformkeys/quber/platform.jks" \
       "zbqj2636" \
       "quber" \
       "zbqj2636"
