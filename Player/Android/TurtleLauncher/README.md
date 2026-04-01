@@ -1,5 +1,5 @@
-Light Android Launcher
-======================
+TurtleLauncher
+==============
 
 Configurable, minimalistic, super lightweight app launcher with a low memory usage and small install size
 ---------------------------------------------------------------------------------------------------------
@@ -15,11 +15,9 @@ Functionalities
 1. Long press on all-apps view allows you to read info about app (API >= 9).
 1. To go back to favorites view press back button or swipe bottom vertically.
 
-Get it on:
----------
-| Regular | E-paper |
-|---------|---------|
-| <a href="https://f-droid.org/packages/com.github.postapczuk.lalauncher/"><img src="https://github.com/light-launcher/Light-Android-Launcher/raw/master/get-it-on.png" alt="Get it on F-Droid" height="80"></a> | <a href="https://www.dropbox.com/s/ci677hmb2s1la5w/LaLauncher-e-paper-unsigned.apk?dl=1"><img src="https://github.com/light-launcher/Light-Android-Launcher/raw/master/DropBox-icon.png" alt="Get it from Dropbox" height="80"></a> |
+Package name
+------------
+`kr.co.turtlelab.launcher`
 
 Android version
 ===============
@@ -28,7 +26,7 @@ Works with each Android version from 2.0 (API 5)
 ### E-paper version
 One of the goals of the app is to provide smooth experience for older e-paper devices like Nook Simple Touch (NST).
 There is a separate development branch "epaper-ready" for this kind of devices. 
-The latest apk will always be under [this](https://www.dropbox.com/s/ci677hmb2s1la5w/LaLauncher-e-paper-unsigned.apk?dl=1) url.
+Build the APK from this repository when you need the latest package.
 
 Free & Open Source
 ==================

@@ -1,4 +1,4 @@
-package com.github.postapczuk.lalauncher;
+package kr.co.turtlelab.launcher;
 
 import android.content.Context;
 import android.view.Display;

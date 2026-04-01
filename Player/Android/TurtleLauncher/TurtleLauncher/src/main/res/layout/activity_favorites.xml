@@ -12,7 +12,7 @@
         android:scaleType="fitCenter"
         android:src="@drawable/turtlelab_bg"/>
 
-    <com.github.postapczuk.lalauncher.views.KeyCaptureEditText
+    <kr.co.turtlelab.launcher.views.KeyCaptureEditText
         android:id="@+id/key_input_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

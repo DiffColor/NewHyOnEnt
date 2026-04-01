@@ -1,4 +1,4 @@
-package com.github.postapczuk.lalauncher;
+package kr.co.turtlelab.launcher;
 
 import android.annotation.SuppressLint;
 import android.content.Context;

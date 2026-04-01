@@ -1,4 +1,4 @@
-package com.github.postapczuk.lalauncher;
+package kr.co.turtlelab.launcher;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
@@ -120,7 +120,7 @@ public class InstalledAppsActivity extends Activity {
         adapter.clear();
         for (ResolveInfo resolver : getActivities(getPackageManager())) {
             String appName = (String) resolver.loadLabel(getPackageManager());
-            if (appName.equals("Light Android Launcher"))
+            if (appName.equals("TurtleLauncher"))
                 continue;
             adapter.add(appName);
             appNamesPosition.add(appName);

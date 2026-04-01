@@ -1,4 +1,4 @@
-package com.github.postapczuk.lalauncher;
+package kr.co.turtlelab.launcher;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -36,7 +36,7 @@ import java.util.List;
 
 import java8.util.Comparators;
 
-import com.github.postapczuk.lalauncher.views.KeyCaptureEditText;
+import kr.co.turtlelab.launcher.views.KeyCaptureEditText;
 
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
 
@@ -454,9 +454,24 @@ public class FavoriteAppsActivity extends Activity {
     }
 
     private void executeOverlaySequenceCommand(char commandChar) {
-        if (Character.toLowerCase(commandChar) == 'q') {
-            resetOverlayCommandBuffer();
-            openQuickLaunch();
+        switch (Character.toLowerCase(commandChar)) {
+            case 's':
+                resetOverlayCommandBuffer();
+                startActivityForResult(new Intent(android.provider.Settings.ACTION_SETTINGS), 0);
+                break;
+
+            case 'a':
+                resetOverlayCommandBuffer();
+                showFavoriteModal();
+                break;
+
+            case 'q':
+                resetOverlayCommandBuffer();
+                openQuickLaunch();
+                break;
+
+            default:
+                break;
         }
     }
 
@@ -489,6 +504,14 @@ public class FavoriteAppsActivity extends Activity {
         }
 
         switch (keyCode) {
+            case KeyEvent.KEYCODE_S:
+                appendOverlaySequenceChar('s');
+                return true;
+
+            case KeyEvent.KEYCODE_A:
+                appendOverlaySequenceChar('a');
+                return true;
+
             case KeyEvent.KEYCODE_Q:
                 appendOverlaySequenceChar('q');
                 return true;
@@ -519,7 +542,7 @@ public class FavoriteAppsActivity extends Activity {
 
         for (ResolveInfo resolver : activities) {
             String appName = (String) resolver.loadLabel(getPackageManager());
-            if (appName.equals("Light Android Launcher") || favorites.contains(resolver.activityInfo.packageName))
+            if (appName.equals("TurtleLauncher") || favorites.contains(resolver.activityInfo.packageName))
                 continue;
             smallAdapter.add(appName);
             smallPackageNames.add(resolver.activityInfo.packageName);

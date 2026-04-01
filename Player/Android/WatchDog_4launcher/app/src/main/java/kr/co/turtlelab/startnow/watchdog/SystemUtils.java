@@ -33,8 +33,8 @@ import android.view.Window;
 import android.view.WindowManager.LayoutParams;
 
 public class SystemUtils {
-	private static final String LAUNCHER_PACKAGE = "com.github.postapczuk.lalauncher";
-	private static final String ACTION_LAUNCH_COMPONENT = "kr.co.turtlelab.turtlelauncher.action.LAUNCH_COMPONENT";
+	private static final String LAUNCHER_PACKAGE = "kr.co.turtlelab.launcher";
+	private static final String ACTION_LAUNCH_COMPONENT = "kr.co.turtlelab.launcher.action.LAUNCH_COMPONENT";
 	private static final String EXTRA_TARGET_PACKAGE = "target_package";
 	private static final String EXTRA_TARGET_CLASS = "target_class";
 	private static final String EXTRA_CLEAR_TASK = "clear_task";

@@ -1,4 +1,4 @@
-package com.github.postapczuk.lalauncher.views;
+package kr.co.turtlelab.launcher.views;
 
 import android.content.Context;
 import android.graphics.Color;

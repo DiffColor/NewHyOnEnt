@@ -1,4 +1,4 @@
-package com.github.postapczuk.lalauncher;
+package kr.co.turtlelab.launcher;
 
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -9,7 +9,7 @@ import android.util.Log;
 
 public class LaunchRequestReceiver extends BroadcastReceiver {
 
-    public static final String ACTION_LAUNCH_COMPONENT = "kr.co.turtlelab.turtlelauncher.action.LAUNCH_COMPONENT";
+    public static final String ACTION_LAUNCH_COMPONENT = "kr.co.turtlelab.launcher.action.LAUNCH_COMPONENT";
     public static final String EXTRA_TARGET_PACKAGE = "target_package";
     public static final String EXTRA_TARGET_CLASS = "target_class";
     public static final String EXTRA_CLEAR_TASK = "clear_task";

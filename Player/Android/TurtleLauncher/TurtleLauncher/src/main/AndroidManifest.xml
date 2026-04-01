@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          xmlns:tools="http://schemas.android.com/tools" package="com.github.postapczuk.lalauncher">
+          xmlns:tools="http://schemas.android.com/tools" package="kr.co.turtlelab.launcher">
     <application
             android:icon="@mipmap/ic_launcher"
             android:label="TurtleLauncher"
@@ -30,7 +30,7 @@
                 android:enabled="true"
                 android:exported="true">
             <intent-filter>
-                <action android:name="kr.co.turtlelab.turtlelauncher.action.LAUNCH_COMPONENT" />
+                <action android:name="kr.co.turtlelab.launcher.action.LAUNCH_COMPONENT" />
             </intent-filter>
         </receiver>
     </application>
