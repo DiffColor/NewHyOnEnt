@@ -8,8 +8,12 @@ import android.os.Environment;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
@@ -95,6 +99,7 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 	TextView check_keepratio_txt;
 	CheckBox check_switch_content;
 	TextView check_switch_content_txt;
+	EditText activeTextInput;
 	
 	public ConfigDialog(Context context) {
 		super(context);
@@ -103,6 +108,7 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 		requestWindowFeature(Window.FEATURE_NO_TITLE);
 		setContentView(R.layout.custom_dialog);
 		getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+		prepareDialogWindow(getWindow(), WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 		setCanceledOnTouchOutside(false);
 
 		initLayoutItems();
@@ -115,8 +121,133 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 	@Override
 	protected void onStart() {
 		super.onStart();
+		prepareDialogWindow(getWindow(), WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 		
 		refreshWeeklyDataList();
+		focusTextInput(resolvePreferredTextInput(), false);
+	}
+
+	private void prepareDialogWindow(Window window, int softInputMode) {
+		if (window == null) {
+			return;
+		}
+		window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+				| WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+		window.setSoftInputMode(softInputMode);
+	}
+
+	public boolean isSubDialogShowing() {
+		return tpickerDialog != null && tpickerDialog.isShowing();
+	}
+
+	private void bindEditableField(final EditText editText) {
+		if (editText == null) {
+			return;
+		}
+
+		editText.setFocusable(true);
+		editText.setFocusableInTouchMode(true);
+		editText.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+			@Override
+			public void onFocusChange(View v, boolean hasFocus) {
+				if (hasFocus) {
+					activeTextInput = editText;
+					ensureTextInputConnection(editText);
+				}
+			}
+		});
+		editText.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				focusTextInput(editText, false);
+			}
+		});
+		editText.setOnTouchListener(new View.OnTouchListener() {
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				if (event != null && event.getAction() == MotionEvent.ACTION_DOWN) {
+					activeTextInput = editText;
+				}
+				return false;
+			}
+		});
+	}
+
+	private void ensureTextInputConnection(EditText editText) {
+		if (editText == null || !editText.isEnabled()) {
+			return;
+		}
+
+		InputMethodManager imm = (InputMethodManager) ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
+		if (imm != null) {
+			imm.restartInput(editText);
+		}
+	}
+
+	private void focusTextInput(EditText editText, boolean selectAll) {
+		if (editText == null || !editText.isEnabled()) {
+			return;
+		}
+
+		activeTextInput = editText;
+		if (!editText.hasFocus()) {
+			editText.requestFocus();
+		}
+		editText.requestFocusFromTouch();
+		if (editText.length() > 0) {
+			if (selectAll) {
+				editText.selectAll();
+			} else {
+				editText.setSelection(editText.length());
+			}
+		}
+		ensureTextInputConnection(editText);
+	}
+
+	private EditText resolvePreferredTextInput() {
+		View currentFocus = getCurrentFocus();
+		if (currentFocus instanceof EditText) {
+			EditText currentEditText = (EditText) currentFocus;
+			if (currentEditText.isEnabled()) {
+				return currentEditText;
+			}
+		}
+
+		if (activeTextInput != null && activeTextInput.isEnabled()) {
+			return activeTextInput;
+		}
+
+		if (player_id != null && player_id.isEnabled()) {
+			return player_id;
+		}
+
+		if (managerAddressEdit != null && managerAddressEdit.isEnabled()) {
+			return managerAddressEdit;
+		}
+
+		return null;
+	}
+
+	private boolean isHardwareTextInputEvent(KeyEvent event) {
+		if (event == null || event.getAction() != KeyEvent.ACTION_DOWN || event.isSystem()) {
+			return false;
+		}
+
+		if (event.isAltPressed() || event.isCtrlPressed() || event.isMetaPressed()) {
+			return false;
+		}
+
+		int keyCode = event.getKeyCode();
+		if (keyCode == KeyEvent.KEYCODE_DEL
+				|| keyCode == KeyEvent.KEYCODE_FORWARD_DEL
+				|| keyCode == KeyEvent.KEYCODE_SPACE
+				|| keyCode == KeyEvent.KEYCODE_TAB
+				|| keyCode == KeyEvent.KEYCODE_ENTER
+				|| keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+			return true;
+		}
+
+		return event.getUnicodeChar() != 0;
 	}
 	
 	private void initLayoutItems() {
@@ -125,6 +256,7 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 		id_confirmBtn = (Button)findViewById(R.id.id_confirm_btn);
 		id_confirmBtn.setOnClickListener(this);
 		player_id = (EditText)findViewById(R.id.player_id);
+		bindEditableField(player_id);
 		
 		player_id.addTextChangedListener(new TextWatcher() {
 			
@@ -167,13 +299,13 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 		pIP2 = (EditText)findViewById(R.id.player_ip2_edit);
 		pIP3 = (EditText)findViewById(R.id.player_ip3_edit);
 		pIP4 = (EditText)findViewById(R.id.player_ip4_edit);
-		pIP1.setOnClickListener(this);
-		pIP2.setOnClickListener(this);
-		pIP3.setOnClickListener(this);
-		pIP4.setOnClickListener(this);
+		bindEditableField(pIP1);
+		bindEditableField(pIP2);
+		bindEditableField(pIP3);
+		bindEditableField(pIP4);
 		
 		managerAddressEdit = (EditText)findViewById(R.id.manager_address_edit);
-		managerAddressEdit.setOnClickListener(this);
+		bindEditableField(managerAddressEdit);
 		
 		mSch1from = (Button)findViewById(R.id.timePicker1from);
 		mSch1to = (Button)findViewById(R.id.timePicker1to);
@@ -314,6 +446,7 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 		mAuthBg = (TextView)findViewById(R.id.auth_label1);
 		mSrcKey = (EditText)findViewById(R.id.sourceKey);
 		mAuthKey = (EditText)findViewById(R.id.authKey);
+		bindEditableField(mAuthKey);
 		mAuthBtn = (Button) findViewById(R.id.authBtn);
 		mAuthBtn.setOnClickListener(this);
 
@@ -538,6 +671,8 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 		
 		tpickerDialog.setView(dialogView);
 		tpickerDialog.show();
+		prepareDialogWindow(tpickerDialog.getWindow(),
+				WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
 	}
 
 	@Override
@@ -582,6 +717,14 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 					break;
 			}
 		}
+
+	@Override
+	public boolean dispatchKeyEvent(KeyEvent event) {
+		if (isHardwareTextInputEvent(event)) {
+			focusTextInput(resolvePreferredTextInput(), false);
+		}
+		return super.dispatchKeyEvent(event);
+	}
 
 		private void exportRealm() {
 			Realm realm = null;

@@ -299,7 +299,7 @@ public class AndoWSignage extends Activity {
 		        (new View.OnSystemUiVisibilityChangeListener() {
 		    @Override
 		    public void onSystemUiVisibilityChange(int visibility) {
-  		    	if(visibility == 0) return;
+  		    	if(visibility == 0 || isConfigInputDialogShowing()) return;
 		    	final int visiblityInt = visibility;
 		        //if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
 		    		mPostRunHandler.postDelayed(new Runnable()
@@ -307,6 +307,9 @@ public class AndoWSignage extends Activity {
 		    		  @Override     
 		    		  public void run()
 		    		  {
+							if (isConfigInputDialogShowing()) {
+								return;
+							}
 							updateAndRestart(true);
 								
 							if(visiblityInt > 0)  {
@@ -617,6 +620,7 @@ public class AndoWSignage extends Activity {
 						if(m_settingDlg.isShowing()) return;
 					}
 					//showCustomDialog();
+					releaseKeyInputOverlayFocus();
 					m_settingDlg.show();
 					SystemUtils.runOnUiThread(new Runnable() {
 						@Override
@@ -1268,7 +1272,9 @@ public class AndoWSignage extends Activity {
 
 	@Override
 	public boolean dispatchKeyEvent(KeyEvent event) {
-		if (event != null && event.getAction() == KeyEvent.ACTION_DOWN) {
+		if (event != null
+				&& event.getAction() == KeyEvent.ACTION_DOWN
+				&& !isConfigInputDialogShowing()) {
 			requestKeyInputOverlayFocus();
 		}
 		return super.dispatchKeyEvent(event);
@@ -1277,7 +1283,7 @@ public class AndoWSignage extends Activity {
 	@Override
 	public void onWindowFocusChanged(boolean hasFocus) {
 		super.onWindowFocusChanged(hasFocus);
-		if (hasFocus) {
+		if (hasFocus && !isConfigInputDialogShowing()) {
 			requestKeyInputOverlayFocus();
 		}
 	}
@@ -1476,7 +1482,12 @@ public class AndoWSignage extends Activity {
 	private boolean canTakeOverlayInputFocus() {
 		return keyInputOverlay != null
 				&& !isFinishing()
-				&& (m_settingDlg == null || !m_settingDlg.isShowing());
+				&& !isConfigInputDialogShowing();
+	}
+
+	private boolean isConfigInputDialogShowing() {
+		return m_settingDlg != null
+				&& (m_settingDlg.isShowing() || m_settingDlg.isSubDialogShowing());
 	}
 
 	private void resetOverlayCommandBuffer() {
@@ -1607,6 +1618,26 @@ public class AndoWSignage extends Activity {
 		InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
 		if (imm != null) {
 			imm.restartInput(keyInputOverlay);
+			imm.hideSoftInputFromWindow(keyInputOverlay.getWindowToken(), 0);
+		}
+	}
+
+	private void releaseKeyInputOverlayFocus() {
+		if (keyInputOverlay == null) {
+			return;
+		}
+
+		if (overlay_container != null) {
+			overlay_container.setImportantForAccessibility(
+					View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+		}
+		keyInputOverlay.clearFocus();
+		keyInputOverlay.setEnabled(false);
+		keyInputOverlay.setVisibility(View.INVISIBLE);
+		keyInputOverlay.setImportantForAccessibility(
+				View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+		InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+		if (imm != null) {
 			imm.hideSoftInputFromWindow(keyInputOverlay.getWindowToken(), 0);
 		}
 	}
