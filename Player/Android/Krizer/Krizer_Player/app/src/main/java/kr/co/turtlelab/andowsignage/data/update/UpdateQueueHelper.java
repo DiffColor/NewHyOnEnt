@@ -539,10 +539,10 @@ public final class UpdateQueueHelper {
                                 snapshot.playlistName,
                                 snapshot.payloadJson,
                                 snapshot.createdAt);
-                if (shouldReportHeartbeatSnapshot(snapshot.status)) {
-                    HeartbeatService.reportQueueStatus(snapshot.status, snapshot.progress, snapshot.scheduleQueue);
-                }
             } catch (Exception ignore) {
+            }
+            if (shouldReportHeartbeatSnapshot(snapshot.status)) {
+                HeartbeatService.reportQueueStatus(snapshot.status, snapshot.progress, snapshot.scheduleQueue);
             }
         });
     }

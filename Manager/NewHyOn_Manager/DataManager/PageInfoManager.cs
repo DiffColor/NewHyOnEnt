@@ -275,16 +275,29 @@ namespace AndoW_Manager
             var pageLists = DataShop.Instance.g_PageListInfoManager.g_PageListInfoClassList;
             if (pageLists == null)
             {
+                DataShop.Instance.g_PageListInfoManager.DeletePageListInfoByName(pageName);
                 return;
             }
 
-            foreach (PageListInfoClass list in pageLists)
+            foreach (PageListInfoClass list in pageLists.ToList())
             {
+                if (list == null)
+                {
+                    continue;
+                }
+
+                if (list.PLI_PageListName.Equals(pageName, StringComparison.CurrentCultureIgnoreCase))
+                {
+                    continue;
+                }
+
                 if (list.PLI_Pages != null && list.PLI_Pages.Remove(target.PIC_GUID))
                 {
                     DataShop.Instance.g_PageListInfoManager.SavePageList(list);
                 }
             }
+
+            DataShop.Instance.g_PageListInfoManager.DeletePageListInfoByName(pageName);
         }
 
         public PageInfoClass SavePageDefinition(string pageName, PageInfoClass definition)

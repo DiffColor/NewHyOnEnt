@@ -14,15 +14,15 @@ public class ScrolltextDataProvider {
     private ScrolltextDataProvider() {
     }
 
-    public static List<ScrolltextDataModel> getContentList(String pageName, String elementName) {
+    public static List<ScrolltextDataModel> getContentList(String pageId, String elementName) {
         List<ScrolltextDataModel> contentList = new ArrayList<>();
-        if (pageName == null || elementName == null) {
+        if (pageId == null || elementName == null) {
             return contentList;
         }
         Realm realm = Realm.getDefaultInstance();
         try {
             RealmPage page = realm.where(RealmPage.class)
-                    .equalTo("pageName", pageName)
+                    .equalTo("pageId", pageId)
                     .findFirst();
             if (page == null || page.getElements() == null) {
                 return contentList;

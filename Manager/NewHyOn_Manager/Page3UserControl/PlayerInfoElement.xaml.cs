@@ -613,6 +613,7 @@ namespace AndoW_Manager
 
         public void RefreshPlayListComboBox()
         {
+            SyncPlayerInfoFromManager();
             PlaylistCombo.Items.Clear();
 
             string direction = g_PlayerInfoClass.PIF_IsLandScape ? DeviceOrientation.Landscape.ToString() : DeviceOrientation.Portrait.ToString();
@@ -626,11 +627,12 @@ namespace AndoW_Manager
                 PlaylistCombo.Items.Add(item.PLI_PageListName);
             }
 
-            PlaylistCombo.SelectedItem = g_PlayerInfoClass.PIF_CurrentPlayList;
+            ApplyCurrentPlaylistSelection();
         }
 
         public void DisplayDataInfo()
         {
+            SyncPlayerInfoFromManager();
             TextBlockOrderingNumber_Copy.Text = g_PlayerInfoClass.PIF_PlayerName;
 
             if (g_PlayerInfoClass.PIF_IsLandScape == true)
@@ -644,7 +646,57 @@ namespace AndoW_Manager
                 pagePrevieImgRect_Copy.Visibility = System.Windows.Visibility.Visible;
             }
 
-            PlaylistCombo.SelectedItem = g_PlayerInfoClass.PIF_CurrentPlayList;
+            ApplyCurrentPlaylistSelection();
+        }
+
+        private void SyncPlayerInfoFromManager()
+        {
+            if (DataShop.Instance?.g_PlayerInfoManager?.g_PlayerInfoClassList == null)
+            {
+                return;
+            }
+
+            PlayerInfoClass latest = null;
+
+            if (!string.IsNullOrWhiteSpace(g_PlayerInfoClass.PIF_GUID))
+            {
+                latest = DataShop.Instance.g_PlayerInfoManager.g_PlayerInfoClassList.FirstOrDefault(x =>
+                    x != null && x.PIF_GUID == g_PlayerInfoClass.PIF_GUID);
+            }
+
+            if (latest == null && !string.IsNullOrWhiteSpace(g_PlayerInfoClass.PIF_PlayerName))
+            {
+                latest = DataShop.Instance.g_PlayerInfoManager.g_PlayerInfoClassList.FirstOrDefault(x =>
+                    x != null && x.PIF_PlayerName.Equals(g_PlayerInfoClass.PIF_PlayerName, StringComparison.CurrentCultureIgnoreCase));
+            }
+
+            if (latest != null)
+            {
+                g_PlayerInfoClass.CopyData(latest);
+            }
+        }
+
+        private void ApplyCurrentPlaylistSelection()
+        {
+            string currentPlaylist = g_PlayerInfoClass.PIF_CurrentPlayList;
+            if (string.IsNullOrWhiteSpace(currentPlaylist))
+            {
+                PlaylistCombo.SelectedIndex = -1;
+                return;
+            }
+
+            object matchedItem = PlaylistCombo.Items
+                .Cast<object>()
+                .FirstOrDefault(x => x != null
+                    && x.ToString().Equals(currentPlaylist, StringComparison.CurrentCultureIgnoreCase));
+
+            if (matchedItem == null)
+            {
+                PlaylistCombo.SelectedIndex = -1;
+                return;
+            }
+
+            PlaylistCombo.SelectedItem = matchedItem;
         }
 
         private BitmapImage LoadThumbnailBitmap(string pageName)

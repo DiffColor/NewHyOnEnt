@@ -21,6 +21,7 @@ import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
 
 public class CommandQueueClient {
     private static final String TAG = "CommandQueueClient";
+    private static final long SENT_FALLBACK_DELAY_MS = 15000L;
 
     private static final String DATABASE = "NewHyOn";
     private static final String TABLE = "CommandQueue";
@@ -78,7 +79,7 @@ public class CommandQueueClient {
             for (Map row : rows) {
                 CommandQueueEntry entry = convert(row);
                 if (entry != null && hasPlayer(entry, normalizedPlayerId)
-                        && isStatus(entry, normalizedPlayerId, "pending")) {
+                        && isActionableStatus(entry, normalizedPlayerId)) {
                     entries.add(entry);
                 }
             }
@@ -296,6 +297,45 @@ public class CommandQueueClient {
         String statusKey = findStatusKeyIgnoreCase(entry.Status, normalizedPlayerId);
         String current = TextUtils.isEmpty(statusKey) ? null : entry.Status.get(statusKey);
         return expected.equalsIgnoreCase(current == null ? "" : current);
+    }
+
+    private boolean isActionableStatus(CommandQueueEntry entry, String normalizedPlayerId) {
+        if (isStatus(entry, normalizedPlayerId, "pending")) {
+            return true;
+        }
+        if (!isStatus(entry, normalizedPlayerId, "sent")) {
+            return false;
+        }
+        return isSentDeliveryStale(entry);
+    }
+
+    private boolean isSentDeliveryStale(CommandQueueEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+        long sentAt = parseTimestampMillis(entry.UpdatedAt);
+        if (sentAt <= 0L) {
+            sentAt = parseTimestampMillis(entry.CreatedAt);
+        }
+        if (sentAt <= 0L) {
+            return true;
+        }
+        return System.currentTimeMillis() - sentAt >= SENT_FALLBACK_DELAY_MS;
+    }
+
+    private long parseTimestampMillis(String value) {
+        if (TextUtils.isEmpty(value)) {
+            return -1L;
+        }
+        try {
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA);
+            format.setTimeZone(TimeZone.getTimeZone("Asia/Seoul"));
+            Date parsed = format.parse(value);
+            return parsed != null ? parsed.getTime() : -1L;
+        } catch (Exception ex) {
+            Log.w(TAG, "parseTimestampMillis: failed value=" + value, ex);
+            return -1L;
+        }
     }
 
     private String findStatusKeyIgnoreCase(Map<String, String> statusMap, String normalizedPlayerId) {

@@ -11,11 +11,11 @@ public class WelcomeDataProvider {
     private WelcomeDataProvider() {
     }
 
-    public static WelcomeDataModel getContent(String pageName, String elementName) {
+    public static WelcomeDataModel getContent(String pageId, String elementName) {
         Realm realm = Realm.getDefaultInstance();
         try {
             RealmPage page = realm.where(RealmPage.class)
-                    .equalTo("pageName", pageName)
+                    .equalTo("pageId", pageId)
                     .findFirst();
             if (page == null) {
                 return null;

@@ -133,11 +133,16 @@ namespace AndoW_Manager
 
         public void DeletePageListInfoByName(string playListName)
         {
+            if (string.IsNullOrWhiteSpace(playListName))
+            {
+                return;
+            }
+
             int idx = 0;
 
             foreach (PageListInfoClass item in g_PageListInfoClassList)
             {
-                if (item.PLI_PageListName == playListName)
+                if (item != null && item.PLI_PageListName.Equals(playListName, StringComparison.CurrentCultureIgnoreCase))
                 {
                     break;
                 }
@@ -156,11 +161,16 @@ namespace AndoW_Manager
 
         public void DeletePageListInfo(PageListInfoClass paramCls)
         {
+            if (paramCls == null || string.IsNullOrWhiteSpace(paramCls.PLI_PageListName))
+            {
+                return;
+            }
+
             int idx = 0;
 
             foreach (PageListInfoClass item in g_PageListInfoClassList)
             {
-                if (item.PLI_PageListName == paramCls.PLI_PageListName)
+                if (item != null && item.PLI_PageListName.Equals(paramCls.PLI_PageListName, StringComparison.CurrentCultureIgnoreCase))
                 {
                     break;
                 }

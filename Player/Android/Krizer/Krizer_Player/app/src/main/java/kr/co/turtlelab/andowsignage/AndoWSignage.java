@@ -1213,10 +1213,10 @@ public class AndoWSignage extends Activity {
 		spec.playlistName = target.playlistName;
 		spec.pageData = copyPageData(target.pageData);
 		spec.pageName = spec.pageData.getPageName();
-		spec.elements = ElementDataProvider.getPageElementList(spec.pageName);
+		spec.elements = ElementDataProvider.getPageElementList(spec.pageData.getGUID());
 		updateLayoutScales(spec.elements, spec.pageData);
 		for (ElementDataModel edm : spec.elements) {
-			ElementBuildSpec elementSpec = buildElementSpec(spec.pageName, edm);
+			ElementBuildSpec elementSpec = buildElementSpec(spec.pageData.getGUID(), edm);
 			if (elementSpec != null) {
 				spec.elementSpecs.add(elementSpec);
 			}
@@ -1224,7 +1224,7 @@ public class AndoWSignage extends Activity {
 		return spec;
 	}
 
-	private ElementBuildSpec buildElementSpec(String pageName, ElementDataModel edm) {
+	private ElementBuildSpec buildElementSpec(String pageId, ElementDataModel edm) {
 		if (edm == null || TextUtils.isEmpty(edm.getType())) {
 			return null;
 		}
@@ -1238,13 +1238,13 @@ public class AndoWSignage extends Activity {
 		switch (spec.type) {
 			case Media:
 			case TemplateBoard:
-				spec.mediaContents = MediaDataProvider.getContentList(pageName, edm.getName());
+				spec.mediaContents = MediaDataProvider.getContentList(pageId, edm.getName());
 				break;
 			case ScrollText:
-				spec.scrolltextContents = ScrolltextDataProvider.getContentList(pageName, edm.getName());
+				spec.scrolltextContents = ScrolltextDataProvider.getContentList(pageId, edm.getName());
 				break;
 			case WelcomeBoard:
-				spec.welcomeData = WelcomeDataProvider.getContent(pageName, edm.getName());
+				spec.welcomeData = WelcomeDataProvider.getContent(pageId, edm.getName());
 				break;
 			default:
 				break;

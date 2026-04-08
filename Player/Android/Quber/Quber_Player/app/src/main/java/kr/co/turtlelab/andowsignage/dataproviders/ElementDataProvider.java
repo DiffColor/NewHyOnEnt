@@ -16,15 +16,15 @@ public class ElementDataProvider {
     private ElementDataProvider() {
     }
 
-    public static List<ElementDataModel> getPageElementList(String pageName) {
+    public static List<ElementDataModel> getPageElementList(String pageId) {
         List<ElementDataModel> elementList = new ArrayList<>();
-        if (pageName == null || pageName.isEmpty()) {
+        if (pageId == null || pageId.isEmpty()) {
             return elementList;
         }
         Realm realm = Realm.getDefaultInstance();
         try {
             RealmPage realmPage = realm.where(RealmPage.class)
-                    .equalTo("pageName", pageName)
+                    .equalTo("pageId", pageId)
                     .findFirst();
             if (realmPage == null || realmPage.getElements() == null) {
                 return elementList;

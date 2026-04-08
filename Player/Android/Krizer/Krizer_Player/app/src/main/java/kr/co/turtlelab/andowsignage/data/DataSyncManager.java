@@ -41,6 +41,7 @@ import kr.co.turtlelab.andowsignage.data.update.UpdateQueueHelper;
 import kr.co.turtlelab.andowsignage.data.update.UpdateQueueProcessor;
 import kr.co.turtlelab.andowsignage.data.update.UpdatePayloadModels;
 import kr.co.turtlelab.andowsignage.dataproviders.UpdateQueueProvider;
+import kr.co.turtlelab.andowsignage.services.HeartbeatService;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
 import kr.co.turtlelab.andowsignage.tools.SystemUtils;
@@ -1053,6 +1054,7 @@ public class DataSyncManager {
         }
         if (applied) {
             UpdateQueueHelper.updateStatus(queue.getId(), UpdateQueueContract.Status.DONE);
+            HeartbeatService.reportQueueStatus(UpdateQueueContract.Status.DONE, 100f, isScheduleQueue);
             // 원격 UpdateQueue 레코드는 삭제하되 PlayerInfo의 최종 상태/진행률은 남긴다.
             String externalId = TextUtils.isEmpty(queue.getExternalId())
                     ? String.valueOf(queue.getId())
@@ -1168,34 +1170,40 @@ public class DataSyncManager {
         Realm realm = Realm.getDefaultInstance();
         final Set<String> usedContentPaths = new HashSet<>();
         realm.executeTransaction(r -> {
-            List<String> incomingPageIds = new ArrayList<>();
-            if (payload.pages != null) {
-                for (UpdateQueueContract.PagePayload page : payload.pages) {
-                    if (page != null && !TextUtils.isEmpty(page.pageId)) {
-                        incomingPageIds.add(page.pageId);
-                    }
-                }
-            }
-            List<String> incomingElementIds = new ArrayList<>();
-            if (payload.pages != null) {
-                for (UpdateQueueContract.PagePayload page : payload.pages) {
-                    if (page == null || page.elements == null) {
-                        continue;
-                    }
-                    for (UpdateQueueContract.ElementPayload element : page.elements) {
-                        if (element != null && !TextUtils.isEmpty(element.elementId)) {
-                            incomingElementIds.add(element.elementId);
+            List<String> existingPageIds = new ArrayList<>();
+            if (!TextUtils.isEmpty(payload.playlistName)) {
+                List<RealmPage> existingPages = r.where(RealmPage.class)
+                        .equalTo("playlistName", payload.playlistName)
+                        .findAll();
+                if (existingPages != null) {
+                    for (RealmPage existingPage : existingPages) {
+                        if (existingPage != null && !TextUtils.isEmpty(existingPage.getPageId())) {
+                            existingPageIds.add(existingPage.getPageId());
                         }
                     }
                 }
             }
-            if (!incomingPageIds.isEmpty()) {
-                r.where(RealmPage.class).in("pageId", incomingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
-                r.where(RealmElement.class).in("pageId", incomingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
-                r.where(RealmWelcome.class).in("pageId", incomingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
-            }
-            if (!incomingElementIds.isEmpty()) {
-                r.where(RealmContent.class).in("elementId", incomingElementIds.toArray(new String[0])).findAll().deleteAllFromRealm();
+            if (!existingPageIds.isEmpty()) {
+                List<String> existingElementIds = new ArrayList<>();
+                List<RealmElement> existingElements = r.where(RealmElement.class)
+                        .in("pageId", existingPageIds.toArray(new String[0]))
+                        .findAll();
+                if (existingElements != null) {
+                    for (RealmElement existingElement : existingElements) {
+                        if (existingElement != null && !TextUtils.isEmpty(existingElement.getElementId())) {
+                            existingElementIds.add(existingElement.getElementId());
+                        }
+                    }
+                }
+                if (!existingElementIds.isEmpty()) {
+                    r.where(RealmContent.class)
+                            .in("elementId", existingElementIds.toArray(new String[0]))
+                            .findAll()
+                            .deleteAllFromRealm();
+                }
+                r.where(RealmWelcome.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
+                r.where(RealmElement.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
+                r.where(RealmPage.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
             }
 
             if (updatePlayerInfo) {
