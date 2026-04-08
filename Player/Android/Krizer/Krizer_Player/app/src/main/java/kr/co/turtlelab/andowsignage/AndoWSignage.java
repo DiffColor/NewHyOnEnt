@@ -16,6 +16,7 @@ import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.view.inputmethod.InputMethodManager;
 import android.os.IBinder;
 import android.text.Editable;
@@ -46,6 +47,10 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import kr.co.turtlelab.andowsignage.AndoWSignageApp.RP_STATUS;
 import kr.co.turtlelab.andowsignage.data.DataSyncManager;
@@ -111,6 +116,7 @@ public class AndoWSignage extends Activity {
 	
 	public PlayerDataModel playerData = new PlayerDataModel();
 	List<PageDataModel> pageDataList = new ArrayList<PageDataModel>();
+	private final Map<String, List<PageDataModel>> playlistPageCache = new ConcurrentHashMap<>();
 	List<ElementDataModel> elementDataList = new ArrayList<ElementDataModel>();
 	List<View> elementViewList = new ArrayList<View>();
 	WelcomeDataModel wdm = new WelcomeDataModel();
@@ -142,8 +148,20 @@ public class AndoWSignage extends Activity {
 	private long nextStageAllowedAtMillis = 0L;
 	private PageRuntime activePageRuntime;
 	private PageRuntime stagedPageRuntime;
+	private PageBuildSpec stagedPageSpec;
 	private static final long NEXT_LAYOUT_STAGE_DELAY_MS = 600L;
+	private static final long CLEANUP_STEP_DELAY_MS = 16L;
+	private static final int UI_BUILD_BATCH_SIZE = 1;
+	private static final long UI_BUILD_FRAME_DELAY_MS = 16L;
+	private static final long UI_BUILD_TIME_BUDGET_MS = 2L;
+	private static final int UI_PREPARE_BATCH_SIZE = 1;
+	private static final long UI_PREPARE_FRAME_DELAY_MS = 16L;
+	private static final long UI_PREPARE_TIME_BUDGET_MS = 2L;
+	private static final ExecutorService pageBuildExecutor = Executors.newSingleThreadExecutor();
 	private boolean stageNextDeferredPending = false;
+	private int pageBuildGeneration = 0;
+	private String pendingStageBuildPlaylistName = "";
+	private String pendingStageBuildPageName = "";
 	private final Runnable deferredStageNextRunnable = new Runnable() {
 		@Override
 		public void run() {
@@ -164,14 +182,46 @@ public class AndoWSignage extends Activity {
 		String pageName = "";
 		PageDataModel pageData;
 		RelativeLayout container;
+		PageBuildSpec buildSpec;
+		Runnable buildStepRunnable;
+		Runnable prepareStepRunnable;
 		List<ElementDataModel> elements = new ArrayList<>();
 		List<View> views = new ArrayList<>();
 		int pendingPreparationCount = 0;
 		int pendingPlaybackStartCount = 0;
+		int buildElementIndex = 0;
+		int prepareViewIndex = 0;
 		boolean prepared = false;
+		boolean buildCancelled = false;
+		boolean buildCompleted = false;
+		boolean prepareCancelled = false;
 		boolean startInProgress = false;
 		boolean activateWhenPrepared = false;
 		int nextPageIndexAfterActivate = 0;
+	}
+
+	private static final class ElementBuildSpec {
+		ElementDataModel element;
+		AndoWSignageApp.ELEMENT_TYPE type;
+		List<MediaDataModel> mediaContents = new ArrayList<>();
+		List<ScrolltextDataModel> scrolltextContents = new ArrayList<>();
+		WelcomeDataModel welcomeData;
+	}
+
+	private static final class PageBuildSpec {
+		String playlistName = "";
+		String pageName = "";
+		PageDataModel pageData;
+		List<ElementDataModel> elements = new ArrayList<>();
+		List<ElementBuildSpec> elementSpecs = new ArrayList<>();
+
+		boolean matches(PlaybackTarget target) {
+			return target != null
+					&& pageData != null
+					&& !TextUtils.isEmpty(playlistName)
+					&& playlistName.equals(target.playlistName)
+					&& pageName.equals(target.pageData.getPageName());
+		}
 	}
 
 	private static final class PlaybackTarget {
@@ -343,8 +393,8 @@ public class AndoWSignage extends Activity {
 		AndoWSignageApp.networkState = NetworkUtils.getConnectivityStatus(this);
 //		AndoWSignageApp.AUTO_IP = NetworkUtils.getIPAddress(AndoWSignage.this);
 		
-		if(!playbackPlaylistName.isEmpty())	
-			pageDataList = PlaylistDataProvider.getPageList(playbackPlaylistName);
+		if(!playbackPlaylistName.isEmpty())
+			syncCurrentPlaylistPages();
 
 		boolean appliedReady = applyPendingReadyQueuesSync();
 		if (appliedReady) {
@@ -353,7 +403,7 @@ public class AndoWSignage extends Activity {
 			refreshSchedulePlaybackState(System.currentTimeMillis());
 		}
 		if (!playbackPlaylistName.isEmpty()) {
-			pageDataList = PlaylistDataProvider.getPageList(playbackPlaylistName);
+			syncCurrentPlaylistPages();
 		}
 		
 		final View decorView = getWindow().getDecorView();
@@ -830,7 +880,7 @@ public class AndoWSignage extends Activity {
 		playerData = PlayerDataProvider.getPlayerData();
 		basePlaylistName = playerData.getPlaylist();
 		refreshSchedulePlaybackState(System.currentTimeMillis());
-		pageDataList = PlaylistDataProvider.getPageList(playbackPlaylistName);
+		syncCurrentPlaylistPages();
 		stopTimerAndElements();
 		settingsForPlaying();	
 
@@ -1030,7 +1080,14 @@ public class AndoWSignage extends Activity {
 		}
 		container.setVisibility(View.INVISIBLE);
 		moveContainerOffScreen(container);
+	}
+
+	private void prepareContainerForDeferredLoad(RelativeLayout container) {
+		if (container == null) {
+			return;
+		}
 		container.setVisibility(View.VISIBLE);
+		moveContainerOffScreen(container);
 	}
 
 	private RelativeLayout createPageContainer() {
@@ -1044,10 +1101,15 @@ public class AndoWSignage extends Activity {
 
 	private void clearPlaybackRuntimeState() {
 		cancelDeferredStageNextPlayback();
+		pageBuildGeneration++;
+		pendingStageBuildPlaylistName = "";
+		pendingStageBuildPageName = "";
 		clearRuntime(activePageRuntime);
 		clearRuntime(stagedPageRuntime);
 		activePageRuntime = null;
 		stagedPageRuntime = null;
+		stagedPageSpec = null;
+		playlistPageCache.clear();
 		elementDataList.clear();
 		elementViewList.clear();
 		currentPageName = "";
@@ -1083,42 +1145,180 @@ public class AndoWSignage extends Activity {
 	}
 	
 	private PageRuntime buildPageRuntime(RelativeLayout container, PlaybackTarget target) {
-		if (container == null || target == null || target.pageData == null) {
+		PageBuildSpec spec = buildPageSpec(target);
+		return buildPageRuntime(container, spec);
+    }
+
+	private PageRuntime buildPageRuntime(RelativeLayout container, PageBuildSpec spec) {
+		if (container == null || spec == null || spec.pageData == null) {
 			return null;
 		}
 		PageRuntime runtime = new PageRuntime();
 		runtime.container = container;
-		runtime.pageData = target.pageData;
-		runtime.playlistName = target.playlistName;
-		runtime.pageName = target.pageData.getPageName();
-		runtime.elements = ElementDataProvider.getPageElementList(runtime.pageName);
-		updateLayoutScales(runtime.elements, runtime.pageData);
+		runtime.pageData = copyPageData(spec.pageData);
+		runtime.playlistName = spec.playlistName;
+		runtime.pageName = runtime.pageData.getPageName();
+		runtime.buildSpec = spec;
+		runtime.elements = new ArrayList<>(spec.elements);
 		runtime.container.removeAllViews();
-		for (ElementDataModel edm : runtime.elements) {
-			addElement(runtime.container, runtime.pageName, runtime.views, edm);
-		}
 		runtime.container.setVisibility(View.VISIBLE);
 		moveContainerOffScreen(runtime.container);
-		prepareRuntime(runtime);
+		scheduleRuntimeViewBuild(runtime);
 		return runtime;
     }
 
-	private void prepareRuntime(PageRuntime runtime) {
+	private void scheduleRuntimeViewBuild(final PageRuntime runtime) {
+		if (runtime == null || runtime.container == null || runtime.buildSpec == null) {
+			return;
+		}
+		runtime.buildCancelled = false;
+		runtime.buildCompleted = false;
+		runtime.buildElementIndex = 0;
+		runtime.buildStepRunnable = new Runnable() {
+			@Override
+			public void run() {
+				if (runtime.buildCancelled || runtime.container == null || runtime.buildSpec == null) {
+					return;
+				}
+				long startedAt = SystemClock.uptimeMillis();
+				int processed = 0;
+				List<ElementBuildSpec> specs = runtime.buildSpec.elementSpecs;
+				while (runtime.buildElementIndex < specs.size()) {
+					addBuiltElement(runtime.container, runtime.views, specs.get(runtime.buildElementIndex));
+					runtime.buildElementIndex++;
+					processed++;
+					if (processed >= UI_BUILD_BATCH_SIZE
+							|| SystemClock.uptimeMillis() - startedAt >= UI_BUILD_TIME_BUDGET_MS) {
+						break;
+					}
+				}
+				if (runtime.buildElementIndex < specs.size()) {
+					mPostRunHandler.postDelayed(this, UI_BUILD_FRAME_DELAY_MS);
+					return;
+				}
+				runtime.buildCompleted = true;
+				runtime.buildSpec = null;
+				runtime.buildStepRunnable = null;
+				scheduleRuntimePrepare(runtime);
+			}
+		};
+		mPostRunHandler.post(runtime.buildStepRunnable);
+	}
+
+	private PageBuildSpec buildPageSpec(PlaybackTarget target) {
+		if (target == null || target.pageData == null) {
+			return null;
+		}
+		PageBuildSpec spec = new PageBuildSpec();
+		spec.playlistName = target.playlistName;
+		spec.pageData = copyPageData(target.pageData);
+		spec.pageName = spec.pageData.getPageName();
+		spec.elements = ElementDataProvider.getPageElementList(spec.pageName);
+		updateLayoutScales(spec.elements, spec.pageData);
+		for (ElementDataModel edm : spec.elements) {
+			ElementBuildSpec elementSpec = buildElementSpec(spec.pageName, edm);
+			if (elementSpec != null) {
+				spec.elementSpecs.add(elementSpec);
+			}
+		}
+		return spec;
+	}
+
+	private ElementBuildSpec buildElementSpec(String pageName, ElementDataModel edm) {
+		if (edm == null || TextUtils.isEmpty(edm.getType())) {
+			return null;
+		}
+		ElementBuildSpec spec = new ElementBuildSpec();
+		spec.element = edm;
+		try {
+			spec.type = AndoWSignageApp.ELEMENT_TYPE.valueOf(edm.getType());
+		} catch (Exception ignored) {
+			return null;
+		}
+		switch (spec.type) {
+			case Media:
+			case TemplateBoard:
+				spec.mediaContents = MediaDataProvider.getContentList(pageName, edm.getName());
+				break;
+			case ScrollText:
+				spec.scrolltextContents = ScrolltextDataProvider.getContentList(pageName, edm.getName());
+				break;
+			case WelcomeBoard:
+				spec.welcomeData = WelcomeDataProvider.getContent(pageName, edm.getName());
+				break;
+			default:
+				break;
+		}
+		return spec;
+	}
+
+	private PageDataModel copyPageData(PageDataModel source) {
+		if (source == null) {
+			return null;
+		}
+		PageDataModel copy = new PageDataModel();
+		copy.setPageName(source.getPageName());
+		String[] playTime = source.getPlayTime();
+		copy.setPlayTime(playTime[0], playTime[1], playTime[2]);
+		copy.setVolume(String.valueOf(source.getPlayVolume()));
+		copy.setGUID(source.getGUID());
+		copy.setLandscape(source.isLandscape());
+		copy.setCanvasSize(source.getCanvasWidth(), source.getCanvasHeight());
+		return copy;
+	}
+
+	private PlaybackTarget copyPlaybackTarget(PlaybackTarget source) {
+		if (source == null || source.pageData == null) {
+			return null;
+		}
+		PlaybackTarget copy = new PlaybackTarget();
+		copy.playlistName = source.playlistName;
+		copy.pageIndex = source.pageIndex;
+		copy.fromSchedule = source.fromSchedule;
+		copy.pageData = copyPageData(source.pageData);
+		return copy;
+	}
+
+	private void scheduleRuntimePrepare(final PageRuntime runtime) {
 		if (runtime == null) {
 			return;
 		}
+		runtime.prepareCancelled = false;
 		runtime.prepared = false;
+		runtime.prepareViewIndex = 0;
 		runtime.pendingPreparationCount = 0;
-		for (View view : runtime.views) {
-			if (view instanceof MediaView) {
-				runtime.pendingPreparationCount++;
-				((MediaView) view).prepareInitialContent(preparedView -> onRuntimeViewPrepared(runtime));
+		runtime.prepareStepRunnable = new Runnable() {
+			@Override
+			public void run() {
+				if (runtime.prepareCancelled) {
+					return;
+				}
+				long startedAt = SystemClock.uptimeMillis();
+				int processed = 0;
+				while (runtime.prepareViewIndex < runtime.views.size()) {
+					View view = runtime.views.get(runtime.prepareViewIndex++);
+					if (view instanceof MediaView) {
+						runtime.pendingPreparationCount++;
+						((MediaView) view).prepareInitialContent(preparedView -> onRuntimeViewPrepared(runtime));
+						processed++;
+					}
+					if (processed >= UI_PREPARE_BATCH_SIZE
+							|| SystemClock.uptimeMillis() - startedAt >= UI_PREPARE_TIME_BUDGET_MS) {
+						break;
+					}
+				}
+				if (runtime.prepareViewIndex < runtime.views.size()) {
+					mPostRunHandler.postDelayed(this, UI_PREPARE_FRAME_DELAY_MS);
+					return;
+				}
+				runtime.prepareStepRunnable = null;
+				if (runtime.pendingPreparationCount <= 0) {
+					runtime.prepared = true;
+					onRuntimePrepared(runtime);
+				}
 			}
-		}
-		if (runtime.pendingPreparationCount <= 0) {
-			runtime.prepared = true;
-			onRuntimePrepared(runtime);
-		}
+		};
+		mPostRunHandler.post(runtime.prepareStepRunnable);
 	}
 
 	private void onRuntimeViewPrepared(PageRuntime runtime) {
@@ -1144,9 +1344,13 @@ public class AndoWSignage extends Activity {
 	}
 
 	
-	void addElement(RelativeLayout container, String pageName, List<View> targetViewList, ElementDataModel edm) {
+	private void addBuiltElement(RelativeLayout container, List<View> targetViewList, ElementBuildSpec elementSpec) {
+		if (container == null || targetViewList == null || elementSpec == null || elementSpec.element == null || elementSpec.type == null) {
+			return;
+		}
 		View element = null;
-		AndoWSignageApp.ELEMENT_TYPE type = AndoWSignageApp.ELEMENT_TYPE.valueOf(edm.getType());
+		ElementDataModel edm = elementSpec.element;
+		AndoWSignageApp.ELEMENT_TYPE type = elementSpec.type;
 		
 		layout_params = new RelativeLayout.LayoutParams(edm.getWidth(), edm.getHeight());
 		layout_params.leftMargin = edm.getX();
@@ -1155,20 +1359,16 @@ public class AndoWSignage extends Activity {
 		switch (type) {
 		
 			case Media:
-				List<MediaDataModel> cdmList
-					= MediaDataProvider.getContentList(pageName, edm.getName());
-				element = new MediaView(act, this, edm.getWidth(), edm.getHeight(), cdmList);
+				element = new MediaView(act, this, edm.getWidth(), edm.getHeight(), elementSpec.mediaContents);
 				break;
 				
 			case ScrollText:
-				List<ScrolltextDataModel> sdmList
-					= ScrolltextDataProvider.getContentList(pageName, edm.getName());
-				if(sdmList == null) return;
-				element = new ScrollTextView(act, this, edm.getWidth(), edm.getHeight(), sdmList);		
+				if(elementSpec.scrolltextContents == null) return;
+				element = new ScrollTextView(act, this, edm.getWidth(), edm.getHeight(), elementSpec.scrolltextContents);		
 				break;
 				
 			case WelcomeBoard:
-				wdm	= WelcomeDataProvider.getContent(pageName, edm.getName());
+				wdm	= elementSpec.welcomeData;
 				if (wdm == null) {
 					break;
 				}
@@ -1176,8 +1376,7 @@ public class AndoWSignage extends Activity {
 				break;
 			
 			case TemplateBoard:
-				List<MediaDataModel> tbList = MediaDataProvider.getContentList(pageName, edm.getName());
-				element = new TurtleWebView(this, edm.getWidth(), edm.getHeight(), tbList);
+				element = new TurtleWebView(this, edm.getWidth(), edm.getHeight(), elementSpec.mediaContents);
 				break;
 				
 			default:
@@ -1218,7 +1417,7 @@ public class AndoWSignage extends Activity {
 		if (TextUtils.isEmpty(pendingSchedulePlaylistName)) {
 			return null;
 		}
-		List<PageDataModel> scheduledPages = PlaylistDataProvider.getPageList(pendingSchedulePlaylistName);
+		List<PageDataModel> scheduledPages = getOrLoadPageList(pendingSchedulePlaylistName);
 		if (scheduledPages == null || scheduledPages.isEmpty()) {
 			return null;
 		}
@@ -1241,6 +1440,33 @@ public class AndoWSignage extends Activity {
 			return 0;
 		}
 		return requestedIndex;
+	}
+
+	private List<PageDataModel> getOrLoadPageList(String playlistName) {
+		if (TextUtils.isEmpty(playlistName)) {
+			return new ArrayList<>();
+		}
+		List<PageDataModel> cached = playlistPageCache.get(playlistName);
+		if (cached != null) {
+			return cached;
+		}
+		List<PageDataModel> loaded = PlaylistDataProvider.getPageList(playlistName);
+		if (loaded == null) {
+			loaded = new ArrayList<>();
+		}
+		playlistPageCache.put(playlistName, loaded);
+		return loaded;
+	}
+
+	private void invalidatePageListCache(String playlistName) {
+		if (TextUtils.isEmpty(playlistName)) {
+			return;
+		}
+		playlistPageCache.remove(playlistName);
+	}
+
+	private void syncCurrentPlaylistPages() {
+		pageDataList = getOrLoadPageList(playbackPlaylistName);
 	}
 
 	private void syncActiveViews(PageRuntime runtime) {
@@ -1291,6 +1517,16 @@ public class AndoWSignage extends Activity {
 		if (runtime == null) {
 			return;
 		}
+		runtime.buildCancelled = true;
+		if (runtime.buildStepRunnable != null) {
+			mPostRunHandler.removeCallbacks(runtime.buildStepRunnable);
+			runtime.buildStepRunnable = null;
+		}
+		runtime.prepareCancelled = true;
+		if (runtime.prepareStepRunnable != null) {
+			mPostRunHandler.removeCallbacks(runtime.prepareStepRunnable);
+			runtime.prepareStepRunnable = null;
+		}
 		stopRuntime(runtime);
 		if (runtime.container != null) {
 			runtime.container.removeAllViews();
@@ -1301,7 +1537,11 @@ public class AndoWSignage extends Activity {
 		runtime.elements.clear();
 		runtime.pendingPreparationCount = 0;
 		runtime.pendingPlaybackStartCount = 0;
+		runtime.buildElementIndex = 0;
+		runtime.prepareViewIndex = 0;
 		runtime.prepared = false;
+		runtime.buildCompleted = false;
+		runtime.buildSpec = null;
 		runtime.startInProgress = false;
 		runtime.activateWhenPrepared = false;
 	}
@@ -1335,27 +1575,62 @@ public class AndoWSignage extends Activity {
 		pageIdx = nextRuntime.nextPageIndexAfterActivate;
 		if (previousRuntime == null || previousRuntime == nextRuntime) {
 			startRuntimePlayback(nextRuntime);
+			nextStageAllowedAtMillis = System.currentTimeMillis() + NEXT_LAYOUT_STAGE_DELAY_MS;
+			scheduleDeferredStageNextPlayback(NEXT_LAYOUT_STAGE_DELAY_MS);
 		} else {
 			startRuntimePlayback(nextRuntime);
 			hideContainerImmediately(previousRuntime.container);
-			stopRuntime(previousRuntime);
+			schedulePreviousRuntimeCleanup(previousRuntime, new Runnable() {
+				@Override
+				public void run() {
+					nextStageAllowedAtMillis = System.currentTimeMillis() + NEXT_LAYOUT_STAGE_DELAY_MS;
+					scheduleDeferredStageNextPlayback(NEXT_LAYOUT_STAGE_DELAY_MS);
+				}
+			});
 		}
-		if (previousRuntime != null && previousRuntime != nextRuntime && stagedPageContainer != null) {
-			moveContainerOffScreen(stagedPageContainer);
-			stagedPageContainer.removeAllViews();
-		}
-		if (previousRuntime != null && previousRuntime != nextRuntime) {
-			previousRuntime.container = stagedPageContainer;
-			previousRuntime.views.clear();
-			previousRuntime.elements.clear();
-			previousRuntime.prepared = false;
-			previousRuntime.startInProgress = false;
-			previousRuntime.activateWhenPrepared = false;
-			previousRuntime.pendingPreparationCount = 0;
-			previousRuntime.pendingPlaybackStartCount = 0;
-		}
-		nextStageAllowedAtMillis = 0L;
 		nextRuntime.startInProgress = false;
+	}
+
+	private void schedulePreviousRuntimeCleanup(final PageRuntime previousRuntime, final Runnable onCleanupComplete) {
+		if (previousRuntime == null) {
+			if (onCleanupComplete != null) {
+				onCleanupComplete.run();
+			}
+			return;
+		}
+		final RelativeLayout previousContainer = previousRuntime.container;
+		final List<View> cleanupViews = new ArrayList<>(previousRuntime.views);
+		mPostRunHandler.post(new Runnable() {
+			int cleanupIndex = 0;
+
+			@Override
+			public void run() {
+				if (cleanupIndex < cleanupViews.size()) {
+					View view = cleanupViews.get(cleanupIndex++);
+					if (view instanceof MediaView) {
+						((MediaView) view).stopPlaylist();
+					}
+					mPostRunHandler.postDelayed(this, CLEANUP_STEP_DELAY_MS);
+					return;
+				}
+				if (previousContainer != null) {
+					previousContainer.removeAllViews();
+					previousContainer.setVisibility(View.VISIBLE);
+					moveContainerOffScreen(previousContainer);
+				}
+				previousRuntime.container = previousContainer;
+				previousRuntime.views.clear();
+				previousRuntime.elements.clear();
+				previousRuntime.prepared = false;
+				previousRuntime.startInProgress = false;
+				previousRuntime.activateWhenPrepared = false;
+				previousRuntime.pendingPreparationCount = 0;
+				previousRuntime.pendingPlaybackStartCount = 0;
+				if (onCleanupComplete != null) {
+					onCleanupComplete.run();
+				}
+			}
+		});
 	}
 
 	private void cancelDeferredStageNextPlayback() {
@@ -1411,13 +1686,95 @@ public class AndoWSignage extends Activity {
 		if (target == null) {
 			clearRuntime(stagedPageRuntime);
 			stagedPageRuntime = null;
+			stagedPageSpec = null;
+			pendingStageBuildPlaylistName = "";
+			pendingStageBuildPageName = "";
 			return;
+		}
+		if (target.matches(stagedPageRuntime) || matchesPageBuildSpec(stagedPageSpec, target) || isPendingStageBuild(target)) {
+			return;
+		}
+		prepareContainerForDeferredLoad(stagedPageContainer);
+		clearRuntime(stagedPageRuntime);
+		stagedPageRuntime = null;
+		stagedPageSpec = null;
+		requestPageBuildSpec(target);
+	}
+
+	private boolean matchesPageBuildSpec(PageBuildSpec spec, PlaybackTarget target) {
+		return spec != null && spec.matches(target);
+	}
+
+	private boolean isPendingStageBuild(PlaybackTarget target) {
+		return target != null
+				&& !TextUtils.isEmpty(pendingStageBuildPlaylistName)
+				&& pendingStageBuildPlaylistName.equals(target.playlistName)
+				&& pendingStageBuildPageName.equals(target.pageData.getPageName());
+	}
+
+	private void requestPageBuildSpec(PlaybackTarget target) {
+		final PlaybackTarget requestTarget = copyPlaybackTarget(target);
+		if (requestTarget == null || requestTarget.pageData == null) {
+			return;
+		}
+		final int generation = pageBuildGeneration;
+		pendingStageBuildPlaylistName = requestTarget.playlistName;
+		pendingStageBuildPageName = requestTarget.pageData.getPageName();
+		pageBuildExecutor.execute(new Runnable() {
+			@Override
+			public void run() {
+				invalidatePageListCache(requestTarget.playlistName);
+				List<PageDataModel> warmedPages = PlaylistDataProvider.getPageList(requestTarget.playlistName);
+				if (warmedPages == null) {
+					warmedPages = new ArrayList<>();
+				}
+				final PageBuildSpec spec = buildPageSpec(requestTarget);
+				final List<PageDataModel> finalWarmedPages = warmedPages;
+				SystemUtils.runOnUiThread(new Runnable() {
+					@Override
+					public void run() {
+						if (generation != pageBuildGeneration) {
+							return;
+						}
+						if (!isPendingStageBuild(requestTarget)) {
+							return;
+						}
+						pendingStageBuildPlaylistName = "";
+						pendingStageBuildPageName = "";
+						playlistPageCache.put(requestTarget.playlistName, finalWarmedPages);
+						if (generation != pageBuildGeneration || activePageRuntime == null) {
+							stagedPageSpec = spec;
+							return;
+						}
+						clearRuntime(stagedPageRuntime);
+						stagedPageRuntime = buildPageRuntime(stagedPageContainer, spec);
+						stagedPageSpec = null;
+					}
+				});
+			}
+		});
+	}
+
+	private PageRuntime resolveRuntimeForTarget(PlaybackTarget target) {
+		if (target == null) {
+			return null;
 		}
 		if (target.matches(stagedPageRuntime)) {
-			return;
+			return stagedPageRuntime;
 		}
-		clearRuntime(stagedPageRuntime);
-		stagedPageRuntime = buildPageRuntime(stagedPageContainer, target);
+		boolean useActiveContainer = activePageRuntime == null;
+		RelativeLayout targetContainer = useActiveContainer ? activePageContainer : stagedPageContainer;
+		PageRuntime runtime;
+		if (matchesPageBuildSpec(stagedPageSpec, target)) {
+			runtime = buildPageRuntime(targetContainer, stagedPageSpec);
+			stagedPageSpec = null;
+		} else {
+			runtime = buildPageRuntime(targetContainer, target);
+		}
+		if (!useActiveContainer) {
+			stagedPageRuntime = runtime;
+		}
+		return runtime;
 	}
 
 	private void refreshSchedulePlaybackState(long nowMillis) {
@@ -1440,22 +1797,14 @@ public class AndoWSignage extends Activity {
 				|| TextUtils.equals(playbackPlaylistName, currentRuntimePlaylist)) {
 			return false;
 		}
-		List<PageDataModel> targetPages = PlaylistDataProvider.getPageList(playbackPlaylistName);
+		List<PageDataModel> targetPages = getOrLoadPageList(playbackPlaylistName);
 		if (targetPages == null || targetPages.isEmpty()) {
 			return false;
 		}
 		pageDataList = targetPages;
 		pageIdx = 0;
 		PlaybackTarget target = createActivePageTarget();
-		PageRuntime nextRuntime;
-		if (target.matches(stagedPageRuntime)) {
-			nextRuntime = stagedPageRuntime;
-		} else if (activePageRuntime == null) {
-			nextRuntime = buildPageRuntime(activePageContainer, target);
-		} else {
-			nextRuntime = buildPageRuntime(stagedPageContainer, target);
-			stagedPageRuntime = nextRuntime;
-		}
+		PageRuntime nextRuntime = resolveRuntimeForTarget(target);
 		requestRuntimeActivation(nextRuntime, 1);
 		return true;
 	}
@@ -1467,7 +1816,11 @@ public class AndoWSignage extends Activity {
 			}
 		}
 		refreshSchedulePlaybackState(System.currentTimeMillis());
-		maybeSwitchScheduledPlayback(System.currentTimeMillis());
+		if (!maybeSwitchScheduledPlayback(System.currentTimeMillis())
+				&& !stageNextDeferredPending
+				&& System.currentTimeMillis() >= nextStageAllowedAtMillis) {
+			stageNextPlaybackTarget();
+		}
 		checkReadyQueue();
 		if (debugOverlayVisible) {
 			refreshDebugOverlay();
@@ -1479,7 +1832,7 @@ public class AndoWSignage extends Activity {
 		try {
 			maybeApplyQueuedUpdate();
 			refreshSchedulePlaybackState(System.currentTimeMillis());
-			pageDataList = PlaylistDataProvider.getPageList(playbackPlaylistName);
+			syncCurrentPlaylistPages();
 			if (maybeSwitchScheduledPlayback(System.currentTimeMillis())) {
 				return;
 			}
@@ -1502,6 +1855,9 @@ public class AndoWSignage extends Activity {
 			}
 
 			if(pageDataList.size() == 1 && pageIdx == 1 && activePageRuntime != null) {
+				if (!stageNextDeferredPending && System.currentTimeMillis() >= nextStageAllowedAtMillis) {
+					stageNextPlaybackTarget();
+				}
 				return;
 			}
 
@@ -1510,15 +1866,7 @@ public class AndoWSignage extends Activity {
 			if (target == null) {
 				return;
 			}
-			PageRuntime nextRuntime;
-			if (target.matches(stagedPageRuntime)) {
-				nextRuntime = stagedPageRuntime;
-			} else if (activePageRuntime == null) {
-				nextRuntime = buildPageRuntime(activePageContainer, target);
-			} else {
-				nextRuntime = buildPageRuntime(stagedPageContainer, target);
-				stagedPageRuntime = nextRuntime;
-			}
+			PageRuntime nextRuntime = resolveRuntimeForTarget(target);
 			requestRuntimeActivation(nextRuntime, target.pageIndex + 1);
 		} catch(Exception e) {
 			e.printStackTrace();
