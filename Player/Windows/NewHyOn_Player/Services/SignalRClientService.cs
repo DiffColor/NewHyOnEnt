@@ -2,9 +2,12 @@
 using AndoW.Shared;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNet.SignalR.Client;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TurtleTools;
@@ -28,7 +31,6 @@ namespace NewHyOnPlayer
         private readonly ServerSettingsClient serverSettingsClient;
         private readonly Queue<SignalRAction> actionQueue = new Queue<SignalRAction>();
         private HubConnection connection;
-        private IHubProxy hubProxy;
         private int queuedActionProcessor;
         private int reconnectScheduled;
         private int stopping;
@@ -88,38 +90,47 @@ namespace NewHyOnPlayer
 
         private HubConnection BuildConnection(string url)
         {
-            var hub = new HubConnection(url, BuildQueryString());
-            hubProxy = hub.CreateHubProxy("MsgHub");
-            hubProxy.On<SignalRMessage>("ReceiveMessage", OnReceiveMessage);          
-            hub.Closed += () => OnClosed(hub);
-            hub.Error += ex => Logger.WriteErrorLog($"SignalR client error: {ex}", Logger.GetLogFileName());
+            var hub = new HubConnectionBuilder()
+                .AddNewtonsoftJsonProtocol()
+                .WithUrl(AppendQueryString(url, BuildQueryString()), options =>
+                {
+                    options.Transports = HttpTransportType.WebSockets | HttpTransportType.LongPolling;
+                })
+                .Build();
+
+            hub.On<SignalRMessage>("ReceiveMessage", OnReceiveMessage);
+            hub.Closed += ex =>
+            {
+                OnClosed(hub, ex);
+                return Task.CompletedTask;
+            };
 
             return hub;
         }
 
-        private IDictionary<string, string> BuildQueryString()
+        private string BuildQueryString()
         {
-            var query = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var player = owner?.g_PlayerInfoManager?.g_PlayerInfo;
             if (player == null)
             {
-                return query;
+                return string.Empty;
             }
 
+            var query = new StringBuilder();
             if (!string.IsNullOrWhiteSpace(player.PIF_PlayerName))
             {
-                query["playerName"] = player.PIF_PlayerName;
+                AppendQueryValue(query, "playerName", player.PIF_PlayerName);
             }
 
             if (!string.IsNullOrWhiteSpace(player.PIF_GUID))
             {
-                query["playerGuid"] = player.PIF_GUID;
+                AppendQueryValue(query, "playerGuid", player.PIF_GUID);
             }
 
-            return query;
+            return query.ToString();
         }
 
-        private void OnClosed(HubConnection closedConnection)
+        private void OnClosed(HubConnection closedConnection, Exception ex)
         {
             if (Interlocked.CompareExchange(ref stopping, 0, 0) == 1)
             {
@@ -131,11 +142,14 @@ namespace NewHyOnPlayer
                 if (connection == closedConnection)
                 {
                     connection = null;
-                    hubProxy = null;
                     currentUrl = null;
                 }
             }
 
+            if (ex != null)
+            {
+                Logger.WriteErrorLog($"SignalR client closed with error: {ex}", Logger.GetLogFileName());
+            }
             Logger.WriteLog("SignalR client disconnected. Reconnecting...", Logger.GetLogFileName());
             ScheduleReconnect();
         }
@@ -233,14 +247,12 @@ namespace NewHyOnPlayer
             }
 
             HubConnection localConnection;
-            IHubProxy localProxy;
             lock (syncRoot)
             {
                 localConnection = connection;
-                localProxy = hubProxy;
             }
 
-            if (localConnection == null || localProxy == null || localConnection.State != ConnectionState.Connected)
+            if (localConnection == null || localConnection.State != HubConnectionState.Connected)
             {
                 ScheduleReconnect();
                 return;
@@ -258,7 +270,7 @@ namespace NewHyOnPlayer
                     return;
                 }
 
-                await WaitWithTimeoutAsync(localProxy.Invoke("ReportHeartbeat", payload), HeartbeatTimeoutMs);
+                await WaitWithTimeoutAsync(localConnection.InvokeAsync("ReportHeartbeat", payload), HeartbeatTimeoutMs);
             }
             catch (Exception ex)
             {
@@ -276,14 +288,12 @@ namespace NewHyOnPlayer
             }
 
             HubConnection localConnection;
-            IHubProxy localProxy;
             lock (syncRoot)
             {
                 localConnection = connection;
-                localProxy = hubProxy;
             }
 
-            if (localConnection == null || localProxy == null || localConnection.State != ConnectionState.Connected)
+            if (localConnection == null || localConnection.State != HubConnectionState.Connected)
             {
                 Logger.WriteLog("SignalR terminal heartbeat skipped: connection unavailable.", Logger.GetLogFileName());
                 return;
@@ -291,7 +301,7 @@ namespace NewHyOnPlayer
 
             try
             {
-                WaitWithTimeoutAsync(localProxy.Invoke("ReportHeartbeat", payload), HeartbeatTimeoutMs)
+                WaitWithTimeoutAsync(localConnection.InvokeAsync("ReportHeartbeat", payload), HeartbeatTimeoutMs)
                     .GetAwaiter()
                     .GetResult();
             }
@@ -506,13 +516,12 @@ namespace NewHyOnPlayer
                 if (connection != null)
                 {
                     bool sameUrl = string.Equals(currentUrl, url, StringComparison.OrdinalIgnoreCase);
-                    if (sameUrl && connection.State == ConnectionState.Connected)
+                    if (sameUrl && connection.State == HubConnectionState.Connected)
                     {
                         return true;
                     }
 
                     previous = connection;
-                    hubProxy = null;
                     connection = null;
                     currentUrl = null;
                 }
@@ -526,8 +535,7 @@ namespace NewHyOnPlayer
             {
                 try
                 {
-                    previous.Stop();
-                    previous.Dispose();
+                    StopAndDisposeConnection(previous);
                 }
                 catch (Exception ex)
                 {
@@ -535,14 +543,14 @@ namespace NewHyOnPlayer
                 }
             }
 
-            if (local.State == ConnectionState.Connected)
+            if (local.State == HubConnectionState.Connected)
             {
                 return true;
             }
 
             try
             {
-                await WaitWithTimeoutAsync(local.Start(), ConnectTimeoutMs);
+                await WaitWithTimeoutAsync(local.StartAsync(), ConnectTimeoutMs);
                 Logger.WriteLog($"SignalR client connected: {url}", Logger.GetLogFileName());
                 return true;
             }
@@ -592,7 +600,6 @@ namespace NewHyOnPlayer
             lock (syncRoot)
             {
                 local = connection;
-                hubProxy = null;
                 connection = null;
                 currentUrl = null;
             }
@@ -604,8 +611,7 @@ namespace NewHyOnPlayer
 
             try
             {
-                local.Stop();
-                local.Dispose();
+                StopAndDisposeConnection(local);
             }
             catch (Exception ex)
             {
@@ -620,7 +626,6 @@ namespace NewHyOnPlayer
             {
                 if (connection == local)
                 {
-                    hubProxy = null;
                     connection = null;
                     currentUrl = null;
                     shouldStop = true;
@@ -634,8 +639,7 @@ namespace NewHyOnPlayer
 
             try
             {
-                local.Stop();
-                local.Dispose();
+                StopAndDisposeConnection(local);
             }
             catch (Exception ex)
             {
@@ -746,6 +750,46 @@ namespace NewHyOnPlayer
             {
                 return action == null ? Task.CompletedTask : action();
             }
+        }
+
+        private static void AppendQueryValue(StringBuilder builder, string key, string value)
+        {
+            if (builder == null || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            if (builder.Length > 0)
+            {
+                builder.Append("&");
+            }
+
+            builder.Append(Uri.EscapeDataString(key));
+            builder.Append("=");
+            builder.Append(Uri.EscapeDataString(value));
+        }
+
+        private static string AppendQueryString(string url, string queryString)
+        {
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(queryString))
+            {
+                return url;
+            }
+
+            return url.Contains("?")
+                ? $"{url}&{queryString}"
+                : $"{url}?{queryString}";
+        }
+
+        private static void StopAndDisposeConnection(HubConnection hubConnection)
+        {
+            if (hubConnection == null)
+            {
+                return;
+            }
+
+            hubConnection.StopAsync().GetAwaiter().GetResult();
+            hubConnection.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
 
         private static int ResolvePort()

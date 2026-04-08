@@ -33,6 +33,8 @@
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
     <BootstrapperEnabled>true</BootstrapperEnabled>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>x86</PlatformTarget>
@@ -121,11 +123,73 @@
     <Reference Include="MediaInfo.DotNetWrapper, Version=1.0.7.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\MediaInfo.DotNetWrapper.1.0.7\lib\net40\MediaInfo.DotNetWrapper.dll</HintPath>
     </Reference>
-    <Reference Include="Microsoft.AspNet.SignalR.Client, Version=2.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.SignalR.Client.2.1.0\lib\net45\Microsoft.AspNet.SignalR.Client.dll</HintPath>
+    <Reference Include="Microsoft.AspNetCore.Connections.Abstractions">
+      <HintPath>..\packages\Microsoft.AspNetCore.Connections.Abstractions.9.0.14\lib\net462\Microsoft.AspNetCore.Connections.Abstractions.dll</HintPath>
+      <Private>True</Private>
     </Reference>
-    <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.8.0.0\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
+    <Reference Include="Microsoft.AspNetCore.Http.Connections.Client">
+      <HintPath>..\packages\Microsoft.AspNetCore.Http.Connections.Client.9.0.14\lib\net462\Microsoft.AspNetCore.Http.Connections.Client.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.Http.Connections.Common">
+      <HintPath>..\packages\Microsoft.AspNetCore.Http.Connections.Common.9.0.14\lib\net462\Microsoft.AspNetCore.Http.Connections.Common.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.SignalR.Client">
+      <HintPath>..\packages\Microsoft.AspNetCore.SignalR.Client.9.0.14\lib\net462\Microsoft.AspNetCore.SignalR.Client.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.SignalR.Client.Core">
+      <HintPath>..\packages\Microsoft.AspNetCore.SignalR.Client.Core.9.0.14\lib\net462\Microsoft.AspNetCore.SignalR.Client.Core.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.SignalR.Common">
+      <HintPath>..\packages\Microsoft.AspNetCore.SignalR.Common.9.0.14\lib\net462\Microsoft.AspNetCore.SignalR.Common.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.SignalR.Protocols.Json">
+      <HintPath>..\packages\Microsoft.AspNetCore.SignalR.Protocols.Json.9.0.14\lib\net462\Microsoft.AspNetCore.SignalR.Protocols.Json.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson">
+      <HintPath>..\packages\Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson.9.0.14\lib\net462\Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=9.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.9.0.14\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Bcl.TimeProvider">
+      <HintPath>..\packages\Microsoft.Bcl.TimeProvider.9.0.14\lib\net462\Microsoft.Bcl.TimeProvider.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.DependencyInjection">
+      <HintPath>..\packages\Microsoft.Extensions.DependencyInjection.9.0.14\lib\net462\Microsoft.Extensions.DependencyInjection.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions">
+      <HintPath>..\packages\Microsoft.Extensions.DependencyInjection.Abstractions.9.0.14\lib\net462\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Features">
+      <HintPath>..\packages\Microsoft.Extensions.Features.9.0.14\lib\net462\Microsoft.Extensions.Features.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging">
+      <HintPath>..\packages\Microsoft.Extensions.Logging.9.0.14\lib\net462\Microsoft.Extensions.Logging.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Abstractions">
+      <HintPath>..\packages\Microsoft.Extensions.Logging.Abstractions.9.0.14\lib\net462\Microsoft.Extensions.Logging.Abstractions.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Options">
+      <HintPath>..\packages\Microsoft.Extensions.Options.9.0.14\lib\net462\Microsoft.Extensions.Options.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Primitives">
+      <HintPath>..\packages\Microsoft.Extensions.Primitives.9.0.14\lib\net462\Microsoft.Extensions.Primitives.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.NET.StringTools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.NET.StringTools.17.11.4\lib\net472\Microsoft.NET.StringTools.dll</HintPath>
@@ -147,6 +211,34 @@
     </Reference>
     <Reference Include="RethinkDb.Driver, Version=2.3.150.0, Culture=neutral, PublicKeyToken=289e75d5145ae4e6, processorArchitecture=MSIL">
       <HintPath>..\packages\RethinkDb.Driver.2.3.150\lib\net45\RethinkDb.Driver.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Diagnostics.DiagnosticSource">
+      <HintPath>..\packages\System.Diagnostics.DiagnosticSource.9.0.14\lib\net462\System.Diagnostics.DiagnosticSource.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.IO.Pipelines">
+      <HintPath>..\packages\System.IO.Pipelines.9.0.14\lib\net462\System.IO.Pipelines.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Net.ServerSentEvents">
+      <HintPath>..\packages\System.Net.ServerSentEvents.9.0.14\lib\net462\System.Net.ServerSentEvents.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Text.Encodings.Web">
+      <HintPath>..\packages\System.Text.Encodings.Web.9.0.14\lib\net462\System.Text.Encodings.Web.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Text.Json">
+      <HintPath>..\packages\System.Text.Json.9.0.14\lib\net462\System.Text.Json.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Threading.Channels">
+      <HintPath>..\packages\System.Threading.Channels.9.0.14\lib\net462\System.Threading.Channels.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.ValueTuple">
+      <HintPath>..\packages\System.ValueTuple.4.5.0\lib\net47\System.ValueTuple.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="RethinkDb.Driver.Linq, Version=2.3.150.0, Culture=neutral, PublicKeyToken=289e75d5145ae4e6, processorArchitecture=MSIL">
       <HintPath>..\packages\RethinkDb.Driver.Linq.2.3.150\lib\net45\RethinkDb.Driver.Linq.dll</HintPath>

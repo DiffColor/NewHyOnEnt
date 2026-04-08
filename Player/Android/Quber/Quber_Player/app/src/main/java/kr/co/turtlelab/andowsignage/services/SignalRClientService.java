@@ -4,11 +4,14 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
+import com.microsoft.signalr.HubConnection;
+import com.microsoft.signalr.HubConnectionBuilder;
+import com.microsoft.signalr.HubConnectionState;
+import com.microsoft.signalr.TransportEnum;
 
 import java.net.URLEncoder;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -23,15 +26,6 @@ import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkModels;
 import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
-import microsoft.aspnet.signalr.client.ConnectionState;
-import microsoft.aspnet.signalr.client.NullLogger;
-import microsoft.aspnet.signalr.client.Platform;
-import microsoft.aspnet.signalr.client.SignalRFuture;
-import microsoft.aspnet.signalr.client.hubs.HubConnection;
-import microsoft.aspnet.signalr.client.hubs.HubProxy;
-import microsoft.aspnet.signalr.client.hubs.SubscriptionHandler1;
-import microsoft.aspnet.signalr.client.http.android.AndroidPlatformComponent;
-import microsoft.aspnet.signalr.client.transport.LongPollingTransport;
 
 public class SignalRClientService {
     private static final String TAG = "SignalRClientService";
@@ -48,12 +42,10 @@ public class SignalRClientService {
 
     private static final int DEFAULT_PORT = 5000;
     private static final String DEFAULT_HUB_PATH = "/Data";
-    private static final String HUB_NAME = "MsgHub";
     private static final long RECONNECT_DELAY_MS = 5000L;
     private static final long CONNECT_TIMEOUT_MS = 15000L;
     private static final long HEARTBEAT_TIMEOUT_MS = 5000L;
     private static final int MAX_SIGNALR_ACTION_QUEUE = 10;
-    private static final NullLogger SIGNALR_NULL_LOGGER = new NullLogger();
 
     private Listener listener;
     private final Gson gson;
@@ -68,7 +60,7 @@ public class SignalRClientService {
                 thread.setDaemon(true);
                 return thread;
             });
-    private final ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+    private final ScheduledExecutorService reconnectScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "SignalRReconnectScheduler");
         thread.setDaemon(true);
         return thread;
@@ -80,7 +72,6 @@ public class SignalRClientService {
     private final AtomicLong heartbeatGeneration = new AtomicLong(0L);
 
     private HubConnection connection;
-    private HubProxy hubProxy;
     private ScheduledFuture<?> reconnectFuture;
 
     private static SignalRClientService shared;
@@ -88,7 +79,6 @@ public class SignalRClientService {
     public SignalRClientService(Listener listener, Gson gson) {
         this.listener = listener;
         this.gson = gson == null ? new Gson() : gson;
-        Platform.loadPlatformComponent(new AndroidPlatformComponent());
         actionExecutor.setRejectedExecutionHandler((runnable, executor) -> {
             if (executor.isShutdown()) {
                 throw new RejectedExecutionException("SignalR action queue is shut down");
@@ -167,12 +157,14 @@ public class SignalRClientService {
         if (stopping.get()) {
             return;
         }
-        String url = buildUrl();
-        if (TextUtils.isEmpty(url)) {
+
+        String baseUrl = buildUrl();
+        if (TextUtils.isEmpty(baseUrl)) {
             Log.w(TAG, "ensureConnectedInternal: empty SignalR url");
             return;
         }
 
+        String url = appendQueryString(baseUrl, buildQueryString());
         HubConnection existingConnection;
         synchronized (syncRoot) {
             existingConnection = connection;
@@ -181,58 +173,57 @@ public class SignalRClientService {
             }
         }
 
-        ConnectionBundle bundle = buildConnection(url);
+        HubConnection nextConnection = buildConnection(url);
         HubConnection previous;
         synchronized (syncRoot) {
             previous = connection;
-            connection = bundle.connection;
-            hubProxy = bundle.proxy;
+            connection = nextConnection;
         }
         safeStopConnection(previous);
 
         try {
-            startConnection(bundle.connection);
+            startConnection(nextConnection);
             reconnectScheduled.set(false);
         } catch (Exception ex) {
             if (isOperationCancelled(ex)) {
-                Log.w(TAG, "startInternal: startConnection cancelled. url=" + url, ex);
+                Log.w(TAG, "ensureConnectedInternal: start cancelled. url=" + url, ex);
             } else {
-                Log.e(TAG, "startInternal: startConnection failed, scheduling reconnect. url=" + url, ex);
+                Log.e(TAG, "ensureConnectedInternal: start failed, scheduling reconnect. url=" + url, ex);
             }
             synchronized (syncRoot) {
-                if (connection == bundle.connection) {
+                if (connection == nextConnection) {
                     connection = null;
-                    hubProxy = null;
                 }
             }
-            safeStopConnection(bundle.connection);
+            safeStopConnection(nextConnection);
             if (!stopping.get()) {
                 scheduleReconnect();
             }
         }
     }
 
-    private ConnectionBundle buildConnection(String url) {
-        HubConnection hubConnection = new HubConnection(url, buildQueryString(), true, SIGNALR_NULL_LOGGER);
-        HubProxy proxy = hubConnection.createHubProxy(HUB_NAME);
-        proxy.on("ReceiveMessage", new SubscriptionHandler1<SignalRMessage>() {
-            @Override
-            public void run(SignalRMessage message) {
-                handleMessage(message);
-            }
-        }, SignalRMessage.class);
-        hubConnection.closed(() -> {
+    private HubConnection buildConnection(String url) {
+        HubConnection hubConnection = HubConnectionBuilder.create(url)
+                // 기존 안드로이드 플레이어는 장비/망 제약을 피하기 위해 롱폴링으로 동작했다.
+                .withTransport(TransportEnum.LONG_POLLING)
+                .build();
+
+        hubConnection.on("ReceiveMessage", this::handleMessage, SignalRMessage.class);
+        hubConnection.onClosed(exception -> {
             if (!stopping.get()) {
                 synchronized (syncRoot) {
                     if (connection == hubConnection) {
                         connection = null;
-                        hubProxy = null;
                     }
+                }
+                if (exception != null) {
+                    Log.e(TAG, "SignalR connection closed with error", exception);
                 }
                 scheduleReconnect();
             }
         });
-        return new ConnectionBundle(hubConnection, proxy);
+
+        return hubConnection;
     }
 
     private void scheduleReconnect() {
@@ -260,9 +251,14 @@ public class SignalRClientService {
             return;
         }
         try {
-            hubConnection.stop();
+            hubConnection.stop().blockingAwait();
         } catch (Exception ex) {
             Log.w(TAG, "safeStopConnection: failed to stop hub connection", ex);
+        }
+        try {
+            hubConnection.close();
+        } catch (Exception ex) {
+            Log.w(TAG, "safeStopConnection: failed to close hub connection", ex);
         }
     }
 
@@ -271,36 +267,25 @@ public class SignalRClientService {
         synchronized (syncRoot) {
             local = connection;
             connection = null;
-            hubProxy = null;
         }
         safeStopConnection(local);
     }
 
-    private static final class ConnectionBundle {
-        final HubConnection connection;
-        final HubProxy proxy;
-
-        ConnectionBundle(HubConnection connection, HubProxy proxy) {
-            this.connection = connection;
-            this.proxy = proxy;
-        }
-    }
-
-    private void startConnection(HubConnection local) throws Exception {
-        // 이전 작업의 interrupt 플래그가 남아 있으면 future.get()가 즉시 취소될 수 있어 초기화한다.
+    private void startConnection(HubConnection local) {
         if (Thread.interrupted()) {
             Log.w(TAG, "startConnection: clearing stale interrupted flag before connect.");
         }
-        SignalRFuture<Void> future = local.start(new LongPollingTransport(SIGNALR_NULL_LOGGER));
-        future.get(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        local.start()
+                .timeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .blockingAwait();
     }
 
     private boolean shouldKeepCurrentConnection(HubConnection local) {
         if (local == null) {
             return false;
         }
-        ConnectionState state = local.getState();
-        return state == ConnectionState.Connected || state == ConnectionState.Connecting;
+        HubConnectionState state = local.getConnectionState();
+        return state == HubConnectionState.CONNECTED || state == HubConnectionState.CONNECTING;
     }
 
     private void sendHeartbeatInternal(HeartbeatPayload payload, HeartbeatGuard guard, long generation) {
@@ -313,20 +298,17 @@ public class SignalRClientService {
         if (guard != null && !guard.shouldSend()) {
             return;
         }
+
         HubConnection localConn;
-        HubProxy localProxy;
         synchronized (syncRoot) {
             localConn = connection;
-            localProxy = hubProxy;
         }
-        if (localConn == null || localProxy == null) {
+
+        if (localConn == null || localConn.getConnectionState() != HubConnectionState.CONNECTED) {
             scheduleReconnect();
             return;
         }
-        if (localConn.getState() != ConnectionState.Connected) {
-            scheduleReconnect();
-            return;
-        }
+
         try {
             if (!isCurrentHeartbeatGeneration(generation)) {
                 return;
@@ -334,14 +316,14 @@ public class SignalRClientService {
             if (guard != null && !guard.shouldSend()) {
                 return;
             }
-            SignalRFuture<Void> future = localProxy.invoke("ReportHeartbeat", payload);
-            future.get(HEARTBEAT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            localConn.invoke("ReportHeartbeat", payload)
+                    .timeout(HEARTBEAT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .blockingAwait();
         } catch (Exception ex) {
             Log.e(TAG, "sendHeartbeat: ReportHeartbeat invoke failed", ex);
             synchronized (syncRoot) {
                 if (connection == localConn) {
                     connection = null;
-                    hubProxy = null;
                 }
             }
             safeStopConnection(localConn);
@@ -353,19 +335,21 @@ public class SignalRClientService {
         if (payload == null) {
             return;
         }
+
         HubConnection localConn;
-        HubProxy localProxy;
         synchronized (syncRoot) {
             localConn = connection;
-            localProxy = hubProxy;
         }
-        if (localConn == null || localProxy == null || localConn.getState() != ConnectionState.Connected) {
+
+        if (localConn == null || localConn.getConnectionState() != HubConnectionState.CONNECTED) {
             Log.w(TAG, "sendTerminalHeartbeat: connection unavailable");
             return;
         }
+
         try {
-            SignalRFuture<Void> future = localProxy.invoke("ReportHeartbeat", payload);
-            future.get(HEARTBEAT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            localConn.invoke("ReportHeartbeat", payload)
+                    .timeout(HEARTBEAT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .blockingAwait();
         } catch (Exception ex) {
             Log.e(TAG, "sendTerminalHeartbeat: ReportHeartbeat invoke failed", ex);
         }
@@ -579,6 +563,13 @@ public class SignalRClientService {
         }
     }
 
+    private static String appendQueryString(String url, String queryString) {
+        if (TextUtils.isEmpty(url) || TextUtils.isEmpty(queryString)) {
+            return url;
+        }
+        return url.contains("?") ? url + "&" + queryString : url + "?" + queryString;
+    }
+
     private String resolveServerAddress() {
         String messageServerIp = LocalSettingsProvider.getMessageServerIp();
         if (!TextUtils.isEmpty(messageServerIp)) {
@@ -611,29 +602,47 @@ public class SignalRClientService {
     }
 
     public static class SignalRMessage {
+        @SerializedName("from")
         public String From = "Server";
+        @SerializedName("to")
         public String To = "All";
+        @SerializedName("command")
         public String Command = "Update";
+        @SerializedName("dataType")
         public String DataType = "String";
+        @SerializedName("data")
         public Object Data = null;
     }
 
     public static class SignalRCommandEnvelope {
+        @SerializedName("commandId")
         public String CommandId;
+        @SerializedName("command")
         public String Command;
+        @SerializedName("playerId")
         public String PlayerId;
+        @SerializedName("payloadJson")
         public String PayloadJson;
+        @SerializedName("createdAt")
         public String CreatedAt;
+        @SerializedName("isUrgent")
         public boolean IsUrgent;
     }
 
     public static class HeartbeatPayload {
+        @SerializedName("clientId")
         public String ClientId = "";
+        @SerializedName("playerName")
         public String PlayerName = "";
+        @SerializedName("status")
         public String Status = "";
+        @SerializedName("process")
         public int Process;
+        @SerializedName("version")
         public String Version = "";
+        @SerializedName("currentPage")
         public String CurrentPage = "";
+        @SerializedName("hdmiState")
         public boolean HdmiState;
 
         public static HeartbeatPayload create(String clientId,
