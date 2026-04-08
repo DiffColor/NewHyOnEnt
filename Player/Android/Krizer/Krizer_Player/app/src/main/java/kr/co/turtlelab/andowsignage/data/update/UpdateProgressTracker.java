@@ -9,7 +9,7 @@ import kr.co.turtlelab.andowsignage.services.HeartbeatService;
 
 /**
  * UpdateQueue 진행률을 일관되게 계산하고 서버에도 보고하는 유틸.
- * weight 단위(progressWeight * 100)로 수치를 관리하고, 변화량이 작을 경우 보고를 생략해 부하를 줄인다.
+ * 다운로드 진행률을 기준으로 보고하고, 다운로드가 0일 때만 검증 진행률을 보조 값으로 사용한다.
  */
 public class UpdateProgressTracker {
 
@@ -52,10 +52,11 @@ public class UpdateProgressTracker {
     }
 
     public float reportApplyProgress(float unit) {
-        // Apply 단계는 다운로드/검증 완료 후 진행률 100% 기준에서 보고만 수행
-        float dl = downloadProgress.get();
-        float vl = validateProgress.get();
+        float applyUnit = Math.min(1f, Math.max(unit, 0f));
+        float dl = Math.max(100f, downloadProgress.get());
+        float vl = Math.max(100f, validateProgress.get());
         float percent = setProgress(dl, vl);
+        percent = Math.max(percent, 100f * applyUnit);
         maybeReport(percent, dl, vl, UpdateQueueContract.Status.APPLYING);
         return percent;
     }
@@ -69,7 +70,11 @@ public class UpdateProgressTracker {
     private float setProgress(float downloadPercent, float validatePercent) {
         float dl = Math.min(100f, Math.max(0f, downloadPercent));
         float vl = Math.min(100f, Math.max(0f, validatePercent));
-        float overall = Math.min(100f, Math.max(0f, (dl + vl) / 2f));
+        float overall = dl;
+        if (overall <= 0f && vl > 0f) {
+            overall = vl;
+        }
+        overall = Math.min(100f, Math.max(0f, overall));
         UpdateQueueHelper.updateProgress(queueId, dl, vl, overall);
         return overall;
     }

@@ -110,7 +110,7 @@ public class UpdateQueueDownloader {
                     entry.Status = UpdateQueueContract.DownloadStatus.DOWNLOADING;
                     markChunkStatus(entry, UpdateQueueContract.ChunkStatus.DOWNLOADING, 0L);
                     UpdateQueueHelper.updateDownloadJournal(queue.getId(), journal.toJson());
-                    boolean success = downloadSingle(entry, renewFailed);
+                    boolean success = downloadSingle(entries, entry, tracker, renewFailed);
                     if (!success) {
                         String lastError = entry.LastError == null ? "" : entry.LastError;
                         outcome.lastError = TextUtils.isEmpty(lastError)
@@ -160,7 +160,9 @@ public class UpdateQueueDownloader {
         }
     }
 
-    private boolean downloadSingle(UpdateQueueContract.DownloadEntry entry,
+    private boolean downloadSingle(List<UpdateQueueContract.DownloadEntry> entries,
+                                   UpdateQueueContract.DownloadEntry entry,
+                                   UpdateProgressTracker tracker,
                                    java.util.concurrent.atomic.AtomicBoolean renewFailed) {
         if (entry == null) {
             return true;
@@ -207,42 +209,50 @@ public class UpdateQueueDownloader {
         UpdateQueueLogger.log("Downloading " + entry.FileName + " from " + remotePath + " via FTP " + ftpHost + ":" + ftpPort);
         ensureChunks(entry);
         List<UpdateQueueContract.DownloadChunk> chunks = entry.Chunks;
-        for (UpdateQueueContract.DownloadChunk chunk : chunks) {
-            if (chunk == null) {
-                continue;
-            }
-            if (UpdateQueueContract.ChunkStatus.DONE.equalsIgnoreCase(chunk.Status)) {
-                continue;
-            }
-            if (renewFailed != null && renewFailed.get()) {
-                entry.LastError = "LEASE_LOST";
-                return false;
-            }
-            chunk.Status = UpdateQueueContract.ChunkStatus.DOWNLOADING;
-            chunk.LastUpdatedTicks = UpdateQueueHelper.toDotNetLocalTicks(System.currentTimeMillis());
-            long length = chunk.Length > 0 ? chunk.Length : Math.max(0L, entry.SizeBytes - chunk.Offset);
-            FTP4JUtil.DownloadResult result = ftp.downloadRange(remotePath,
-                    stagingFile,
-                    chunk.Offset,
-                    length,
-                    entry.SizeBytes,
-                    renewFailed);
-            if (result.missing) {
-                entry.LastError = "MISSING_FILE";
-                return false;
-            }
-            if (!result.success) {
-                entry.LastError = TextUtils.isEmpty(result.errorMessage)
-                        ? "CHUNK_FAIL"
-                        : result.errorMessage;
-                chunk.Status = UpdateQueueContract.ChunkStatus.PENDING;
-                chunk.DownloadedBytes = 0L;
+        try (FTP4JUtil.Session session = ftp.openSession()) {
+            for (UpdateQueueContract.DownloadChunk chunk : chunks) {
+                if (chunk == null) {
+                    continue;
+                }
+                if (UpdateQueueContract.ChunkStatus.DONE.equalsIgnoreCase(chunk.Status)) {
+                    continue;
+                }
+                if (renewFailed != null && renewFailed.get()) {
+                    entry.LastError = "LEASE_LOST";
+                    return false;
+                }
+                chunk.Status = UpdateQueueContract.ChunkStatus.DOWNLOADING;
                 chunk.LastUpdatedTicks = UpdateQueueHelper.toDotNetLocalTicks(System.currentTimeMillis());
-                return false;
+                long length = chunk.Length > 0 ? chunk.Length : Math.max(0L, entry.SizeBytes - chunk.Offset);
+                FTP4JUtil.DownloadResult result = downloadChunkWithRetry(session,
+                        remotePath,
+                        stagingFile,
+                        entry,
+                        chunk,
+                        length,
+                        tracker,
+                        entries,
+                        renewFailed);
+                if (result.missing) {
+                    entry.LastError = "MISSING_FILE";
+                    return false;
+                }
+                if (!result.success) {
+                    entry.LastError = TextUtils.isEmpty(result.errorMessage)
+                            ? "CHUNK_FAIL"
+                            : result.errorMessage;
+                    chunk.Status = UpdateQueueContract.ChunkStatus.PENDING;
+                    chunk.DownloadedBytes = 0L;
+                    chunk.LastUpdatedTicks = UpdateQueueHelper.toDotNetLocalTicks(System.currentTimeMillis());
+                    return false;
+                }
+                chunk.Status = UpdateQueueContract.ChunkStatus.DONE;
+                chunk.DownloadedBytes = length;
+                chunk.LastUpdatedTicks = UpdateQueueHelper.toDotNetLocalTicks(System.currentTimeMillis());
             }
-            chunk.Status = UpdateQueueContract.ChunkStatus.DONE;
-            chunk.DownloadedBytes = length;
-            chunk.LastUpdatedTicks = UpdateQueueHelper.toDotNetLocalTicks(System.currentTimeMillis());
+        } catch (Exception ex) {
+            entry.LastError = TextUtils.isEmpty(ex.getMessage()) ? "FTP_SESSION_FAIL" : ex.getMessage();
+            return false;
         }
         if (!FileIntegrityUtils.verifyFile(stagingFile, entry.SizeBytes, entry.Checksum)) {
             entry.LastError = "HASH_MISMATCH";
@@ -276,18 +286,131 @@ public class UpdateQueueDownloader {
         return true;
     }
 
+    private FTP4JUtil.DownloadResult downloadChunkWithRetry(FTP4JUtil.Session session,
+                                                            String remotePath,
+                                                            File stagingFile,
+                                                            UpdateQueueContract.DownloadEntry entry,
+                                                            UpdateQueueContract.DownloadChunk chunk,
+                                                            long length,
+                                                            UpdateProgressTracker tracker,
+                                                            List<UpdateQueueContract.DownloadEntry> entries,
+                                                            java.util.concurrent.atomic.AtomicBoolean renewFailed) throws Exception {
+        FTP4JUtil.DownloadResult lastResult = new FTP4JUtil.DownloadResult();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            if (attempt > 0) {
+                UpdateQueueLogger.log("Reconnecting FTP session for " + entry.FileName + " chunk " + chunk.Index);
+                session.reconnect();
+            }
+            lastResult = session.downloadRange(remotePath,
+                    stagingFile,
+                    chunk.Offset,
+                    length,
+                    entry.SizeBytes,
+                    renewFailed,
+                    downloadedBytes -> {
+                        chunk.DownloadedBytes = Math.min(length, Math.max(0L, downloadedBytes));
+                        chunk.LastUpdatedTicks = UpdateQueueHelper.toDotNetLocalTicks(System.currentTimeMillis());
+                        if (tracker != null) {
+                            tracker.stepDownload(calculateDownloadProgress(entries));
+                        }
+                    });
+            if (lastResult.success || lastResult.missing || !shouldReconnect(lastResult.errorMessage)) {
+                return lastResult;
+            }
+        }
+        return lastResult;
+    }
+
+    private boolean shouldReconnect(String errorMessage) {
+        if (TextUtils.isEmpty(errorMessage)) {
+            return false;
+        }
+        String normalized = errorMessage.trim().toUpperCase(Locale.US);
+        return !normalized.startsWith("MISSING_FILE")
+                && !normalized.startsWith("LEASE_LOST")
+                && !normalized.startsWith("REMOTE_PATH_EMPTY")
+                && !normalized.startsWith("LOCAL_FILENAME_EMPTY");
+    }
+
     private float calculateDownloadProgress(List<UpdateQueueContract.DownloadEntry> entries) {
         if (entries == null || entries.isEmpty()) {
             return 1f;
         }
-        int total = entries.size();
-        int done = 0;
+        long totalBytes = calculateTotalBytes(entries);
+        if (totalBytes <= 0L) {
+            int total = entries.size();
+            int done = 0;
+            for (UpdateQueueContract.DownloadEntry entry : entries) {
+                if (entry != null && UpdateQueueContract.DownloadStatus.DONE.equalsIgnoreCase(entry.Status)) {
+                    done++;
+                }
+            }
+            return Math.min(1f, (float) done / Math.max(1, total));
+        }
+        long downloadedBytes = calculateDownloadedBytes(entries);
+        if (downloadedBytes < 0L) {
+            downloadedBytes = 0L;
+        }
+        if (downloadedBytes > totalBytes) {
+            downloadedBytes = totalBytes;
+        }
+        return Math.min(1f, (float) downloadedBytes / (float) totalBytes);
+    }
+
+    private long calculateTotalBytes(List<UpdateQueueContract.DownloadEntry> entries) {
+        if (entries == null) {
+            return 0L;
+        }
+        long total = 0L;
         for (UpdateQueueContract.DownloadEntry entry : entries) {
-            if (entry != null && UpdateQueueContract.DownloadStatus.DONE.equalsIgnoreCase(entry.Status)) {
-                done++;
+            if (entry == null) {
+                continue;
+            }
+            if (entry.SizeBytes > 0L) {
+                total += entry.SizeBytes;
+                continue;
+            }
+            if (entry.Chunks == null) {
+                continue;
+            }
+            for (UpdateQueueContract.DownloadChunk chunk : entry.Chunks) {
+                if (chunk != null && chunk.Length > 0L) {
+                    total += chunk.Length;
+                }
             }
         }
-        return Math.min(1f, (float) done / Math.max(1, total));
+        return total;
+    }
+
+    private long calculateDownloadedBytes(List<UpdateQueueContract.DownloadEntry> entries) {
+        if (entries == null) {
+            return 0L;
+        }
+        long downloaded = 0L;
+        for (UpdateQueueContract.DownloadEntry entry : entries) {
+            if (entry == null) {
+                continue;
+            }
+            if (UpdateQueueContract.DownloadStatus.DONE.equalsIgnoreCase(entry.Status) && entry.SizeBytes > 0L) {
+                downloaded += entry.SizeBytes;
+                continue;
+            }
+            if (entry.Chunks == null) {
+                continue;
+            }
+            for (UpdateQueueContract.DownloadChunk chunk : entry.Chunks) {
+                if (chunk == null) {
+                    continue;
+                }
+                long chunkTotal = chunk.Length > 0L ? chunk.Length : chunk.DownloadedBytes;
+                long chunkDone = Math.max(0L, chunk.DownloadedBytes);
+                if (chunkTotal > 0L && chunkDone > chunkTotal) {
+                    chunkDone = chunkTotal;
+                }
+                downloaded += chunkDone;
+            }
+        }
+        return downloaded;
     }
 
     private void resetChunksToPending(UpdateQueueContract.DownloadEntry entry) {

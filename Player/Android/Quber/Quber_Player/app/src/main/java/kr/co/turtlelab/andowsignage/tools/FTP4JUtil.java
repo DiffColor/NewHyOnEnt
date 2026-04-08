@@ -49,6 +49,44 @@ public class FTP4JUtil {
         public String errorMessage;
     }
 
+    public interface RangeProgressListener {
+        void onProgress(long downloadedBytes);
+    }
+
+    public final class Session implements AutoCloseable {
+        private final FTPClient client = new FTPClient();
+
+        private Session() throws Exception {
+            reconnect();
+        }
+
+        public DownloadResult downloadRange(String remotePath,
+                                            File targetFile,
+                                            long offset,
+                                            long length,
+                                            long totalSize,
+                                            java.util.concurrent.atomic.AtomicBoolean stopFlag,
+                                            RangeProgressListener progressListener) {
+            return downloadRangeInternal(client, remotePath, targetFile, offset, length, totalSize, stopFlag, progressListener);
+        }
+
+        public void reconnect() throws Exception {
+            disconnectClient(client);
+            prepareClient(client);
+            client.connect(host, port);
+            client.login(id, pw);
+        }
+
+        @Override
+        public void close() {
+            disconnectClient(client);
+        }
+    }
+
+    public Session openSession() throws Exception {
+        return new Session();
+    }
+
     public DownloadResult downloadWithResume(String remotePath, File targetFile, long resumeHint) {
         DownloadResult result = new DownloadResult();
         FTPClient client = new FTPClient();
@@ -122,8 +160,57 @@ public class FTP4JUtil {
                                         long length,
                                         long totalSize,
                                         java.util.concurrent.atomic.AtomicBoolean stopFlag) {
-        DownloadResult result = new DownloadResult();
+        return downloadRange(remotePath, targetFile, offset, length, totalSize, stopFlag, null);
+    }
+
+    public DownloadResult downloadRange(String remotePath,
+                                        File targetFile,
+                                        long offset,
+                                        long length,
+                                        long totalSize,
+                                        java.util.concurrent.atomic.AtomicBoolean stopFlag,
+                                        RangeProgressListener progressListener) {
         FTPClient client = new FTPClient();
+        try {
+            prepareClient(client);
+            client.connect(host, port);
+            client.login(id, pw);
+            return downloadRangeInternal(client, remotePath, targetFile, offset, length, totalSize, stopFlag, progressListener);
+        } catch (FTPException e) {
+            DownloadResult result = new DownloadResult();
+            int code = e.getCode();
+            if (code == 550 || code == 553) {
+                result.missing = true;
+                result.errorMessage = "MISSING_FILE";
+            } else {
+                result.errorMessage = "FTP_ERROR:" + e.getMessage();
+            }
+            UpdateQueueLogger.log("FTP4J FTPException code=" + e.getCode() + " msg=" + e.getMessage());
+            return result;
+        } catch (FTPIllegalReplyException | java.io.IOException e) {
+            DownloadResult result = new DownloadResult();
+            result.errorMessage = "IO_ERROR:" + e.getMessage();
+            UpdateQueueLogger.log("FTP4J download failed: " + e.getMessage());
+            return result;
+        } catch (Exception e) {
+            DownloadResult result = new DownloadResult();
+            result.errorMessage = "FTP_ERROR:" + e.getMessage();
+            UpdateQueueLogger.log("FTP4J unexpected error: " + e.getMessage());
+            return result;
+        } finally {
+            disconnectClient(client);
+        }
+    }
+
+    private DownloadResult downloadRangeInternal(FTPClient client,
+                                                 String remotePath,
+                                                 File targetFile,
+                                                 long offset,
+                                                 long length,
+                                                 long totalSize,
+                                                 java.util.concurrent.atomic.AtomicBoolean stopFlag,
+                                                 RangeProgressListener progressListener) {
+        DownloadResult result = new DownloadResult();
         java.util.concurrent.atomic.AtomicLong written = new java.util.concurrent.atomic.AtomicLong(0L);
         java.util.concurrent.atomic.AtomicBoolean abortedByLimit = new java.util.concurrent.atomic.AtomicBoolean(false);
         java.util.concurrent.atomic.AtomicBoolean abortedByStop = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -141,10 +228,6 @@ public class FTP4JUtil {
             if (parent != null && !parent.exists()) {
                 parent.mkdirs();
             }
-
-            prepareClient(client);
-            client.connect(host, port);
-            client.login(id, pw);
 
             long ensureSize = totalSize;
             if (ensureSize <= 0) {
@@ -165,6 +248,9 @@ public class FTP4JUtil {
                                 client.abortCurrentDataTransfer(true);
                             } catch (Exception ignore) { }
                             return;
+                        }
+                        if (progressListener != null) {
+                            progressListener.onProgress(Math.min(safeLength, Math.max(0L, written.get())));
                         }
                         if (!abortedByLimit.get() && written.get() >= safeLength) {
                             abortedByLimit.set(true);
@@ -189,6 +275,9 @@ public class FTP4JUtil {
             if (!result.success) {
                 result.errorMessage = "INCOMPLETE_RANGE";
             }
+            if (progressListener != null) {
+                progressListener.onProgress(Math.min(safeLength, Math.max(0L, written.get())));
+            }
         } catch (FTPAbortedException e) {
             result.downloadedBytes = written.get();
             if (abortedByStop.get()) {
@@ -197,6 +286,9 @@ public class FTP4JUtil {
                 result.success = true;
             } else {
                 result.errorMessage = "FTP_ABORTED";
+            }
+            if (progressListener != null) {
+                progressListener.onProgress(Math.min(safeLength, Math.max(0L, written.get())));
             }
         } catch (FTPException e) {
             int code = e.getCode();
@@ -217,16 +309,10 @@ public class FTP4JUtil {
         } catch (Exception e) {
             result.errorMessage = "FTP_ERROR:" + e.getMessage();
             UpdateQueueLogger.log("FTP4J unexpected error: " + e.getMessage());
-        } finally {
-            try {
-                if (client.isConnected()) {
-                    client.logout();
-                    client.disconnect(true);
-                }
-            } catch (Exception ignore) { }
         }
         return result;
     }
+
     private long clampResume(String remotePath, FTPClient client, long resumeAt) {
         long safeResume = Math.max(0L, resumeAt);
         try {
@@ -246,6 +332,18 @@ public class FTP4JUtil {
         client.setCharset(charset);
         client.setType(FTPClient.TYPE_BINARY);
         client.setAutoNoopTimeout(30_000);
+    }
+
+    private void disconnectClient(FTPClient client) {
+        if (client == null) {
+            return;
+        }
+        try {
+            if (client.isConnected()) {
+                client.logout();
+                client.disconnect(true);
+            }
+        } catch (Exception ignore) { }
     }
 
     private long queryRemoteSize(FTPClient client, String remotePath) {
