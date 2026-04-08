@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNet.SignalR.Client;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TurtleTools
 {
@@ -13,7 +15,6 @@ namespace TurtleTools
         private const int ReconnectDelayMs = 15000;
         private static readonly object SyncRoot = new object();
         private static HubConnection _connection;
-        private static IHubProxy _hubProxy;
         private static int _reconnecting;
         private static int _stopping;
 
@@ -23,7 +24,7 @@ namespace TurtleTools
         {
             lock (SyncRoot)
             {
-                return _connection != null && _connection.State == ConnectionState.Connected;
+                return _connection != null && _connection.State == HubConnectionState.Connected;
             }
         }
 
@@ -31,7 +32,9 @@ namespace TurtleTools
         {
             lock (SyncRoot)
             {
-                return _connection != null && _connection.State == ConnectionState.Connecting;
+                return _connection != null
+                    && (_connection.State == HubConnectionState.Connecting
+                        || _connection.State == HubConnectionState.Reconnecting);
             }
         }
 
@@ -48,7 +51,6 @@ namespace TurtleTools
             lock (SyncRoot)
             {
                 local = _connection;
-                _hubProxy = null;
                 _connection = null;
             }
 
@@ -59,8 +61,7 @@ namespace TurtleTools
 
             try
             {
-                local.Stop();
-                local.Dispose();
+                StopAndDisposeConnection(local);
             }
             catch (Exception ex)
             {
@@ -76,14 +77,12 @@ namespace TurtleTools
             }
 
             HubConnection localConnection;
-            IHubProxy localProxy;
             lock (SyncRoot)
             {
                 localConnection = _connection;
-                localProxy = _hubProxy;
             }
 
-            if (localConnection == null || localProxy == null || localConnection.State != ConnectionState.Connected)
+            if (localConnection == null || localConnection.State != HubConnectionState.Connected)
             {
                 ScheduleReconnect();
                 return false;
@@ -91,7 +90,7 @@ namespace TurtleTools
 
             try
             {
-                var sendTask = localProxy.Invoke<bool>("SendCommandToClient", clientId, envelope);
+                var sendTask = localConnection.InvokeAsync<bool>("SendCommandToClient", clientId, envelope);
                 return sendTask.GetAwaiter().GetResult();
             }
             catch (Exception ex)
@@ -125,7 +124,7 @@ namespace TurtleTools
 
             try
             {
-                await local.Start();
+                await local.StartAsync();
                 Logger.WriteLog($"SignalR client connected: {url}", Logger.GetLogFileName());
                 await RegisterManagerGroup();
             }
@@ -138,33 +137,40 @@ namespace TurtleTools
 
         private static HubConnection BuildConnection(string url)
         {
-            var hub = new HubConnection(url);
-            _hubProxy = hub.CreateHubProxy("MsgHub");
-            _hubProxy.On<SignalRHeartbeatPayload>("ReceiveHeartbeat", OnReceiveHeartbeat);
-            hub.Closed += OnClosed;
-            hub.Error += ex => Logger.WriteErrorLog($"SignalR client error: {ex}", Logger.GetLogFileName());
+            var hub = new HubConnectionBuilder()
+                .AddNewtonsoftJsonProtocol()
+                .WithUrl(url, options =>
+                {
+                    options.Transports = HttpTransportType.WebSockets | HttpTransportType.LongPolling;
+                })
+                .Build();
+
+            hub.On<SignalRHeartbeatPayload>("ReceiveHeartbeat", OnReceiveHeartbeat);
+            hub.Closed += ex =>
+            {
+                OnClosed(ex);
+                return Task.CompletedTask;
+            };
 
             return hub;
         }
 
         private static async Task RegisterManagerGroup()
         {
-            IHubProxy localProxy;
             HubConnection localConnection;
             lock (SyncRoot)
             {
-                localProxy = _hubProxy;
                 localConnection = _connection;
             }
 
-            if (localProxy == null || localConnection == null || localConnection.State != ConnectionState.Connected)
+            if (localConnection == null || localConnection.State != HubConnectionState.Connected)
             {
                 return;
             }
 
             try
             {
-                await localProxy.Invoke("RegisterManager");
+                await localConnection.InvokeAsync("RegisterManager");
             }
             catch (Exception ex)
             {
@@ -172,13 +178,17 @@ namespace TurtleTools
             }
         }
 
-        private static void OnClosed()
+        private static void OnClosed(Exception ex)
         {
             if (Interlocked.CompareExchange(ref _stopping, 0, 0) == 1)
             {
                 return;
             }
 
+            if (ex != null)
+            {
+                Logger.WriteErrorLog($"SignalR client closed with error: {ex}", Logger.GetLogFileName());
+            }
             Logger.WriteLog("SignalR client disconnected. Reconnecting...", Logger.GetLogFileName());
             ScheduleReconnect();
         }
@@ -210,7 +220,7 @@ namespace TurtleTools
 
                         try
                         {
-                            await local.Start();
+                            await local.StartAsync();
                             Logger.WriteLog("SignalR client reconnected.", Logger.GetLogFileName());
                             await RegisterManagerGroup();
                             return;
@@ -282,6 +292,17 @@ namespace TurtleTools
             }
 
             return settings.SignalRHubPath.Trim();
+        }
+
+        private static void StopAndDisposeConnection(HubConnection connection)
+        {
+            if (connection == null)
+            {
+                return;
+            }
+
+            connection.StopAsync().GetAwaiter().GetResult();
+            connection.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }
 }

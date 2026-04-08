@@ -53,12 +53,10 @@ repositories {
 
 dependencies {
     implementation 'com.android.support:support-v4:22.0.0'
-    implementation 'com.google.code.gson:gson:2.2.4'
+    implementation 'com.google.code.gson:gson:2.8.5'
     implementation files('libs/ftp4j-1.7.2.jar')
     implementation files('libs/universal-image-loader-1.9.3.jar')
     implementation files('libs/commons-io-2.6.jar')
     implementation 'com.rethinkdb:rethinkdb-driver:2.4.4'
-    // Legacy ASP.NET SignalR client (Windows와 동일 프로토콜)
-    implementation files('libs/signalr-client-sdk.jar')
-    implementation(name: 'signalr-client-sdk-android-debug', ext: 'aar')
+    implementation 'com.microsoft.signalr:signalr:7.0.20'
 }
