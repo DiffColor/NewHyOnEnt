@@ -13,19 +13,19 @@ public class PlayerDataModel {
 	 * Setter Methods
 	 */
 	public void setPlayerName(String playername) {
-		playerName = playername;
+		playerName = playername == null ? "" : playername;
 	}
 	
 	public void setPlaylist(String playlist) {
-		this.playlist = playlist;
+		this.playlist = playlist == null ? "" : playlist;
 	}
 	
 	public void setPlayerIP(String ip) {
-		playerIP = ip;
+		playerIP = ip == null ? "" : ip;
 	}
 	
 	public void setManagerIP(String ip) {
-		managerIP = ip;
+		managerIP = ip == null ? "" : ip;
 	}
 	
 	public void setIsLandscape(String islandscape) {
@@ -36,19 +36,19 @@ public class PlayerDataModel {
 	 * Getter Methods
 	 */
 	public String getPlayerName() {
-		return playerName;
+		return playerName == null ? "" : playerName;
 	}
 	
 	public String getPlaylist() {
-		return playlist;
+		return playlist == null ? "" : playlist;
 	}
 	
 	public String getPlayerIP() {
-		return playerIP;
+		return playerIP == null ? "" : playerIP;
 	}
 	
 	public String getManagerIP() {
-		return managerIP;
+		return managerIP == null ? "" : managerIP;
 	}
 	
 	public boolean getIsLandscape() {

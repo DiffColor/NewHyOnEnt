@@ -174,6 +174,11 @@ public class RethinkDbClient {
         new Thread(() -> {
             try {
                 try {
+                    refreshPlayerGuidFromRemote();
+                } catch (Exception ex) {
+                    Log.e(TAG, "RethinkDbClient: operation failed", ex);
+                }
+                try {
                     updateDeviceInfoIfNeeded();
                 } catch (Exception ex) {
                     Log.e(TAG, "RethinkDbClient: operation failed", ex);
@@ -758,11 +763,8 @@ public class RethinkDbClient {
             deviceInfoSyncInProgress = true;
         }
         try {
-            String playerId = getStoredPlayerGuid();
-            if (TextUtils.isEmpty(playerId)) {
-                playerId = ensurePlayerGuid();
-            }
-            if (TextUtils.isEmpty(playerId)) {
+            String playerId = ensurePlayerGuid();
+            if (TextUtils.isEmpty(playerId) || !guidVerified) {
                 return;
             }
             String ip = resolveLocalIpAddress();
@@ -798,6 +800,11 @@ public class RethinkDbClient {
         String storedGuid = getStoredPlayerGuid();
         String guid = storedGuid;
         String storedPlayerName = getStoredPlayerName();
+        if (TextUtils.isEmpty(normalizedPlayerName)) {
+            guidVerified = !TextUtils.isEmpty(storedGuid);
+            resetDeviceInfoSyncWhenGuidChanged(storedGuid);
+            return storedGuid;
+        }
         boolean isStoredNameMismatched = !TextUtils.isEmpty(normalizedPlayerName)
                 && !TextUtils.isEmpty(storedPlayerName)
                 && !normalizedPlayerName.equalsIgnoreCase(storedPlayerName.trim());
@@ -814,41 +821,21 @@ public class RethinkDbClient {
                 || (now - lastGuidVerificationEpochMs) >= GUID_VERIFICATION_INTERVAL_MS;
 
         if (shouldVerifyRemotely) {
-            if (!TextUtils.isEmpty(normalizedPlayerName)) {
-                playerRecord = fetchPlayerInternal(normalizedPlayerName, false);
-                if (playerRecord != null && !TextUtils.isEmpty(playerRecord.getGuid())) {
-                    guid = playerRecord.getGuid();
-                    guidVerified = true;
-                }
-            }
-
-            if (TextUtils.isEmpty(guid) && !TextUtils.isEmpty(storedGuid) && !isStoredNameMismatched) {
-                RethinkModels.PlayerInfoRecord byGuid = fetchPlayerByGuid(storedGuid);
-                if (byGuid != null && !TextUtils.isEmpty(byGuid.getGuid())) {
-                    guid = byGuid.getGuid();
-                    playerRecord = byGuid;
-                    guidVerified = true;
-                }
-            }
-
-            if (TextUtils.isEmpty(guid)) {
-                String bootstrapGuid = !TextUtils.isEmpty(storedGuid) && !isStoredNameMismatched
-                        ? storedGuid
-                        : createNewGuidNotExists();
-                if (!TextUtils.isEmpty(bootstrapGuid)) {
-                    String upsertedGuid = upsertPlayerSkeleton(bootstrapGuid, normalizedPlayerName, storedPlayerName);
-                    if (!TextUtils.isEmpty(upsertedGuid)) {
-                        guid = upsertedGuid;
-                        guidVerified = true;
-                    }
-                }
+            playerRecord = fetchPlayerInternal(normalizedPlayerName, false);
+            if (playerRecord != null && !TextUtils.isEmpty(playerRecord.getGuid())) {
+                guid = playerRecord.getGuid();
+                guidVerified = true;
+            } else {
+                guid = null;
+                guidVerified = false;
             }
 
             lastGuidVerificationEpochMs = now;
         }
 
-        if (TextUtils.isEmpty(guid) && !isStoredNameMismatched) {
-            guid = storedGuid;
+        if (TextUtils.isEmpty(guid)) {
+            resetDeviceInfoSyncWhenGuidChanged(null);
+            return null;
         }
 
         boolean shouldPersistSkeleton = isStoredNameMismatched
@@ -995,6 +982,17 @@ public class RethinkDbClient {
             Log.e(TAG, "RethinkDbClient: operation failed", ex);
             return null;
         }
+    }
+
+    private void refreshPlayerGuidFromRemote() {
+        String playerName = getStoredPlayerName();
+        if (TextUtils.isEmpty(playerName)) {
+            playerName = AndoWSignageApp.PLAYER_ID;
+        }
+        if (TextUtils.isEmpty(playerName)) {
+            return;
+        }
+        ensurePlayerGuid(playerName);
     }
 
     private String resolveLocalIpAddress() {

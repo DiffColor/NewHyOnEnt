@@ -375,7 +375,7 @@ public class AndoWSignage extends Activity {
 		checkBakFile();
         
 		playerData = PlayerDataProvider.getPlayerData();
-		basePlaylistName = playerData.getPlaylist();
+		basePlaylistName = TextUtils.isEmpty(playerData.getPlaylist()) ? "" : playerData.getPlaylist();
 		refreshSchedulePlaybackState(System.currentTimeMillis());
 		
 		String idStr = playerData.getPlayerName();
@@ -393,16 +393,16 @@ public class AndoWSignage extends Activity {
 		AndoWSignageApp.networkState = NetworkUtils.getConnectivityStatus(this);
 //		AndoWSignageApp.AUTO_IP = NetworkUtils.getIPAddress(AndoWSignage.this);
 		
-		if(!playbackPlaylistName.isEmpty())
+		if (!TextUtils.isEmpty(playbackPlaylistName))
 			syncCurrentPlaylistPages();
 
 		boolean appliedReady = applyPendingReadyQueuesSync();
 		if (appliedReady) {
 			playerData = PlayerDataProvider.getPlayerData();
-			basePlaylistName = playerData.getPlaylist();
+			basePlaylistName = TextUtils.isEmpty(playerData.getPlaylist()) ? "" : playerData.getPlaylist();
 			refreshSchedulePlaybackState(System.currentTimeMillis());
 		}
-		if (!playbackPlaylistName.isEmpty()) {
+		if (!TextUtils.isEmpty(playbackPlaylistName)) {
 			syncCurrentPlaylistPages();
 		}
 		
@@ -878,7 +878,7 @@ public class AndoWSignage extends Activity {
 		applyPendingReadyQueuesSync();
 		
 		playerData = PlayerDataProvider.getPlayerData();
-		basePlaylistName = playerData.getPlaylist();
+		basePlaylistName = TextUtils.isEmpty(playerData.getPlaylist()) ? "" : playerData.getPlaylist();
 		refreshSchedulePlaybackState(System.currentTimeMillis());
 		syncCurrentPlaylistPages();
 		stopTimerAndElements();
@@ -963,19 +963,26 @@ public class AndoWSignage extends Activity {
 
 	TurtleVideoView vv;
 	public void showInitAnim() {
+		if (vv != null) {
+			if (!vv.isPlaying()) {
+				try {
+					vv.start();
+				} catch (Exception ignored) {
+				}
+			}
+			return;
+		}
+		if(gifView != null) {
+			layout_root.removeView(gifView);
+			gifView = null;
+		}
 		vv = new TurtleVideoView(sCtx);
 		layout_params = new RelativeLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
 		layout_params.addRule(RelativeLayout.CENTER_IN_PARENT);
 		layout_root.addView(vv ,layout_params);
 		String path = "android.resource://" + getPackageName() + "/" + R.raw.intro;
 		vv.setVideoURI(Uri.parse(path));
-		vv.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-
-			@Override
-			public void onCompletion(MediaPlayer mp) {
-				vv.start();
-			}
-		});
+		vv.setLoop(true);
 		vv.start();
 	}
 	

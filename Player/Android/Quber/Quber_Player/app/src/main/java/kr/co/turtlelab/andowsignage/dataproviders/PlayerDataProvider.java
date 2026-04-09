@@ -36,7 +36,7 @@ public class PlayerDataProvider {
                     }
                 }
                 playerData.setPlayerName(name);
-                playerData.setPlaylist(realmPlayer.getPlaylistName());
+                playerData.setPlaylist(TextUtils.isEmpty(realmPlayer.getPlaylistName()) ? "" : realmPlayer.getPlaylistName());
                 playerData.setIsLandscape(String.valueOf(realmPlayer.isLandscape()));
             } else {
                 String playerId = local.getPlayerId();

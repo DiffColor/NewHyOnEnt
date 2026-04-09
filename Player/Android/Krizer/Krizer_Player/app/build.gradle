@@ -9,6 +9,7 @@ def keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD") ?: "android"
 
 android {
     ndkVersion "26.1.10909125"
+    namespace "kr.co.turtlelab.andowsignage"
     signingConfigs {
         debug {
             storeFile file(keystorePath)
@@ -23,13 +24,12 @@ android {
             keyPassword keyPasswordValue
         }
     }
-    compileSdkVersion 22
-    buildToolsVersion "29.0.2"
+    compileSdk 22
 
     defaultConfig {
         applicationId "kr.co.turtlelab.andowsignage"
-        minSdkVersion 17
-        targetSdkVersion 17
+        minSdk 17
+        targetSdk 17
     }
 
     buildTypes {
@@ -42,6 +42,9 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
+    }
+    lint {
+        disable += 'ExpiredTargetSdkVersion'
     }
 }
 

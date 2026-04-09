@@ -333,14 +333,21 @@ public class HeartbeatService extends Service {
             return cachedClientId;
         }
         String previousClientId = cachedClientId;
-        String resolved = RethinkDbClient.getInstance().getStoredPlayerGuid();
-        if (TextUtils.isEmpty(resolved) && canAttemptCommunicationNow() && canReachRethink(activeRethinkHost)) {
-            resolved = RethinkDbClient.getInstance().ensurePlayerGuid();
-        } else if (TextUtils.isEmpty(resolved)) {
-            blockReconnectTemporarily();
-        }
-        if (TextUtils.isEmpty(resolved)) {
-            resolved = previousClientId;
+        String playerName = resolvePlayerName();
+        String resolved;
+        if (canAttemptCommunicationNow() && canReachRethink(activeRethinkHost)) {
+            resolved = RethinkDbClient.getInstance().ensurePlayerGuid(playerName);
+            if (TextUtils.isEmpty(resolved)) {
+                cachedClientId = "";
+                lastClientIdResolveAt = now;
+                return "";
+            }
+        } else {
+            resolved = RethinkDbClient.getInstance().getStoredPlayerGuid();
+            if (TextUtils.isEmpty(resolved)) {
+                blockReconnectTemporarily();
+                resolved = previousClientId;
+            }
         }
         if (!TextUtils.isEmpty(resolved)) {
             boolean guidChanged = !TextUtils.isEmpty(previousClientId)
