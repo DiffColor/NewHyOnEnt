@@ -1083,7 +1083,6 @@ public class MediaView extends RelativeLayout {
             }
         });
         videoView.setVideoPath(normalizedPath);
-        videoView.start();
     }
 
     private void showPreparedImage() {
