@@ -342,8 +342,6 @@ public class MediaView extends RelativeLayout {
         if (preparedContentShown) {
             return;
         }
-        setVisibility(View.VISIBLE);
-        resetViewPosition(this);
         restoreVisibleOutputs();
         preparedContentShown = true;
         tick = 0;
@@ -1103,11 +1101,6 @@ public class MediaView extends RelativeLayout {
         videoView.setMediaInfoListener(null);
         videoView.setVisibility(View.VISIBLE);
         videoView.setAlpha(1f);
-        try {
-            videoView.pause();
-            videoView.seekTo(1);
-        } catch (Exception ignored) {
-        }
     }
 
     private void startPreparedVideoPlayback() {

@@ -152,17 +152,19 @@ public class AndoWSignage extends Activity {
 	private PageRuntime specialPageRuntime;
 	private PageBuildSpec stagedPageSpec;
 	private PageBuildSpec specialPageSpec;
-	private static final long NEXT_LAYOUT_STAGE_DELAY_MS = 600L;
+	private static final long NEXT_LAYOUT_STAGE_DELAY_MS = 1200L;
 	private static final long POST_ACTIVATION_CLEANUP_DELAY_MS = 48L;
 	private static final long SPECIAL_SCHEDULE_PRELOAD_LOOKAHEAD_MS = 60000L;
 	private static final long SLOT_APPLY_FRAME_DELAY_MS = 16L;
 	private static final long SLOT_PREPARE_FRAME_DELAY_MS = 16L;
+	private static final long POST_SWITCH_TICK_SUPPRESS_MS = 1500L;
 	private static final int PRECREATED_MEDIA_SLOT_COUNT = 4;
 	private static final ExecutorService pageBuildExecutor = Executors.newSingleThreadExecutor();
 	private boolean stageNextDeferredPending = false;
 	private boolean usbPlaybackActive = false;
 	private MediaView usbPlaybackView;
 	private int pageBuildGeneration = 0;
+	private long lastRuntimeActivationAtMillis = 0L;
 	private String pendingStageBuildPlaylistName = "";
 	private String pendingStageBuildPageName = "";
 	private String pendingSpecialBuildPlaylistName = "";
@@ -1676,6 +1678,7 @@ public class AndoWSignage extends Activity {
 		moveContainerOnScreen(nextRuntime.container);
 		nextRuntime.container.bringToFront();
 		activePageRuntime = nextRuntime;
+		lastRuntimeActivationAtMillis = System.currentTimeMillis();
 		syncActiveViews(activePageRuntime);
 		configurePageTimers(nextRuntime.pageData);
 		pageIdx = nextRuntime.nextPageIndexAfterActivate;
@@ -1955,6 +1958,7 @@ public class AndoWSignage extends Activity {
 	}
 	
 	void tickToAllViews() {
+		long now = System.currentTimeMillis();
 		for (View view: elementViewList) {
 			if(view instanceof PlaybackSlotView) {
 				((PlaybackSlotView) view).tick();
@@ -1969,10 +1973,17 @@ public class AndoWSignage extends Activity {
 			}
 			return;
 		}
-		refreshSchedulePlaybackState(System.currentTimeMillis());
-		if (!maybeSwitchScheduledPlayback(System.currentTimeMillis())
+		if (lastRuntimeActivationAtMillis > 0
+				&& now - lastRuntimeActivationAtMillis < POST_SWITCH_TICK_SUPPRESS_MS) {
+			if (debugOverlayVisible) {
+				refreshDebugOverlay();
+			}
+			return;
+		}
+		refreshSchedulePlaybackState(now);
+		if (!maybeSwitchScheduledPlayback(now)
 				&& !stageNextDeferredPending
-				&& System.currentTimeMillis() >= nextStageAllowedAtMillis) {
+				&& now >= nextStageAllowedAtMillis) {
 			stageNextPlaybackTarget();
 		}
 		stageSpecialPlaybackTarget();
