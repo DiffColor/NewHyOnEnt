@@ -23,6 +23,7 @@ import com.nostra13.universalimageloader.core.assist.ImageScaleType;
 import com.nostra13.universalimageloader.core.listener.SimpleImageLoadingListener;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -54,7 +55,7 @@ public class MediaView extends RelativeLayout {
     ImageView imgView1;
     ImageView imgView2;
     TurtleVideoView videoView;
-    TurtleWebView webView;
+    // 현재 seamless 재생 구조에서는 WebView 기반 콘텐츠를 사용하지 않는다.
 
     Activity act;
     Context ctx;
@@ -87,11 +88,14 @@ public class MediaView extends RelativeLayout {
 
     DisplayImageOptions imgOpt;
     private static final ExecutorService loopExecutor = Executors.newCachedThreadPool();
+    private String mediaConfigurationSignature = "";
+    private boolean mediaConfigured = false;
+    private int mediaConfigurationVersion = 0;
 
     public MediaView(Activity act, Context context, int width, int height, List<MediaDataModel> cdmList) {
         super(context);
 
-        this.cdmList = cdmList;
+        this.cdmList = cdmList != null ? cdmList : new ArrayList<MediaDataModel>();
         ctx = context;
         this.act = act;
 
@@ -103,6 +107,45 @@ public class MediaView extends RelativeLayout {
         setOtherSettings();
 
         mLoopPlay = new LoopPlay();
+    }
+
+    public void configureMediaContents(int width, int height, List<MediaDataModel> contents) {
+        setMinimumWidth(width);
+        setMinimumHeight(height);
+        List<MediaDataModel> nextContents = copyMediaContents(contents);
+        String nextSignature = buildMediaConfigurationSignature(nextContents);
+        boolean changed = !nextSignature.equals(mediaConfigurationSignature);
+        this.cdmList = nextContents;
+        mediaConfigured = !this.cdmList.isEmpty();
+        if (!changed) {
+            return;
+        }
+        mediaConfigurationSignature = nextSignature;
+        mediaConfigurationVersion++;
+        resetPlaybackState();
+    }
+
+    public void deactivateMediaContents() {
+        stopPlaylist();
+        hideAllImageOverlays();
+        if (videoView != null) {
+            videoView.setVisibility(View.GONE);
+            resetViewPosition(videoView);
+        }
+        setVisibility(View.GONE);
+    }
+
+    public void releaseMediaContents() {
+        mediaConfigurationSignature = "";
+        mediaConfigured = false;
+        mediaConfigurationVersion++;
+        this.cdmList = new ArrayList<MediaDataModel>();
+        resetPlaybackState();
+        setVisibility(View.GONE);
+    }
+
+    public boolean hasConfiguredContents() {
+        return mediaConfigured && cdmList != null && !cdmList.isEmpty();
     }
 
     private void initChildViews() {
@@ -132,13 +175,9 @@ public class MediaView extends RelativeLayout {
             videoView.setKeepAspectRatio(false);
         }
 
-        webView = new TurtleWebView(ctx, getMinimumWidth(), getMinimumHeight());
-        webView.setVisibility(View.GONE);
-
         addView(videoView, params);
         addView(imgView1, params);
         addView(imgView2, params);
-        addView(webView, params);
         restoreVisibleOutputs();
     }
 
@@ -221,10 +260,11 @@ public class MediaView extends RelativeLayout {
         contentIdx = 0;
         s_isFirst = true;
 
-        if (cdmList == null || cdmList.isEmpty()) {
+        if (!hasConfiguredContents()) {
             notifyPrepared();
             return;
         }
+        final int configVersion = mediaConfigurationVersion;
 
         int currentIndex = 0;
         int nextIndex = cdmList.size() > 1 ? 1 : 0;
@@ -239,11 +279,11 @@ public class MediaView extends RelativeLayout {
 
         switch (preparedInitialType) {
             case Image:
-                prepareInitialImage(preparedInitialPath, preparedNextType, preparedNextPath);
+                prepareInitialImage(preparedInitialPath, preparedNextType, preparedNextPath, configVersion);
                 break;
 
             case Video:
-                prepareInitialVideo(preparedInitialPath, preparedInitialMuted, preparedNextType, preparedNextPath);
+                prepareInitialVideo(preparedInitialPath, preparedInitialMuted, preparedNextType, preparedNextPath, configVersion);
                 break;
 
             default:
@@ -342,6 +382,17 @@ public class MediaView extends RelativeLayout {
             playbackReadyNotified = false;
             removeCallbacks(playbackReadyFallbackRunnable);
         }
+    }
+
+    private void resetPlaybackState() {
+        stopPlaylist();
+        hideAllImageOverlays();
+        if (videoView != null) {
+            videoView.setMediaInfoListener(null);
+            videoView.setVisibility(View.GONE);
+            resetViewPosition(videoView);
+        }
+        setVisibility(View.GONE);
     }
 
     @Override
@@ -526,36 +577,13 @@ public class MediaView extends RelativeLayout {
                                 break;
 
                             case Flash:
-
-                                releaseUsedResources(usedType, type1, false, false);
-
-                                String html = "<object width=\"550\" height=\"400\"> <param name=\"movie\" value=\"file://" + contentData[1] + "\"> <embed src=\"file://" + contentData[1] + "\" width=\"550\" height=\"400\"> </embed> </object>";
-                                String mimeType = "text/html";
-                                String encoding = "utf-8";
-
-                                webView.loadDataWithBaseURL("null", html, mimeType, encoding, "");
-
-                                webView.setVisibility(View.VISIBLE);
-                                webView.setBackgroundColor(Color.BLACK);
-
-                                if (usedType == CONTENT_TYPE.Image) {
-                                    imgView1.setVisibility(View.GONE);
-                                    imgView2.setVisibility(View.GONE);
-                                }
+                                // 현재 seamless 재생 구조에서는 WebView 기반 콘텐츠를 사용하지 않는다.
+                                popContent();
                                 break;
 
                             case WebSiteURL:
-                                releaseUsedResources(usedType, type1, false, false);
-
-                                webView.loadUrl(contentData[1]);
-
-                                webView.setBackgroundColor(Color.WHITE);
-                                webView.setVisibility(View.VISIBLE);
-
-                                if (usedType == CONTENT_TYPE.Image) {
-                                    imgView1.setVisibility(View.GONE);
-                                    imgView2.setVisibility(View.GONE);
-                                }
+                                // 현재 seamless 재생 구조에서는 WebView 기반 콘텐츠를 사용하지 않는다.
+                                popContent();
                                 break;
 
                             case PPT:
@@ -592,7 +620,6 @@ public class MediaView extends RelativeLayout {
                             break;
 
                         case WebSiteURL:
-                            webView.releaseWebView();
                             break;
                     }
                 }
@@ -976,7 +1003,7 @@ public class MediaView extends RelativeLayout {
         }
     }
 
-    private void prepareInitialImage(final String filePath, final CONTENT_TYPE nextType, final String nextPath) {
+    private void prepareInitialImage(final String filePath, final CONTENT_TYPE nextType, final String nextPath, final int configVersion) {
         restoreVisibleOutputs();
         final ImageView target = imgView1;
         final ImageView preloadTarget = imgView2;
@@ -996,6 +1023,9 @@ public class MediaView extends RelativeLayout {
                 new SimpleImageLoadingListener() {
                     @Override
                     public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
+                        if (!isCurrentMediaConfiguration(configVersion)) {
+                            return;
+                        }
                         if (nextType == CONTENT_TYPE.Image && preloadTarget != null) {
                             preloadTarget.setAlpha(0f);
                             preloadTarget.setVisibility(View.VISIBLE);
@@ -1007,6 +1037,9 @@ public class MediaView extends RelativeLayout {
 
                     @Override
                     public void onLoadingFailed(String imageUri, View view, FailReason failReason) {
+                        if (!isCurrentMediaConfiguration(configVersion)) {
+                            return;
+                        }
                         initialPrepared = true;
                         notifyPrepared();
                     }
@@ -1016,7 +1049,8 @@ public class MediaView extends RelativeLayout {
     private void prepareInitialVideo(final String videoPath,
                                      final boolean muted,
                                      final CONTENT_TYPE nextType,
-                                     final String nextPath) {
+                                     final String nextPath,
+                                     final int configVersion) {
         restoreVisibleOutputs();
         String normalizedPath = normalizeLocalVideoPath(videoPath);
         if (!isPlayableLocalVideo(normalizedPath)) {
@@ -1033,6 +1067,9 @@ public class MediaView extends RelativeLayout {
         videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
             @Override
             public void onPrepared(MediaPlayer mp) {
+                if (!isCurrentMediaConfiguration(configVersion)) {
+                    return;
+                }
                 try {
                     videoView.pause();
                     videoView.seekTo(1);
@@ -1121,7 +1158,6 @@ public class MediaView extends RelativeLayout {
         resetViewPosition(videoView);
         resetViewPosition(imgView1);
         resetViewPosition(imgView2);
-        resetViewPosition(webView);
     }
 
     private void resetViewPosition(View view) {
@@ -1130,6 +1166,32 @@ public class MediaView extends RelativeLayout {
         }
         view.setTranslationX(0f);
         view.setTranslationY(0f);
+    }
+
+    private List<MediaDataModel> copyMediaContents(List<MediaDataModel> contents) {
+        return contents != null ? new ArrayList<>(contents) : new ArrayList<MediaDataModel>();
+    }
+
+    private String buildMediaConfigurationSignature(List<MediaDataModel> contents) {
+        if (contents == null || contents.isEmpty()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (MediaDataModel model : contents) {
+            if (model == null) {
+                builder.append("null;");
+                continue;
+            }
+            builder.append(model.getType()).append('|')
+                    .append(model.getFilePath()).append('|')
+                    .append(model.getPlayTimeSec()).append('|')
+                    .append(model.isMuted()).append(';');
+        }
+        return builder.toString();
+    }
+
+    private boolean isCurrentMediaConfiguration(int configVersion) {
+        return configVersion == mediaConfigurationVersion;
     }
 
 }

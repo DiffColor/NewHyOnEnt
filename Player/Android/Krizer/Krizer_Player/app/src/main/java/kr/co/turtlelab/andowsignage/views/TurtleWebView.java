@@ -17,6 +17,7 @@ import android.webkit.WebViewClient;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
@@ -26,6 +27,7 @@ import kr.co.turtlelab.andowsignage.tools.SystemUtils;
 
 public class TurtleWebView extends WebView {
 	private static Field sConfigCallback;
+	private Runnable pendingPreparedCallback;
 
 	static {
 		try {
@@ -77,10 +79,29 @@ public class TurtleWebView extends WebView {
 
 		setBrowserOptions();
 
-		if(dataList.size() > 0) {
-			String url = NetworkUtils.buildHttpUrl(AndoWSignageApp.MANAGER_IP, "http", -1, dataList.get(0).getRemoteSubPath());
+		bindTemplateContents(dataList);
+	}
+
+	public void bindTemplateContents(List<MediaDataModel> dataList) {
+		bindTemplateContents(dataList, null);
+	}
+
+	public void bindTemplateContents(List<MediaDataModel> dataList, Runnable onPrepared) {
+		pendingPreparedCallback = onPrepared;
+		List<MediaDataModel> safeDataList = dataList != null ? dataList : new ArrayList<MediaDataModel>();
+		if(safeDataList.size() > 0) {
+			String url = NetworkUtils.buildHttpUrl(AndoWSignageApp.MANAGER_IP, "http", -1, safeDataList.get(0).getRemoteSubPath());
 			this.loadUrl(url);
+			setVisibility(VISIBLE);
+			return;
 		}
+		resetContent();
+	}
+
+	public void resetContent() {
+		pendingPreparedCallback = null;
+		releaseWebView();
+		setVisibility(GONE);
 	}
 	
 	@SuppressLint("JavascriptInterface")
@@ -173,6 +194,13 @@ public class TurtleWebView extends WebView {
 		@Override
 		public void onPageFinished(WebView view, String url) {
 			super.onPageFinished(view, url);
+			if (view instanceof TurtleWebView) {
+				Runnable callback = ((TurtleWebView) view).pendingPreparedCallback;
+				((TurtleWebView) view).pendingPreparedCallback = null;
+				if (callback != null) {
+					callback.run();
+				}
+			}
 		}
 
 		@Override
