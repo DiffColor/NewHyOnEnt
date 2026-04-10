@@ -1639,7 +1639,6 @@ public class AndoWSignage extends Activity {
 			return;
 		}
 		runtime.prepareCancelled = true;
-		stopRuntime(runtime);
 		runtime.pendingPreparationCount = 0;
 		runtime.prepared = false;
 		runtime.startInProgress = false;
@@ -1648,6 +1647,7 @@ public class AndoWSignage extends Activity {
 			runtime.container.setVisibility(View.VISIBLE);
 			moveContainerOffScreen(runtime.container);
 		}
+		stopRuntime(runtime);
 	}
 
 	private void beginRuntimeActivation(PageRuntime nextRuntime) {
@@ -1689,8 +1689,8 @@ public class AndoWSignage extends Activity {
 			scheduleDeferredStageNextPlayback(NEXT_LAYOUT_STAGE_DELAY_MS);
 		} else {
 			startRuntimePlayback(nextRuntime);
-			stopRuntime(previousRuntime);
 			hideContainerImmediately(previousRuntime.container);
+			stopRuntime(previousRuntime);
 			schedulePreviousRuntimeCleanup(previousRuntime, new Runnable() {
 				@Override
 				public void run() {
