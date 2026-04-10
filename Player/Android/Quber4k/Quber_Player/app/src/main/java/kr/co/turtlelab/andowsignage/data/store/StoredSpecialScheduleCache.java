@@ -1,21 +1,36 @@
-package kr.co.turtlelab.andowsignage.data.realm;
+package kr.co.turtlelab.andowsignage.data.store;
 
-import io.realm.RealmObject;
-import io.realm.annotations.PrimaryKey;
+import io.objectbox.annotation.Entity;
+import io.objectbox.annotation.Id;
+import io.objectbox.annotation.Unique;
+import kr.co.turtlelab.andowsignage.data.objectbox.BusinessId;
 
 /**
  * Windows SpecialScheduleCache와 동일 목적의 로컬 캐시.
  * 복잡한 중첩 구조는 JSON 문자열로 보관한다.
  */
-public class RealmSpecialScheduleCache extends RealmObject {
+@Entity
+public class StoredSpecialScheduleCache {
 
-    @PrimaryKey
+    @Id
+    private long objectBoxId;
+
+    @BusinessId
+    @Unique
     private String id;
     private String playerId;
     private String playerName;
     private String updatedAt;
     private String schedulesJson;
     private String playlistsJson;
+
+    public long getObjectBoxId() {
+        return objectBoxId;
+    }
+
+    public void setObjectBoxId(long objectBoxId) {
+        this.objectBoxId = objectBoxId;
+    }
 
     public String getId() {
         return id;

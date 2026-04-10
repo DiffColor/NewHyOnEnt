@@ -1,11 +1,18 @@
-package kr.co.turtlelab.andowsignage.data.realm;
+package kr.co.turtlelab.andowsignage.data.store;
 
-import io.realm.RealmObject;
-import io.realm.annotations.PrimaryKey;
+import io.objectbox.annotation.Entity;
+import io.objectbox.annotation.Id;
+import io.objectbox.annotation.Unique;
+import kr.co.turtlelab.andowsignage.data.objectbox.BusinessId;
 
-public class RealmContent extends RealmObject {
+@Entity
+public class StoredContent {
 
-    @PrimaryKey
+    @Id
+    private long objectBoxId;
+
+    @BusinessId
+    @Unique
     private String uid;
     private String elementId;
     private String fileName;
@@ -16,6 +23,14 @@ public class RealmContent extends RealmObject {
     private boolean valid;
     private boolean fileExist;
     private int scrollSpeedSec;
+
+    public long getObjectBoxId() {
+        return objectBoxId;
+    }
+
+    public void setObjectBoxId(long objectBoxId) {
+        this.objectBoxId = objectBoxId;
+    }
 
     public String getUid() {
         return uid;
@@ -74,6 +89,10 @@ public class RealmContent extends RealmObject {
     }
 
     public boolean isContentValid() {
+        return valid;
+    }
+
+    public boolean getValid() {
         return valid;
     }
 

@@ -61,25 +61,20 @@ public class NetworkUtils {
     }
 
 	public static String getMACAddress() {
-        String macAddress = "";
-
         try {
-            if (AndoWSignageApp.networkState == TYPE_WIFI) {
-                macAddress = getMACAddressByWifiPath();
-                if(macAddress.length() < 1)
-                    macAddress = getMACAddressByInterfaceName("wlan0");
-                if(macAddress.length() < 1)
-                    macAddress = getMACAddressByInterfaceName("wlan1");
-            } else {
-                macAddress = getMACAddressByEthernetPath();
-                if(macAddress.length() < 1)
-                    macAddress = getMACAddressByInterfaceName("eth0");
-                if(macAddress.length() < 1)
-                    macAddress = getMACAddressByInterfaceName("eth1");
+            String ethernetMac = QuberAgentClient.get().readEthernetMacAddress();
+            if (!TextUtils.isEmpty(ethernetMac)) {
+                return ethernetMac;
             }
-        } catch (Exception ee) {}
 
-        return macAddress;
+            String wifiMac = QuberAgentClient.get().readWifiMacAddress();
+            if (!TextUtils.isEmpty(wifiMac)) {
+                return wifiMac;
+            }
+        } catch (Exception ignored) {
+        }
+
+        return "";
     }
 
     public static String getMACAddressByInterfaceName(String interfaceName) {

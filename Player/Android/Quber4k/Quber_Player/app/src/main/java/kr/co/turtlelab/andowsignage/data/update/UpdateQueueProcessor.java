@@ -8,10 +8,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import io.realm.Realm;
-import io.realm.RealmResults;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxResults;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
+import kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue;
 import kr.co.turtlelab.andowsignage.data.update.UpdateThrottleModels.UpdateLeaseEntry;
 import kr.co.turtlelab.andowsignage.data.update.UpdateThrottleModels.UpdateThrottleSettings;
 import kr.co.turtlelab.andowsignage.data.update.UpdateLeaseClient;
@@ -24,7 +24,7 @@ import kr.co.turtlelab.andowsignage.data.update.UpdateThrottleSettingsClient;
 public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler {
 
     public interface QueueApplier {
-        boolean apply(RealmUpdateQueue queue);
+        boolean apply(StoredUpdateQueue queue);
     }
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -87,19 +87,19 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
     }
 
     public boolean processImmediate(long queueId, boolean ignoreLease) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmUpdateQueue queue = realm.where(RealmUpdateQueue.class)
+            StoredUpdateQueue queue = storeDb.where(StoredUpdateQueue.class)
                     .equalTo("id", queueId)
                     .findFirst();
             if (queue == null) {
                 return false;
             }
-            RealmUpdateQueue snapshot = realm.copyFromRealm(queue);
+            StoredUpdateQueue snapshot = storeDb.copyEntity(queue);
             processQueueInternal(snapshot, ignoreLease);
             return true;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -127,7 +127,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
     }
 
     @Override
-    public boolean ensureLease(RealmUpdateQueue queue, UpdateThrottleSettings settings) {
+    public boolean ensureLease(StoredUpdateQueue queue, UpdateThrottleSettings settings) {
         if (queue == null) {
             return false;
         }
@@ -181,11 +181,11 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
     }
 
     private void processNext() {
-        Realm realm = Realm.getDefaultInstance();
-        RealmUpdateQueue queue;
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        StoredUpdateQueue queue;
         try {
-            realm.beginTransaction();
-            RealmResults<RealmUpdateQueue> pending = realm.where(RealmUpdateQueue.class)
+            storeDb.beginTransaction();
+            ObjectBoxResults<StoredUpdateQueue> pending = storeDb.where(StoredUpdateQueue.class)
                     .in("status", new String[]{
                             UpdateQueueContract.Status.QUEUED,
                             UpdateQueueContract.Status.DOWNLOADING,
@@ -195,20 +195,20 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
                     .sort("id")
                     .findAll();
             if (pending.isEmpty()) {
-                realm.cancelTransaction();
-                realm.close();
+                storeDb.cancelTransaction();
+                storeDb.close();
                 return;
             }
-            queue = realm.copyFromRealm(pending.first());
-            realm.commitTransaction();
+            queue = storeDb.copyEntity(pending.first());
+            storeDb.commitTransaction();
         } catch (Exception e) {
-            if (realm.isInTransaction()) {
-                realm.cancelTransaction();
+            if (storeDb.isInTransaction()) {
+                storeDb.cancelTransaction();
             }
-            realm.close();
+            storeDb.close();
             return;
         }
-        realm.close();
+        storeDb.close();
 
         long now = System.currentTimeMillis();
         // 재시도 대기 중이면 다음 스케줄까지 대기
@@ -222,7 +222,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
         processQueueInternal(queue, false);
     }
 
-    private void processQueueInternal(RealmUpdateQueue queue, boolean ignoreLease) {
+    private void processQueueInternal(StoredUpdateQueue queue, boolean ignoreLease) {
         if (queue == null) {
             return;
         }
@@ -247,14 +247,14 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
         }
     }
 
-    private void handleQueued(RealmUpdateQueue queue, boolean ignoreLease) {
+    private void handleQueued(StoredUpdateQueue queue, boolean ignoreLease) {
         String playerId = UpdateQueueHelper.getPlayerId(queue);
         UpdateQueueHelper.updateStatus(queue.getId(), UpdateQueueContract.Status.DOWNLOADING);
         UpdateProgressTracker tracker = new UpdateProgressTracker(queue.getId(), playerId, queue.getExternalId());
         handleDownloading(queue, ignoreLease);
     }
 
-    private void handleDownloading(RealmUpdateQueue queue, boolean ignoreLeaseFlag) {
+    private void handleDownloading(StoredUpdateQueue queue, boolean ignoreLeaseFlag) {
         String playerId = UpdateQueueHelper.getPlayerId(queue);
         UpdateProgressTracker tracker = new UpdateProgressTracker(queue.getId(), playerId, queue.getExternalId());
         tracker.stepDownload(0f);
@@ -300,7 +300,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
         }
     }
 
-    private void handleDownloaded(RealmUpdateQueue queue) {
+    private void handleDownloaded(StoredUpdateQueue queue) {
         String playerId = UpdateQueueHelper.getPlayerId(queue);
         UpdateProgressTracker tracker = new UpdateProgressTracker(queue.getId(), playerId, queue.getExternalId());
         UpdateQueueHelper.updateStatus(queue.getId(), UpdateQueueContract.Status.VALIDATING);
@@ -325,15 +325,15 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
         }
     }
 
-    private void handleValidating(RealmUpdateQueue queue) {
+    private void handleValidating(StoredUpdateQueue queue) {
         handleDownloaded(queue);
     }
 
-    private void handleReady(RealmUpdateQueue queue) {
+    private void handleReady(StoredUpdateQueue queue) {
         UpdateQueueHelper.updateStatus(queue.getId(), UpdateQueueContract.Status.READY);
     }
 
-    private void scheduleLeaseRetry(RealmUpdateQueue queue, UpdateThrottleSettings settings, String reason) {
+    private void scheduleLeaseRetry(StoredUpdateQueue queue, UpdateThrottleSettings settings, String reason) {
         if (queue == null) {
             return;
         }
@@ -345,7 +345,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
         UpdateQueueHelper.scheduleLeaseRetry(queue.getId(), nextRetryAt, "LEASE", reason);
     }
 
-    private boolean shouldIgnoreLease(RealmUpdateQueue queue) {
+    private boolean shouldIgnoreLease(StoredUpdateQueue queue) {
         if (queue == null) {
             return false;
         }
@@ -356,7 +356,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
         return !TextUtils.isEmpty(error) && error.toUpperCase(Locale.US).startsWith("LEASE");
     }
 
-    private boolean hasDownloads(RealmUpdateQueue queue) {
+    private boolean hasDownloads(StoredUpdateQueue queue) {
         if (queue == null) {
             return false;
         }
@@ -364,7 +364,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
         return journal != null && journal.getEntries() != null && !journal.getEntries().isEmpty();
     }
 
-    private String getQueueKey(RealmUpdateQueue queue) {
+    private String getQueueKey(StoredUpdateQueue queue) {
         if (queue == null) {
             return "";
         }
@@ -376,9 +376,9 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
     }
 
     private boolean hasLocalActiveDownloads(String playerId) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            List<RealmUpdateQueue> list = realm.where(RealmUpdateQueue.class)
+            List<StoredUpdateQueue> list = storeDb.where(StoredUpdateQueue.class)
                     .in("status", new String[]{
                             UpdateQueueContract.Status.DOWNLOADING,
                             UpdateQueueContract.Status.DOWNLOADED,
@@ -392,7 +392,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
             if (TextUtils.isEmpty(playerId)) {
                 return true;
             }
-            for (RealmUpdateQueue q : list) {
+            for (StoredUpdateQueue q : list) {
                 String owner = UpdateQueueHelper.getPlayerId(q);
                 if (!TextUtils.isEmpty(owner) && owner.equalsIgnoreCase(playerId)) {
                     return true;
@@ -400,7 +400,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
             }
             return false;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -422,7 +422,7 @@ public class UpdateQueueProcessor implements UpdateQueueDownloader.LeaseHandler 
         nextLeaseRenewAt = 0L;
     }
 
-    private void releaseLeaseIfOwner(RealmUpdateQueue queue) {
+    private void releaseLeaseIfOwner(StoredUpdateQueue queue) {
         if (queue == null) {
             return;
         }

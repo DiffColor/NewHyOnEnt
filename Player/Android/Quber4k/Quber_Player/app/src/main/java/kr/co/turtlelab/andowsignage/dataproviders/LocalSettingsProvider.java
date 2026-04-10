@@ -10,9 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import io.realm.Realm;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.data.realm.RealmLocalSettings;
+import kr.co.turtlelab.andowsignage.data.store.StoredLocalSettings;
 import kr.co.turtlelab.andowsignage.datamodels.LocalSettingsModel;
 import kr.co.turtlelab.andowsignage.tools.AuthUtils;
 import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
@@ -49,19 +49,15 @@ public class LocalSettingsProvider {
 
     private static LocalSettingsModel loadOrCreateSettings() {
         LocalSettingsModel model = new LocalSettingsModel();
-        Realm realm = null;
+        ObjectBoxDb storeDb = null;
         try {
-            realm = Realm.getDefaultInstance();
-            RealmLocalSettings settings = realm.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
+            storeDb = ObjectBoxDb.getDefaultInstance();
+            StoredLocalSettings settings = findStoredSettings(storeDb);
             if (settings == null) {
-                realm.close();
+                storeDb.close();
                 createNewLocalSettings();
-                realm = Realm.getDefaultInstance();
-                settings = realm.where(RealmLocalSettings.class)
-                        .equalTo("id", LOCAL_SETTINGS_ID)
-                        .findFirst();
+                storeDb = ObjectBoxDb.getDefaultInstance();
+                settings = findStoredSettings(storeDb);
             }
             if (settings != null) {
                 model.setManualIPState(settings.isManualIpEnabled());
@@ -79,11 +75,11 @@ public class LocalSettingsProvider {
                 model.setFtpPasvMinPort(settings.getFtpPasvMinPort());
                 model.setFtpPasvMaxPort(settings.getFtpPasvMaxPort());
                 model.setFtpRootPath(settings.getFtpRootPath());
-                ensureBackupFromRealmSettings(settings);
+                ensureBackupFromSettings(settings);
             }
         } finally {
-            if (realm != null && !realm.isClosed()) {
-                realm.close();
+            if (storeDb != null && !storeDb.isClosed()) {
+                storeDb.close();
             }
         }
         return model;
@@ -97,30 +93,25 @@ public class LocalSettingsProvider {
         String resolvedPlayerId = AndoWSignageApp.PLAYER_ID;
         String resolvedManagerIp = AndoWSignageApp.MANAGER_IP;
         String resolvedManualIp = AndoWSignageApp.MANUAL_IP;
-        Realm realmPlayer = null;
+        ObjectBoxDb storedPlayer = null;
         try {
-            realmPlayer = Realm.getDefaultInstance();
-            kr.co.turtlelab.andowsignage.data.realm.RealmPlayer rp =
-                    realmPlayer.where(kr.co.turtlelab.andowsignage.data.realm.RealmPlayer.class).findFirst();
+            storedPlayer = ObjectBoxDb.getDefaultInstance();
+            kr.co.turtlelab.andowsignage.data.store.StoredPlayer rp =
+                    storedPlayer.where(kr.co.turtlelab.andowsignage.data.store.StoredPlayer.class).findFirst();
             if (rp != null && !TextUtils.isEmpty(rp.getPlayerName())) {
                 resolvedPlayerId = rp.getPlayerName();
             }
         } catch (Exception ignored) {
         } finally {
-            if (realmPlayer != null) realmPlayer.close();
+            if (storedPlayer != null) storedPlayer.close();
         }
         final String playerId = resolvedPlayerId;
         final String managerIp = resolvedManagerIp;
         final String manualIp = resolvedManualIp;
 
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setManualIpEnabled(enableManualIp);
             settings.setKeepRatioEnabled(keepRatio);
             settings.setSwitchOnContentEnd(switchOnContentEnd);
@@ -138,198 +129,157 @@ public class LocalSettingsProvider {
             settings.setFtpRootPath("/NewHyOnEnt");
             applyBackupToSettings(settings, backupProperties);
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updateManualIPState(boolean state) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setManualIpEnabled(state);
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updateKeepRatioState(boolean state) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setKeepRatioEnabled(state);
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updateSwitchOnContentEndState(boolean state) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setSwitchOnContentEnd(state);
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updateUsbAuthKey(String encodedKey) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setUsbAuthKey(encodedKey == null ? "" : encodedKey);
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updatePlayerId(String playerId) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setPlayerId(playerId == null ? "" : playerId);
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updateManagerIp(String managerIp) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setManagerIp(managerIp == null ? "" : managerIp);
+            settings.setDataServerIp("");
+            settings.setMessageServerIp("");
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updateManualIp(String manualIp) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setManualIp(manualIp == null ? "" : manualIp);
+            settings.setDataServerIp("");
+            settings.setMessageServerIp("");
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updateSignalrPort(int port) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setSignalrPort(port);
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static void updateSignalrHubPath(String hubPath) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = r.where(RealmLocalSettings.class)
-                    .equalTo("id", LOCAL_SETTINGS_ID)
-                    .findFirst();
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             settings.setSignalrHubPath(hubPath == null ? "" : hubPath);
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static int getSignalrPort() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             return settings != null ? settings.getSignalrPort() : 0;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static String getSignalrHubPath() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             return settings != null ? settings.getSignalrHubPath() : "";
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static String getUsbAuthKey() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             return settings != null ? settings.getUsbAuthKey() : "";
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static String getManagerIp() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             if (settings != null && !TextUtils.isEmpty(settings.getManagerIp())) {
                 return settings.getManagerIp();
             }
             return AndoWSignageApp.MANAGER_IP == null ? "" : AndoWSignageApp.MANAGER_IP;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static String getManualIp() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             if (settings != null && !TextUtils.isEmpty(settings.getManualIp())) {
                 return settings.getManualIp();
             }
             return AndoWSignageApp.MANUAL_IP == null ? "" : AndoWSignageApp.MANUAL_IP;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -339,12 +289,9 @@ public class LocalSettingsProvider {
                                                    int ftpPasvMinPort,
                                                    int ftpPasvMaxPort,
                                                    String ftpRootPath) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmLocalSettings settings = rWhere(r);
-            if (settings == null) {
-                settings = r.createObject(RealmLocalSettings.class, LOCAL_SETTINGS_ID);
-            }
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredLocalSettings settings = getOrCreateStoredSettings(r);
             if (!TextUtils.isEmpty(dataServerIp)) {
                 settings.setDataServerIp(dataServerIp.trim());
             }
@@ -368,27 +315,27 @@ public class LocalSettingsProvider {
                 settings.setFtpRootPath(normalizeFtpRootPath(ftpRootPath));
             }
         });
-        realm.close();
+        storeDb.close();
         persistCurrentSettings();
     }
 
     public static String getDataServerIp() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             if (settings == null || TextUtils.isEmpty(settings.getDataServerIp())) {
                 return "";
             }
             return settings.getDataServerIp();
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static String getMessageServerIp() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             if (settings == null) {
                 return "";
             }
@@ -397,14 +344,14 @@ public class LocalSettingsProvider {
             }
             return "";
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static int getFtpPort() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             if (settings == null) {
                 return AndoWSignageApp.FTP_PORT;
             }
@@ -414,20 +361,20 @@ public class LocalSettingsProvider {
             }
             return value;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static String getFtpRootPath() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             if (settings == null || TextUtils.isEmpty(settings.getFtpRootPath())) {
                 return "/NewHyOnEnt";
             }
             return normalizeFtpRootPath(settings.getFtpRootPath());
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -438,7 +385,7 @@ public class LocalSettingsProvider {
         }
     }
 
-    private static void ensureBackupFromRealmSettings(RealmLocalSettings settings) {
+    private static void ensureBackupFromSettings(StoredLocalSettings settings) {
         File backupFile = getBackupFile();
         if (backupFile.exists()) {
             return;
@@ -447,14 +394,14 @@ public class LocalSettingsProvider {
     }
 
     private static void persistCurrentSettings() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmLocalSettings settings = rWhere(realm);
+            StoredLocalSettings settings = rWhere(storeDb);
             if (settings != null) {
                 writeBackupProperties(settings);
             }
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -496,7 +443,7 @@ public class LocalSettingsProvider {
         return properties;
     }
 
-    private static void writeBackupProperties(RealmLocalSettings settings) {
+    private static void writeBackupProperties(StoredLocalSettings settings) {
         if (settings == null) {
             return;
         }
@@ -525,7 +472,7 @@ public class LocalSettingsProvider {
         }
     }
 
-    private static void applyBackupToSettings(RealmLocalSettings settings, Properties properties) {
+    private static void applyBackupToSettings(StoredLocalSettings settings, Properties properties) {
         if (settings == null || properties == null || properties.isEmpty()) {
             return;
         }
@@ -603,10 +550,31 @@ public class LocalSettingsProvider {
         return TextUtils.isEmpty(normalized) ? "/" : normalized;
     }
 
-    private static RealmLocalSettings rWhere(Realm realm) {
-        return realm.where(RealmLocalSettings.class)
+    private static StoredLocalSettings rWhere(ObjectBoxDb storeDb) {
+        return findStoredSettings(storeDb);
+    }
+
+    private static StoredLocalSettings findStoredSettings(ObjectBoxDb storeDb) {
+        if (storeDb == null) {
+            return null;
+        }
+        StoredLocalSettings settings = storeDb.where(StoredLocalSettings.class).findFirst();
+        if (settings != null) {
+            return settings;
+        }
+        return storeDb.where(StoredLocalSettings.class)
                 .equalTo("id", LOCAL_SETTINGS_ID)
                 .findFirst();
+    }
+
+    private static StoredLocalSettings getOrCreateStoredSettings(ObjectBoxDb storeDb) {
+        StoredLocalSettings settings = findStoredSettings(storeDb);
+        if (settings == null) {
+            settings = storeDb.createObject(StoredLocalSettings.class, LOCAL_SETTINGS_ID);
+        } else if (TextUtils.isEmpty(settings.getId())) {
+            settings.setId(LOCAL_SETTINGS_ID);
+        }
+        return settings;
     }
 
     public static boolean hasStoredUsbKeyForDevice() {

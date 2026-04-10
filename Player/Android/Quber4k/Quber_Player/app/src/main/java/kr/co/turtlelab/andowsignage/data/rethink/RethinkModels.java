@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * DTO 모델들은 RethinkDB 에 저장된 AndoW Manager 의 스키마와 1:1 로 매핑된다.
- * Realm 저장 시에는 필요한 필드만 추려서 사용한다.
+ * 로컬 저장 시에는 필요한 필드만 추려서 사용한다.
  */
 public final class RethinkModels {
 

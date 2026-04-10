@@ -20,18 +20,17 @@ import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import io.realm.Realm;
-import io.realm.RealmList;
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.data.realm.RealmContent;
-import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
-import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
-import kr.co.turtlelab.andowsignage.data.realm.RealmPlayer;
-import kr.co.turtlelab.andowsignage.data.realm.RealmSpecialScheduleCache;
-import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
-import kr.co.turtlelab.andowsignage.data.realm.RealmWelcome;
-import kr.co.turtlelab.andowsignage.data.realm.RealmWeeklySchedule;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.store.StoredContent;
+import kr.co.turtlelab.andowsignage.data.store.StoredElement;
+import kr.co.turtlelab.andowsignage.data.store.StoredPage;
+import kr.co.turtlelab.andowsignage.data.store.StoredPlayer;
+import kr.co.turtlelab.andowsignage.data.store.StoredSpecialScheduleCache;
+import kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue;
+import kr.co.turtlelab.andowsignage.data.store.StoredWelcome;
+import kr.co.turtlelab.andowsignage.data.store.StoredWeeklySchedule;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkModels;
 import kr.co.turtlelab.andowsignage.data.update.ContentDownloadJournal;
@@ -47,7 +46,7 @@ import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
 import kr.co.turtlelab.andowsignage.tools.SystemUtils;
 
 /**
- * RethinkDB -> Realm 으로 데이터를 동기화한다.
+ * RethinkDB -> ObjectBox 로 데이터를 동기화한다.
  */
 public class DataSyncManager {
     private static final String TAG = "DataSyncManager";
@@ -91,7 +90,7 @@ public class DataSyncManager {
             return false;
         }
         List<RethinkModels.PageInfoRecord> pages = rethinkClient.fetchPagesByIds(pageList.getPages());
-        writeToRealm(player, pageList, pages);
+        writeToStorage(player, pageList, pages);
         rethinkClient.clearCommand(player.getGuid());
         return true;
     }
@@ -100,13 +99,13 @@ public class DataSyncManager {
         if (player == null)
             return false;
 
-        String realmPlayerKey = player.getPlayerName();
+        String storedPlayerKey = player.getPlayerName();
         RethinkModels.WeeklyScheduleRecord weekly = rethinkClient.fetchWeeklySchedule(player.getGuid());
-        if (TextUtils.isEmpty(realmPlayerKey)) {
-            realmPlayerKey = player.getGuid();
+        if (TextUtils.isEmpty(storedPlayerKey)) {
+            storedPlayerKey = player.getGuid();
         }
 
-        storeWeeklySchedule(realmPlayerKey, weekly);
+        storeWeeklySchedule(storedPlayerKey, weekly);
         return true;
     }
 
@@ -122,13 +121,13 @@ public class DataSyncManager {
         if (TextUtils.isEmpty(playerKey) || weekly == null) {
             return false;
         }
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmWeeklySchedule schedule = r.where(RealmWeeklySchedule.class)
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredWeeklySchedule schedule = r.where(StoredWeeklySchedule.class)
                     .equalTo("playerId", playerKey)
                     .findFirst();
             if (schedule == null) {
-                schedule = r.createObject(RealmWeeklySchedule.class, playerKey);
+                schedule = r.createObject(StoredWeeklySchedule.class, playerKey);
             }
             applyDayPayload(schedule, "MON", weekly.MonSch);
             applyDayPayload(schedule, "TUE", weekly.TueSch);
@@ -138,7 +137,7 @@ public class DataSyncManager {
             applyDayPayload(schedule, "SAT", weekly.SatSch);
             applyDayPayload(schedule, "SUN", weekly.SunSch);
         });
-        realm.close();
+        storeDb.close();
         return true;
     }
 
@@ -150,14 +149,14 @@ public class DataSyncManager {
                 ? new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA)
                         .format(new java.util.Date())
                 : payload.GeneratedAt;
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            realm.executeTransaction(r -> {
-                RealmSpecialScheduleCache cache = r.where(RealmSpecialScheduleCache.class)
+            storeDb.executeTransaction(r -> {
+                StoredSpecialScheduleCache cache = r.where(StoredSpecialScheduleCache.class)
                         .equalTo("id", cacheId)
                         .findFirst();
                 if (cache == null) {
-                    cache = r.createObject(RealmSpecialScheduleCache.class, cacheId);
+                    cache = r.createObject(StoredSpecialScheduleCache.class, cacheId);
                 }
                 cache.setPlayerId(payload.PlayerId == null ? "" : payload.PlayerId);
                 cache.setPlayerName(payload.PlayerName == null ? "" : payload.PlayerName);
@@ -167,7 +166,7 @@ public class DataSyncManager {
             });
             return true;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -199,7 +198,7 @@ public class DataSyncManager {
         if (isDuplicateQueue(contract, payloadJson, isScheduleQueue)) {
             return -1;
         }
-        RealmUpdateQueue enqueued = UpdateQueueHelper.enqueue(UpdateQueueContract.Type.PLAYLIST,
+        StoredUpdateQueue enqueued = UpdateQueueHelper.enqueue(UpdateQueueContract.Type.PLAYLIST,
                 payloadJson,
                 downloadJson,
                 0,
@@ -329,29 +328,29 @@ public class DataSyncManager {
         }
     }
 
-    private void writeToRealm(RethinkModels.PlayerInfoRecord player,
+    private void writeToStorage(RethinkModels.PlayerInfoRecord player,
                               RethinkModels.PageListRecord pageList,
                               List<RethinkModels.PageInfoRecord> pages) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         final Set<String> usedContentPaths = new HashSet<>();
-        realm.executeTransaction(r -> {
-            r.delete(RealmPage.class);
-            r.delete(RealmElement.class);
-            r.delete(RealmContent.class);
-            r.delete(RealmWelcome.class);
+        storeDb.executeTransaction(r -> {
+            r.delete(StoredPage.class);
+            r.delete(StoredElement.class);
+            r.delete(StoredContent.class);
+            r.delete(StoredWelcome.class);
 
-            RealmPlayer realmPlayer = r.where(RealmPlayer.class).findFirst();
-            if (realmPlayer != null && TextUtils.isEmpty(realmPlayer.getPlayerId()) == false
-                    && TextUtils.equals(realmPlayer.getPlayerId(), player.getGuid()) == false) {
-                realmPlayer.deleteFromRealm();
-                realmPlayer = null;
+            StoredPlayer storedPlayer = r.where(StoredPlayer.class).findFirst();
+            if (storedPlayer != null && TextUtils.isEmpty(storedPlayer.getPlayerId()) == false
+                    && TextUtils.equals(storedPlayer.getPlayerId(), player.getGuid()) == false) {
+                r.delete(storedPlayer);
+                storedPlayer = null;
             }
-            if (realmPlayer == null) {
-                realmPlayer = r.createObject(RealmPlayer.class, player.getGuid());
+            if (storedPlayer == null) {
+                storedPlayer = r.createObject(StoredPlayer.class, player.getGuid());
             }
-            realmPlayer.setPlayerName(player.getPlayerName());
-            realmPlayer.setPlaylistName(player.getPlaylist());
-            realmPlayer.setLandscape(player.isLandscape());
+            storedPlayer.setPlayerName(player.getPlayerName());
+            storedPlayer.setPlaylistName(player.getPlaylist());
+            storedPlayer.setLandscape(player.isLandscape());
 
             List<String> orderedIds = pageList.getPages();
             for (int i = 0; i < pages.size(); i++) {
@@ -361,56 +360,56 @@ public class DataSyncManager {
                     orderIndex = i;
                 }
 
-                RealmPage realmPage = r.createObject(RealmPage.class, page.getGuid());
-                realmPage.setPageName(page.getPageName());
-                realmPage.setPlaylistName(pageList.getName());
-                realmPage.setOrderIndex(orderIndex);
-                realmPage.setPlayHour(page.getPlayHour());
-                realmPage.setPlayMinute(page.getPlayMinute());
-                realmPage.setPlaySecond(page.getPlaySecond());
-                realmPage.setVolume(page.getVolume());
-                realmPage.setLandscape(page.isLandscape());
-                realmPage.setCanvasWidth(page.getCanvasWidth() > 0 ? page.getCanvasWidth() : (page.isLandscape() ? 1920 : 1080));
-                realmPage.setCanvasHeight(page.getCanvasHeight() > 0 ? page.getCanvasHeight() : (page.isLandscape() ? 1080 : 1920));
+                StoredPage storedPage = r.createObject(StoredPage.class, page.getGuid());
+                storedPage.setPageName(page.getPageName());
+                storedPage.setPlaylistName(pageList.getName());
+                storedPage.setOrderIndex(orderIndex);
+                storedPage.setPlayHour(page.getPlayHour());
+                storedPage.setPlayMinute(page.getPlayMinute());
+                storedPage.setPlaySecond(page.getPlaySecond());
+                storedPage.setVolume(page.getVolume());
+                storedPage.setLandscape(page.isLandscape());
+                storedPage.setCanvasWidth(page.getCanvasWidth() > 0 ? page.getCanvasWidth() : (page.isLandscape() ? 1920 : 1080));
+                storedPage.setCanvasHeight(page.getCanvasHeight() > 0 ? page.getCanvasHeight() : (page.isLandscape() ? 1080 : 1920));
 
-                RealmList<RealmElement> realmElements = new RealmList<>();
+                List<StoredElement> storedElements = new ArrayList<>();
                         if (page.getElements() != null) {
                             for (RethinkModels.ElementInfoRecord element : page.getElements()) {
                                 String elementId = page.getGuid() + "_" + element.getName();
-                                RealmElement realmElement = r.createObject(RealmElement.class, elementId);
-                                realmElement.setPageId(page.getGuid());
-                                realmElement.setName(element.getName());
-                        realmElement.setType(element.getType());
-                        realmElement.setWidth(element.getWidth());
-                                realmElement.setHeight(element.getHeight());
-                                realmElement.setPosLeft(element.getPosLeft());
-                                realmElement.setPosTop(element.getPosTop());
-                                realmElement.setzIndex(element.getzIndex());
-                                realmElement.setMuted(element.isMuted());
+                                StoredElement storedElement = r.createObject(StoredElement.class, elementId);
+                                storedElement.setPageId(page.getGuid());
+                                storedElement.setName(element.getName());
+                        storedElement.setType(element.getType());
+                        storedElement.setWidth(element.getWidth());
+                                storedElement.setHeight(element.getHeight());
+                                storedElement.setPosLeft(element.getPosLeft());
+                                storedElement.setPosTop(element.getPosTop());
+                                storedElement.setzIndex(element.getzIndex());
+                                storedElement.setMuted(element.isMuted());
 
-                        RealmList<RealmContent> contents = new RealmList<>();
+                        List<StoredContent> contents = new ArrayList<>();
                                 List<RethinkModels.ContentInfoRecord> contentRecords = element.getContents();
                                 if (contentRecords != null) {
                                     for (int index = 0; index < contentRecords.size(); index++) {
                                         RethinkModels.ContentInfoRecord contentRecord = contentRecords.get(index);
                                         String uid = elementId + "_" + index;
-                                        RealmContent realmContent = r.createObject(RealmContent.class, uid);
-                                        realmContent.setElementId(elementId);
-                                        realmContent.setFileName(contentRecord.getFileName());
+                                        StoredContent storedContent = r.createObject(StoredContent.class, uid);
+                                        storedContent.setElementId(elementId);
+                                        storedContent.setFileName(contentRecord.getFileName());
                                         String localAbsolutePath = LocalPathUtils.getContentPath(contentRecord.getFileName());
-                                        realmContent.setFileFullPath(localAbsolutePath);
+                                        storedContent.setFileFullPath(localAbsolutePath);
                                         usedContentPaths.add(new File(localAbsolutePath).getAbsolutePath());
-                                        realmContent.setContentType(contentRecord.getContentType());
-                                        realmContent.setPlayMinute(contentRecord.getPlayMinute());
-                                        realmContent.setPlaySecond(contentRecord.getPlaySecond());
-                                        realmContent.setValid(contentRecord.isValidTime());
-                                        realmContent.setFileExist(contentRecord.isFileExist());
-                                realmContent.setScrollSpeedSec(contentRecord.getScrollSpeedSec());
-                                contents.add(realmContent);
+                                        storedContent.setContentType(contentRecord.getContentType());
+                                        storedContent.setPlayMinute(contentRecord.getPlayMinute());
+                                        storedContent.setPlaySecond(contentRecord.getPlaySecond());
+                                        storedContent.setValid(contentRecord.isValidTime());
+                                        storedContent.setFileExist(contentRecord.isFileExist());
+                                storedContent.setScrollSpeedSec(contentRecord.getScrollSpeedSec());
+                                contents.add(storedContent);
                             }
                         }
-                            realmElement.setContents(contents);
-                            realmElements.add(realmElement);
+                            storedElement.setContents(contents);
+                            storedElements.add(storedElement);
 
                             if ("TemplateBoard".equalsIgnoreCase(element.getType())
                                     || "WelcomeBoard".equalsIgnoreCase(element.getType())) {
@@ -418,10 +417,10 @@ public class DataSyncManager {
                             }
                         }
                     }
-                    realmPage.setElements(realmElements);
+                    storedPage.setElements(storedElements);
                 }
         });
-        realm.close();
+        storeDb.close();
         cleanupUnusedContents(usedContentPaths);
     }
 
@@ -624,7 +623,7 @@ public class DataSyncManager {
             return -1;
         }
         String downloadJson = gson.toJson(buildDownloadEntries(updatePayload));
-        RealmUpdateQueue enqueued = UpdateQueueHelper.enqueue(UpdateQueueContract.Type.PLAYLIST,
+        StoredUpdateQueue enqueued = UpdateQueueHelper.enqueue(UpdateQueueContract.Type.PLAYLIST,
                 payloadJson,
                 downloadJson,
                 0,
@@ -930,14 +929,14 @@ public class DataSyncManager {
         }
         String playerId = payload.playerId == null ? "" : payload.playerId;
         String playlistId = payload.playlistId == null ? "" : payload.playlistId;
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            List<RealmUpdateQueue> list = realm.where(RealmUpdateQueue.class)
+            List<StoredUpdateQueue> list = storeDb.where(StoredUpdateQueue.class)
                     .findAll();
             if (list == null || list.isEmpty()) {
                 return false;
             }
-            for (RealmUpdateQueue queue : list) {
+            for (StoredUpdateQueue queue : list) {
                 if (queue == null) {
                     continue;
                 }
@@ -961,7 +960,7 @@ public class DataSyncManager {
             }
             return false;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -1005,11 +1004,11 @@ public class DataSyncManager {
         return "";
     }
 
-    private boolean applyQueueEntry(RealmUpdateQueue queue) {
+    private boolean applyQueueEntry(StoredUpdateQueue queue) {
         return applyQueueEntry(queue, true);
     }
 
-    private boolean applyQueueEntry(RealmUpdateQueue queue, boolean requestUiRestart) {
+    private boolean applyQueueEntry(StoredUpdateQueue queue, boolean requestUiRestart) {
         if (queue == null) {
             return false;
         }
@@ -1109,7 +1108,7 @@ public class DataSyncManager {
         queueProcessor.schedule();
     }
 
-    private void storeWelcome(Realm realm,
+    private void storeWelcome(ObjectBoxDb storeDb,
                               RethinkModels.PageInfoRecord page,
                               RethinkModels.ElementInfoRecord element,
                               Set<String> usedContentPaths) {
@@ -1121,7 +1120,7 @@ public class DataSyncManager {
             return;
         }
         String elementId = page.getGuid() + "_" + element.getName();
-        RealmWelcome welcome = realm.createObject(RealmWelcome.class, elementId);
+        StoredWelcome welcome = storeDb.createObject(StoredWelcome.class, elementId);
         welcome.setPageId(page.getGuid());
         welcome.setElementName(element.getName());
         welcome.setImageFileName(textInfo.getImageFileName());
@@ -1133,21 +1132,21 @@ public class DataSyncManager {
     }
 
     private void storeWeeklySchedule(String playerId, RethinkModels.WeeklyScheduleRecord record) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmWeeklySchedule schedule = r.where(RealmWeeklySchedule.class)
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredWeeklySchedule schedule = r.where(StoredWeeklySchedule.class)
                     .equalTo("playerId", playerId)
                     .findFirst();
 
             if (record == null) {
                 if (schedule != null) {
-                    schedule.deleteFromRealm();
+                    r.delete(schedule);
                 }
                 return;
             }
 
             if (schedule == null) {
-                schedule = r.createObject(RealmWeeklySchedule.class, playerId);
+                schedule = r.createObject(StoredWeeklySchedule.class, playerId);
             }
 
             applyDay(schedule, "MON", record.getMonday());
@@ -1158,7 +1157,7 @@ public class DataSyncManager {
             applyDay(schedule, "SAT", record.getSaturday());
             applyDay(schedule, "SUN", record.getSunday());
         });
-        realm.close();
+        storeDb.close();
     }
 
     private void writePlaylistPayload(UpdateQueueContract.PlaylistPayload payload,
@@ -1167,16 +1166,16 @@ public class DataSyncManager {
         if (payload == null) {
             return;
         }
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         final Set<String> usedContentPaths = new HashSet<>();
-        realm.executeTransaction(r -> {
+        storeDb.executeTransaction(r -> {
             List<String> existingPageIds = new ArrayList<>();
             if (!TextUtils.isEmpty(payload.playlistName)) {
-                List<RealmPage> existingPages = r.where(RealmPage.class)
+                List<StoredPage> existingPages = r.where(StoredPage.class)
                         .equalTo("playlistName", payload.playlistName)
                         .findAll();
                 if (existingPages != null) {
-                    for (RealmPage existingPage : existingPages) {
+                    for (StoredPage existingPage : existingPages) {
                         if (existingPage != null && !TextUtils.isEmpty(existingPage.getPageId())) {
                             existingPageIds.add(existingPage.getPageId());
                         }
@@ -1185,46 +1184,46 @@ public class DataSyncManager {
             }
             if (!existingPageIds.isEmpty()) {
                 List<String> existingElementIds = new ArrayList<>();
-                List<RealmElement> existingElements = r.where(RealmElement.class)
+                List<StoredElement> existingElements = r.where(StoredElement.class)
                         .in("pageId", existingPageIds.toArray(new String[0]))
                         .findAll();
                 if (existingElements != null) {
-                    for (RealmElement existingElement : existingElements) {
+                    for (StoredElement existingElement : existingElements) {
                         if (existingElement != null && !TextUtils.isEmpty(existingElement.getElementId())) {
                             existingElementIds.add(existingElement.getElementId());
                         }
                     }
                 }
                 if (!existingElementIds.isEmpty()) {
-                    r.where(RealmContent.class)
+                    r.where(StoredContent.class)
                             .in("elementId", existingElementIds.toArray(new String[0]))
                             .findAll()
-                            .deleteAllFromRealm();
+                            .deleteAll();
                 }
-                r.where(RealmWelcome.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
-                r.where(RealmElement.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
-                r.where(RealmPage.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAllFromRealm();
+                r.where(StoredWelcome.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAll();
+                r.where(StoredElement.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAll();
+                r.where(StoredPage.class).in("pageId", existingPageIds.toArray(new String[0])).findAll().deleteAll();
             }
 
             if (updatePlayerInfo) {
                 String playerId = !TextUtils.isEmpty(payload.playerId)
                         ? payload.playerId
                         : payload.playlistId;
-                RealmPlayer realmPlayer = r.where(RealmPlayer.class).findFirst();
-                if (realmPlayer != null && !TextUtils.isEmpty(playerId)
-                        && !TextUtils.equals(realmPlayer.getPlayerId(), playerId)) {
-                    realmPlayer.deleteFromRealm();
-                    realmPlayer = null;
+                StoredPlayer storedPlayer = r.where(StoredPlayer.class).findFirst();
+                if (storedPlayer != null && !TextUtils.isEmpty(playerId)
+                        && !TextUtils.equals(storedPlayer.getPlayerId(), playerId)) {
+                    r.delete(storedPlayer);
+                    storedPlayer = null;
                 }
-                if (realmPlayer == null && !TextUtils.isEmpty(playerId)) {
-                    realmPlayer = r.createObject(RealmPlayer.class, playerId);
+                if (storedPlayer == null && !TextUtils.isEmpty(playerId)) {
+                    storedPlayer = r.createObject(StoredPlayer.class, playerId);
                 }
-                if (realmPlayer != null) {
+                if (storedPlayer != null) {
                     if (!TextUtils.isEmpty(payload.playerName)) {
-                        realmPlayer.setPlayerName(payload.playerName);
+                        storedPlayer.setPlayerName(payload.playerName);
                     }
-                    realmPlayer.setPlaylistName(payload.playlistName);
-                    realmPlayer.setLandscape(payload.playerLandscape);
+                    storedPlayer.setPlaylistName(payload.playlistName);
+                    storedPlayer.setLandscape(payload.playerLandscape);
                 }
             }
 
@@ -1240,59 +1239,59 @@ public class DataSyncManager {
             });
 
             for (UpdateQueueContract.PagePayload page : pagePayloads) {
-                RealmPage realmPage = r.createObject(RealmPage.class, page.pageId);
-                realmPage.setPageName(page.pageName);
-                realmPage.setPlaylistName(payload.playlistName);
-                realmPage.setOrderIndex(page.orderIndex);
-                realmPage.setPlayHour(page.playHour);
-                realmPage.setPlayMinute(page.playMinute);
-                realmPage.setPlaySecond(page.playSecond);
-                realmPage.setVolume(page.volume);
-                realmPage.setLandscape(page.landscape);
-                realmPage.setCanvasWidth(page.canvasWidth > 0 ? page.canvasWidth : (page.landscape ? 1920 : 1080));
-                realmPage.setCanvasHeight(page.canvasHeight > 0 ? page.canvasHeight : (page.landscape ? 1080 : 1920));
+                StoredPage storedPage = r.createObject(StoredPage.class, page.pageId);
+                storedPage.setPageName(page.pageName);
+                storedPage.setPlaylistName(payload.playlistName);
+                storedPage.setOrderIndex(page.orderIndex);
+                storedPage.setPlayHour(page.playHour);
+                storedPage.setPlayMinute(page.playMinute);
+                storedPage.setPlaySecond(page.playSecond);
+                storedPage.setVolume(page.volume);
+                storedPage.setLandscape(page.landscape);
+                storedPage.setCanvasWidth(page.canvasWidth > 0 ? page.canvasWidth : (page.landscape ? 1920 : 1080));
+                storedPage.setCanvasHeight(page.canvasHeight > 0 ? page.canvasHeight : (page.landscape ? 1080 : 1920));
 
-                RealmList<RealmElement> realmElements = new RealmList<>();
+                List<StoredElement> storedElements = new ArrayList<>();
                 if (page.elements != null) {
                     for (UpdateQueueContract.ElementPayload element : page.elements) {
-                        RealmElement realmElement = r.createObject(RealmElement.class, element.elementId);
-                        realmElement.setPageId(page.pageId);
-                        realmElement.setName(element.name);
-                        realmElement.setType(element.type);
-                        realmElement.setWidth(element.width);
-                        realmElement.setHeight(element.height);
-                        realmElement.setPosLeft(element.posLeft);
-                        realmElement.setPosTop(element.posTop);
-                        realmElement.setzIndex(element.zIndex);
-                        realmElement.setMuted(element.muted);
+                        StoredElement storedElement = r.createObject(StoredElement.class, element.elementId);
+                        storedElement.setPageId(page.pageId);
+                        storedElement.setName(element.name);
+                        storedElement.setType(element.type);
+                        storedElement.setWidth(element.width);
+                        storedElement.setHeight(element.height);
+                        storedElement.setPosLeft(element.posLeft);
+                        storedElement.setPosTop(element.posTop);
+                        storedElement.setzIndex(element.zIndex);
+                        storedElement.setMuted(element.muted);
 
-                        RealmList<RealmContent> contents = new RealmList<>();
+                        List<StoredContent> contents = new ArrayList<>();
                             if (element.contents != null) {
                                 for (UpdateQueueContract.ContentPayload content : element.contents) {
-                        RealmContent realmContent = r.createObject(RealmContent.class, content.uid);
-                        realmContent.setElementId(element.elementId);
-                        realmContent.setFileName(content.fileName);
+                        StoredContent storedContent = r.createObject(StoredContent.class, content.uid);
+                        storedContent.setElementId(element.elementId);
+                        storedContent.setFileName(content.fileName);
                         String relativePath = resolveRelativePathFromPayload(content);
                         String absolutePath = toLocalAbsolutePath(relativePath);
-                        realmContent.setFileFullPath(absolutePath);
+                        storedContent.setFileFullPath(absolutePath);
                         usedContentPaths.add(new File(absolutePath).getAbsolutePath());
-                        realmContent.setContentType(content.contentType);
-                        realmContent.setPlayMinute(content.playMinute);
-                        realmContent.setPlaySecond(content.playSecond);
-                                realmContent.setValid(content.valid);
-                                realmContent.setFileExist(content.fileExist);
-                                realmContent.setScrollSpeedSec(content.scrollSpeedSec);
-                                contents.add(realmContent);
+                        storedContent.setContentType(content.contentType);
+                        storedContent.setPlayMinute(content.playMinute);
+                        storedContent.setPlaySecond(content.playSecond);
+                                storedContent.setValid(content.valid);
+                                storedContent.setFileExist(content.fileExist);
+                                storedContent.setScrollSpeedSec(content.scrollSpeedSec);
+                                contents.add(storedContent);
                             }
                         }
-                        realmElement.setContents(contents);
-                        realmElements.add(realmElement);
+                        storedElement.setContents(contents);
+                        storedElements.add(storedElement);
                     }
                 }
-                realmPage.setElements(realmElements);
+                storedPage.setElements(storedElements);
             }
         });
-        realm.close();
+        storeDb.close();
         cleanupUnusedContents(usedContentPaths);
     }
 
@@ -1310,10 +1309,10 @@ public class DataSyncManager {
                 normalized.add(new File(path).getAbsolutePath());
             }
         }
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            List<RealmContent> allContents = realm.copyFromRealm(realm.where(RealmContent.class).findAll());
-            for (RealmContent content : allContents) {
+            List<StoredContent> allContents = storeDb.copyEntity(storeDb.where(StoredContent.class).findAll());
+            for (StoredContent content : allContents) {
                 if (content == null || TextUtils.isEmpty(content.getFileFullPath())) {
                     continue;
                 }
@@ -1321,7 +1320,7 @@ public class DataSyncManager {
             }
         } catch (Exception ignore) {
         } finally {
-            realm.close();
+            storeDb.close();
         }
         Deque<File> stack = new ArrayDeque<>();
         stack.push(contentsRoot);
@@ -1474,7 +1473,7 @@ public class DataSyncManager {
         }
     }
 
-    private void applyDay(RealmWeeklySchedule schedule,
+    private void applyDay(StoredWeeklySchedule schedule,
                           String day,
                           RethinkModels.DayScheduleRecord record) {
         if (record == null) {
@@ -1490,7 +1489,7 @@ public class DataSyncManager {
         schedule.setOnAir(day, record.isOnAir());
     }
 
-    private void applyDayPayload(RealmWeeklySchedule schedule,
+    private void applyDayPayload(StoredWeeklySchedule schedule,
                                  String day,
                                  UpdatePayloadModels.DaySchedule record) {
         if (record == null) {
@@ -1561,20 +1560,20 @@ public class DataSyncManager {
     }
 
     private ApplyBackup createApplyBackup() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
             ApplyBackup backup = new ApplyBackup();
-            backup.pages = realm.copyFromRealm(realm.where(RealmPage.class).findAll());
-            backup.elements = realm.copyFromRealm(realm.where(RealmElement.class).findAll());
-            backup.contents = realm.copyFromRealm(realm.where(RealmContent.class).findAll());
-            backup.welcomes = realm.copyFromRealm(realm.where(RealmWelcome.class).findAll());
-            RealmPlayer player = realm.where(RealmPlayer.class).findFirst();
+            backup.pages = storeDb.copyEntity(storeDb.where(StoredPage.class).findAll());
+            backup.elements = storeDb.copyEntity(storeDb.where(StoredElement.class).findAll());
+            backup.contents = storeDb.copyEntity(storeDb.where(StoredContent.class).findAll());
+            backup.welcomes = storeDb.copyEntity(storeDb.where(StoredWelcome.class).findAll());
+            StoredPlayer player = storeDb.where(StoredPlayer.class).findFirst();
             if (player != null) {
-                backup.player = realm.copyFromRealm(player);
+                backup.player = storeDb.copyEntity(player);
             }
             return backup;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -1582,14 +1581,14 @@ public class DataSyncManager {
         if (backup == null) {
             return;
         }
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            realm.executeTransaction(r -> {
-                r.delete(RealmPage.class);
-                r.delete(RealmElement.class);
-                r.delete(RealmContent.class);
-                r.delete(RealmWelcome.class);
-                r.delete(RealmPlayer.class);
+            storeDb.executeTransaction(r -> {
+                r.delete(StoredPage.class);
+                r.delete(StoredElement.class);
+                r.delete(StoredContent.class);
+                r.delete(StoredWelcome.class);
+                r.delete(StoredPlayer.class);
                 if (backup.player != null) {
                     r.insertOrUpdate(backup.player);
                 }
@@ -1607,16 +1606,16 @@ public class DataSyncManager {
                 }
             });
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     private static final class ApplyBackup {
-        RealmPlayer player;
-        java.util.List<RealmPage> pages;
-        java.util.List<RealmElement> elements;
-        java.util.List<RealmContent> contents;
-        java.util.List<RealmWelcome> welcomes;
+        StoredPlayer player;
+        java.util.List<StoredPage> pages;
+        java.util.List<StoredElement> elements;
+        java.util.List<StoredContent> contents;
+        java.util.List<StoredWelcome> welcomes;
     }
 
     private static final class MoveResult {

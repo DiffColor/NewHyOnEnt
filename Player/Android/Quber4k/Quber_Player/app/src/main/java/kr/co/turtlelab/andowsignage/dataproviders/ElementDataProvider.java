@@ -5,10 +5,10 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import io.realm.Realm;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
-import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.store.StoredElement;
+import kr.co.turtlelab.andowsignage.data.store.StoredPage;
 import kr.co.turtlelab.andowsignage.datamodels.ElementDataModel;
 
 public class ElementDataProvider {
@@ -21,38 +21,38 @@ public class ElementDataProvider {
         if (pageId == null || pageId.isEmpty()) {
             return elementList;
         }
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmPage realmPage = realm.where(RealmPage.class)
+            StoredPage storedPage = storeDb.where(StoredPage.class)
                     .equalTo("pageId", pageId)
                     .findFirst();
-            if (realmPage == null || realmPage.getElements() == null) {
+            if (storedPage == null || storedPage.getElements() == null) {
                 return elementList;
             }
-            RealmPage detached = realm.copyFromRealm(realmPage);
+            StoredPage detached = storeDb.copyEntity(storedPage);
             float[] scales = AndoWSignageApp.getScaleFactorsForCanvas(detached.getCanvasWidth(), detached.getCanvasHeight());
-            List<RealmElement> realmElements = detached.getElements();
-            Collections.sort(realmElements, new Comparator<RealmElement>() {
+            List<StoredElement> storedElements = detached.getElements();
+            Collections.sort(storedElements, new Comparator<StoredElement>() {
                 @Override
-                public int compare(RealmElement o1, RealmElement o2) {
+                public int compare(StoredElement o1, StoredElement o2) {
                     return o1.getzIndex() - o2.getzIndex();
                 }
             });
-            for (RealmElement realmElement : realmElements) {
+            for (StoredElement storedElement : storedElements) {
                 ElementDataModel evm = new ElementDataModel();
                 evm.setScales(scales[0], scales[1], scales[2]);
                 evm.setid(String.valueOf(elementList.size()));
-                evm.setName(realmElement.getName());
-                evm.setType(realmElement.getType());
-                evm.setWidth(String.valueOf(realmElement.getWidth()));
-                evm.setHeight(String.valueOf(realmElement.getHeight()));
-                evm.setX(String.valueOf(realmElement.getPosLeft()));
-                evm.setY(String.valueOf(realmElement.getPosTop()));
-                evm.setZ(String.valueOf(realmElement.getzIndex()));
+                evm.setName(storedElement.getName());
+                evm.setType(storedElement.getType());
+                evm.setWidth(String.valueOf(storedElement.getWidth()));
+                evm.setHeight(String.valueOf(storedElement.getHeight()));
+                evm.setX(String.valueOf(storedElement.getPosLeft()));
+                evm.setY(String.valueOf(storedElement.getPosTop()));
+                evm.setZ(String.valueOf(storedElement.getzIndex()));
                 elementList.add(evm);
             }
         } finally {
-            realm.close();
+            storeDb.close();
         }
         return elementList;
     }

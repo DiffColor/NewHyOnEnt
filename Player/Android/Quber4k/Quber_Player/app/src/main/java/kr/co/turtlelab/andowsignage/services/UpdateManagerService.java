@@ -18,6 +18,7 @@ import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp.RP_STATUS;
 import kr.co.turtlelab.andowsignage.data.CommunicationSettingsSync;
 import kr.co.turtlelab.andowsignage.data.DataSyncManager;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
 import kr.co.turtlelab.andowsignage.data.rethink.CommandQueueClient;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkModels;
@@ -396,9 +397,9 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                         Long createdTicks = null;
                         String externalId = String.valueOf(queueId);
                         try {
-                            io.realm.Realm realm = io.realm.Realm.getDefaultInstance();
+                            ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
                             try {
-                                kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue q = realm.where(kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue.class)
+                                kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue q = storeDb.where(kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue.class)
                                         .equalTo("id", queueId)
                                         .findFirst();
                                 if (q != null) {
@@ -408,7 +409,7 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                                     }
                                 }
                             } finally {
-                                realm.close();
+                                storeDb.close();
                             }
                         } catch (Exception ignored) { }
                         historyId = client.upsertCommandHistoryForQueue(playerGuid,

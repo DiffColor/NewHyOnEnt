@@ -2,10 +2,10 @@ package kr.co.turtlelab.andowsignage.dataproviders;
 
 import android.text.TextUtils;
 
-import io.realm.Realm;
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.data.realm.RealmPlayer;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.store.StoredPlayer;
 import kr.co.turtlelab.andowsignage.datamodels.LocalSettingsModel;
 import kr.co.turtlelab.andowsignage.datamodels.PlayerDataModel;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
@@ -24,11 +24,11 @@ public class PlayerDataProvider {
     public static PlayerDataModel getPlayerData() {
         PlayerDataModel playerData = new PlayerDataModel();
         LocalSettingsModel local = LocalSettingsProvider.getLocalSettings().get(0);
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmPlayer realmPlayer = realm.where(RealmPlayer.class).findFirst();
-            if (realmPlayer != null) {
-                String name = realmPlayer.getPlayerName();
+            StoredPlayer storedPlayer = storeDb.where(StoredPlayer.class).findFirst();
+            if (storedPlayer != null) {
+                String name = storedPlayer.getPlayerName();
                 if (TextUtils.isEmpty(name)) {
                     name = local.getPlayerId();
                     if (TextUtils.isEmpty(name)) {
@@ -36,8 +36,8 @@ public class PlayerDataProvider {
                     }
                 }
                 playerData.setPlayerName(name);
-                playerData.setPlaylist(TextUtils.isEmpty(realmPlayer.getPlaylistName()) ? "" : realmPlayer.getPlaylistName());
-                playerData.setIsLandscape(String.valueOf(realmPlayer.isLandscape()));
+                playerData.setPlaylist(TextUtils.isEmpty(storedPlayer.getPlaylistName()) ? "" : storedPlayer.getPlaylistName());
+                playerData.setIsLandscape(String.valueOf(storedPlayer.isLandscape()));
             } else {
                 String playerId = local.getPlayerId();
                 if (TextUtils.isEmpty(playerId)) {
@@ -48,7 +48,7 @@ public class PlayerDataProvider {
                 playerData.setIsLandscape(String.valueOf(true));
             }
         } finally {
-            realm.close();
+            storeDb.close();
         }
 
         boolean manual = local.getManualIPState();
@@ -67,14 +67,14 @@ public class PlayerDataProvider {
     }
 
     public static void updateCurrentPListName(String playlistName) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmPlayer player = r.where(RealmPlayer.class).findFirst();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredPlayer player = r.where(StoredPlayer.class).findFirst();
             if (player != null) {
                 player.setPlaylistName(playlistName);
             }
         });
-        realm.close();
+        storeDb.close();
     }
 
     public static void updateManagerIP() {
@@ -86,13 +86,13 @@ public class PlayerDataProvider {
     }
 
     public static void updateOrientation(boolean isLandscape) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmPlayer player = r.where(RealmPlayer.class).findFirst();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredPlayer player = r.where(StoredPlayer.class).findFirst();
             if (player != null) {
                 player.setLandscape(isLandscape);
             }
         });
-        realm.close();
+        storeDb.close();
     }
 }

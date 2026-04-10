@@ -1,8 +1,8 @@
 package kr.co.turtlelab.andowsignage.dataproviders;
 
-import io.realm.Realm;
-import io.realm.Sort;
-import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxSort;
+import kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue;
 import kr.co.turtlelab.andowsignage.data.update.UpdateQueueContract;
 
 public final class UpdateQueueProvider {
@@ -10,15 +10,15 @@ public final class UpdateQueueProvider {
     private UpdateQueueProvider() { }
 
     public static boolean hasReadyQueue() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmUpdateQueue queue = realm.where(RealmUpdateQueue.class)
+            StoredUpdateQueue queue = storeDb.where(StoredUpdateQueue.class)
                     .equalTo("status", UpdateQueueContract.Status.READY)
                     .sort("id")
                     .findFirst();
             return queue != null;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -26,44 +26,44 @@ public final class UpdateQueueProvider {
         if (consumer == null) {
             return false;
         }
-        Realm realm = Realm.getDefaultInstance();
-        RealmUpdateQueue queue;
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        StoredUpdateQueue queue;
         try {
-            realm.beginTransaction();
-            queue = realm.where(RealmUpdateQueue.class)
+            storeDb.beginTransaction();
+            queue = storeDb.where(StoredUpdateQueue.class)
                     .equalTo("status", UpdateQueueContract.Status.READY)
                     .sort("id")
                     .findFirst();
             if (queue == null) {
-                realm.cancelTransaction();
+                storeDb.cancelTransaction();
                 return false;
             }
-            queue = realm.copyFromRealm(queue);
-            realm.commitTransaction();
+            queue = storeDb.copyEntity(queue);
+            storeDb.commitTransaction();
         } catch (Exception e) {
-            if (realm.isInTransaction()) {
-                realm.cancelTransaction();
+            if (storeDb.isInTransaction()) {
+                storeDb.cancelTransaction();
             }
-            realm.close();
+            storeDb.close();
             return false;
         }
-        realm.close();
+        storeDb.close();
         return consumer.consume(queue);
     }
 
-    public static RealmUpdateQueue getLatestQueueSnapshot() {
-        Realm realm = Realm.getDefaultInstance();
+    public static StoredUpdateQueue getLatestQueueSnapshot() {
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmUpdateQueue queue = realm.where(RealmUpdateQueue.class)
-                    .sort("updatedAt", Sort.DESCENDING)
+            StoredUpdateQueue queue = storeDb.where(StoredUpdateQueue.class)
+                    .sort("updatedAt", ObjectBoxSort.DESCENDING)
                     .findFirst();
-            return queue == null ? null : realm.copyFromRealm(queue);
+            return queue == null ? null : storeDb.copyEntity(queue);
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public interface DataConsumer {
-        boolean consume(RealmUpdateQueue queue);
+        boolean consume(StoredUpdateQueue queue);
     }
 }

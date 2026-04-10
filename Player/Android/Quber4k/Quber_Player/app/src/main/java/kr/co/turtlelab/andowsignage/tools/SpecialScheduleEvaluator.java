@@ -13,8 +13,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-import io.realm.Realm;
-import kr.co.turtlelab.andowsignage.data.realm.RealmSpecialScheduleCache;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.store.StoredSpecialScheduleCache;
 import kr.co.turtlelab.andowsignage.data.update.UpdatePayloadModels;
 
 public class SpecialScheduleEvaluator {
@@ -62,16 +62,16 @@ public class SpecialScheduleEvaluator {
     }
 
     private List<UpdatePayloadModels.SpecialSchedulePayload> loadSchedules(String playerId, String playerName) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmSpecialScheduleCache cache = null;
+            StoredSpecialScheduleCache cache = null;
             if (!TextUtils.isEmpty(playerId)) {
-                cache = realm.where(RealmSpecialScheduleCache.class)
+                cache = storeDb.where(StoredSpecialScheduleCache.class)
                         .equalTo("id", playerId)
                         .findFirst();
             }
             if (cache == null && !TextUtils.isEmpty(playerName)) {
-                cache = realm.where(RealmSpecialScheduleCache.class)
+                cache = storeDb.where(StoredSpecialScheduleCache.class)
                         .equalTo("playerName", playerName)
                         .findFirst();
             }
@@ -84,7 +84,7 @@ public class SpecialScheduleEvaluator {
         } catch (Exception ignored) {
             return Collections.emptyList();
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 

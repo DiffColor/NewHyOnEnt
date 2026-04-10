@@ -1,11 +1,18 @@
-package kr.co.turtlelab.andowsignage.data.realm;
+package kr.co.turtlelab.andowsignage.data.store;
 
-import io.realm.RealmObject;
-import io.realm.annotations.PrimaryKey;
+import io.objectbox.annotation.Entity;
+import io.objectbox.annotation.Id;
+import io.objectbox.annotation.Unique;
+import kr.co.turtlelab.andowsignage.data.objectbox.BusinessId;
 
-public class RealmLocalSettings extends RealmObject {
+@Entity
+public class StoredLocalSettings {
 
-    @PrimaryKey
+    @Id
+    private long objectBoxId;
+
+    @BusinessId
+    @Unique
     private String id;
     private boolean manualIpEnabled;
     private boolean keepRatioEnabled;
@@ -22,6 +29,14 @@ public class RealmLocalSettings extends RealmObject {
     private int ftpPasvMinPort;
     private int ftpPasvMaxPort;
     private String ftpRootPath = "";
+
+    public long getObjectBoxId() {
+        return objectBoxId;
+    }
+
+    public void setObjectBoxId(long objectBoxId) {
+        this.objectBoxId = objectBoxId;
+    }
 
     public String getId() {
         return id;
@@ -56,6 +71,10 @@ public class RealmLocalSettings extends RealmObject {
     }
 
     public boolean isSwitchOnContentEndEnabled() {
+        return switchOnContentEnd;
+    }
+
+    public boolean getSwitchOnContentEnd() {
         return switchOnContentEnd;
     }
 

@@ -1,15 +1,30 @@
-package kr.co.turtlelab.andowsignage.data.realm;
+package kr.co.turtlelab.andowsignage.data.store;
 
-import io.realm.RealmObject;
-import io.realm.annotations.PrimaryKey;
+import io.objectbox.annotation.Entity;
+import io.objectbox.annotation.Id;
+import io.objectbox.annotation.Unique;
+import kr.co.turtlelab.andowsignage.data.objectbox.BusinessId;
 
-public class RealmPlayer extends RealmObject {
+@Entity
+public class StoredPlayer {
 
-    @PrimaryKey
+    @Id
+    private long objectBoxId;
+
+    @BusinessId
+    @Unique
     private String playerId;
     private String playerName;
     private String playlistName;
     private boolean landscape;
+
+    public long getObjectBoxId() {
+        return objectBoxId;
+    }
+
+    public void setObjectBoxId(long objectBoxId) {
+        this.objectBoxId = objectBoxId;
+    }
 
     public String getPlayerId() {
         return playerId;

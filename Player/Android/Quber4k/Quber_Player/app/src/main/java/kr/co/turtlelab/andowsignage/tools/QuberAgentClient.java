@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.text.TextUtils;
 import android.util.Log;
 
 import net.quber.qubersignageagent.IQuberCallback;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.datamodels.WeeklyScheduleDataModel;
@@ -36,11 +38,13 @@ public final class QuberAgentClient {
     private static final String ACTION_QUBER_AGENT = "net.quber.qubersignageagent.QUBER_AGENT_SERVICE";
     private static final String PACKAGE_QUBER_AGENT = "net.quber.qubersignageagent";
     private static final long CONNECT_TIMEOUT_MS = 1200L;
-    private static final long RESPONSE_TIMEOUT_MS = 2500L;
+    private static final long RESPONSE_TIMEOUT_MS = 6000L;
 
     private static final String CMD_REBOOT = "215001";
     private static final String CMD_SLEEP_MODE_SET = "213017";
     private static final String CMD_SLEEP_MODE_READ = "211028";
+    private static final String CMD_ETHERNET_MAC_READ = "211012";
+    private static final String CMD_WIFI_MAC_READ = "211017";
     private static final String CMD_HDMI_CABLE_STATE_READ = "211024";
     private static final String CMD_SCHEDULE_SET = "213004";
     private static final String CMD_HDMI_ON_OFF = "213020";
@@ -113,6 +117,14 @@ public final class QuberAgentClient {
             return params.optBoolean("connectStatus", false);
         }
         return null;
+    }
+
+    public String readEthernetMacAddress() {
+        return readMacAddress(CMD_ETHERNET_MAC_READ);
+    }
+
+    public String readWifiMacAddress() {
+        return readMacAddress(CMD_WIFI_MAC_READ);
     }
 
     public boolean pushWeeklySchedule(List<WeeklyScheduleDataModel> schedule) {
@@ -196,10 +208,19 @@ public final class QuberAgentClient {
 
         try {
             JSONObject response = waiter.await(RESPONSE_TIMEOUT_MS);
+            if (response == null) {
+                pendingResponses.remove(requestId);
+                Log.w(TAG, "No response received within timeout for " + cmdCode);
+                return QuberResponse.failed();
+            }
             return QuberResponse.success(response);
-        } catch (Exception e) {
+        } catch (TimeoutException e) {
             pendingResponses.remove(requestId);
             Log.w(TAG, "Timeout waiting for response " + cmdCode, e);
+            return QuberResponse.failed();
+        } catch (Exception e) {
+            pendingResponses.remove(requestId);
+            Log.w(TAG, "Failed waiting for response " + cmdCode, e);
             return QuberResponse.failed();
         }
     }
@@ -308,6 +329,25 @@ public final class QuberAgentClient {
         return String.format(Locale.US, "%02d:%02d", hour, minute);
     }
 
+    private String readMacAddress(String cmdCode) {
+        QuberResponse resp = sendCommand(cmdCode, null, true);
+        if (!resp.success || resp.body == null) {
+            return "";
+        }
+        JSONObject params = resp.body.optJSONObject("params");
+        if (params == null) {
+            return "";
+        }
+        return normalizeMac(params.optString("mac", ""));
+    }
+
+    private static String normalizeMac(String mac) {
+        if (TextUtils.isEmpty(mac)) {
+            return "";
+        }
+        return mac.trim().toUpperCase(Locale.US);
+    }
+
     private static final class QuberResponse {
         final boolean success;
         final JSONObject body;
@@ -335,8 +375,10 @@ public final class QuberAgentClient {
             latch.countDown();
         }
 
-        JSONObject await(long timeoutMs) throws InterruptedException {
-            latch.await(timeoutMs, TimeUnit.MILLISECONDS);
+        JSONObject await(long timeoutMs) throws InterruptedException, TimeoutException {
+            if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                throw new TimeoutException("Quber agent response timeout");
+            }
             return response;
         }
     }

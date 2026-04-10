@@ -1,12 +1,22 @@
-package kr.co.turtlelab.andowsignage.data.realm;
+package kr.co.turtlelab.andowsignage.data.store;
 
-import io.realm.RealmList;
-import io.realm.RealmObject;
-import io.realm.annotations.PrimaryKey;
+import java.util.ArrayList;
+import java.util.List;
 
-public class RealmElement extends RealmObject {
+import io.objectbox.annotation.Entity;
+import io.objectbox.annotation.Id;
+import io.objectbox.annotation.Transient;
+import io.objectbox.annotation.Unique;
+import kr.co.turtlelab.andowsignage.data.objectbox.BusinessId;
 
-    @PrimaryKey
+@Entity
+public class StoredElement {
+
+    @Id
+    private long objectBoxId;
+
+    @BusinessId
+    @Unique
     private String elementId;
     private String pageId;
     private String name;
@@ -17,7 +27,16 @@ public class RealmElement extends RealmObject {
     private double posLeft;
     private int zIndex;
     private boolean muted = true;
-    private RealmList<RealmContent> contents;
+    @Transient
+    private List<StoredContent> contents = new ArrayList<>();
+
+    public long getObjectBoxId() {
+        return objectBoxId;
+    }
+
+    public void setObjectBoxId(long objectBoxId) {
+        this.objectBoxId = objectBoxId;
+    }
 
     public String getElementId() {
         return elementId;
@@ -87,6 +106,10 @@ public class RealmElement extends RealmObject {
         return zIndex;
     }
 
+    public int getZIndex() {
+        return zIndex;
+    }
+
     public void setzIndex(int zIndex) {
         this.zIndex = zIndex;
     }
@@ -99,11 +122,11 @@ public class RealmElement extends RealmObject {
         this.muted = muted;
     }
 
-    public RealmList<RealmContent> getContents() {
+    public List<StoredContent> getContents() {
         return contents;
     }
 
-    public void setContents(RealmList<RealmContent> contents) {
+    public void setContents(List<StoredContent> contents) {
         this.contents = contents;
     }
 }

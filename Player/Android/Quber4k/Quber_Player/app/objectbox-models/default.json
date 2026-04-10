@@ -1,0 +1,737 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:5155209631937005484",
+      "lastPropertyId": "11:7691171582117675004",
+      "name": "StoredContent",
+      "properties": [
+        {
+          "id": "1:4547699224646413024",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1460118697251515240",
+          "name": "uid",
+          "indexId": "1:617351444308292616",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:2069155889761375237",
+          "name": "elementId",
+          "type": 9
+        },
+        {
+          "id": "4:6488021029188395521",
+          "name": "fileName",
+          "type": 9
+        },
+        {
+          "id": "5:3057778288284646792",
+          "name": "fileFullPath",
+          "type": 9
+        },
+        {
+          "id": "6:884052996680409026",
+          "name": "contentType",
+          "type": 9
+        },
+        {
+          "id": "7:4787723784938359863",
+          "name": "playMinute",
+          "type": 9
+        },
+        {
+          "id": "8:2879126110240950599",
+          "name": "playSecond",
+          "type": 9
+        },
+        {
+          "id": "9:6885103605367741962",
+          "name": "valid",
+          "type": 1
+        },
+        {
+          "id": "10:4268065049509179559",
+          "name": "fileExist",
+          "type": 1
+        },
+        {
+          "id": "11:7691171582117675004",
+          "name": "scrollSpeedSec",
+          "type": 5
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:1721085651322956203",
+      "lastPropertyId": "11:7983273474796683075",
+      "name": "StoredElement",
+      "properties": [
+        {
+          "id": "1:3510749930691976942",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:9056590481256085568",
+          "name": "elementId",
+          "indexId": "2:2727178269589349666",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:2938872318996506451",
+          "name": "pageId",
+          "type": 9
+        },
+        {
+          "id": "4:918559225011265250",
+          "name": "name",
+          "type": 9
+        },
+        {
+          "id": "5:8728978241348603766",
+          "name": "type",
+          "type": 9
+        },
+        {
+          "id": "6:7862365689495470766",
+          "name": "width",
+          "type": 8
+        },
+        {
+          "id": "7:4654305602653236425",
+          "name": "height",
+          "type": 8
+        },
+        {
+          "id": "8:7816346289486116504",
+          "name": "posTop",
+          "type": 8
+        },
+        {
+          "id": "9:7277734711147596392",
+          "name": "posLeft",
+          "type": 8
+        },
+        {
+          "id": "10:5031570282003946797",
+          "name": "zIndex",
+          "type": 5
+        },
+        {
+          "id": "11:7983273474796683075",
+          "name": "muted",
+          "type": 1
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "3:892636072375574579",
+      "lastPropertyId": "17:146227413326452518",
+      "name": "StoredLocalSettings",
+      "properties": [
+        {
+          "id": "1:8885529850741472076",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2128337315742739853",
+          "name": "id",
+          "indexId": "3:1103797235518184556",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:5752508707090387668",
+          "name": "manualIpEnabled",
+          "type": 1
+        },
+        {
+          "id": "4:3032042229437870588",
+          "name": "keepRatioEnabled",
+          "type": 1
+        },
+        {
+          "id": "5:787853104657125233",
+          "name": "usbAuthKey",
+          "type": 9
+        },
+        {
+          "id": "6:532297237601629544",
+          "name": "switchOnContentEnd",
+          "type": 1
+        },
+        {
+          "id": "7:4248359254645630268",
+          "name": "playerId",
+          "type": 9
+        },
+        {
+          "id": "8:6970470562528320770",
+          "name": "managerIp",
+          "type": 9
+        },
+        {
+          "id": "9:5464691790348039404",
+          "name": "manualIp",
+          "type": 9
+        },
+        {
+          "id": "10:5221691741321881677",
+          "name": "signalrPort",
+          "type": 5
+        },
+        {
+          "id": "11:6636559410583042466",
+          "name": "signalrHubPath",
+          "type": 9
+        },
+        {
+          "id": "12:9076472103024074540",
+          "name": "dataServerIp",
+          "type": 9
+        },
+        {
+          "id": "13:917643506185261861",
+          "name": "messageServerIp",
+          "type": 9
+        },
+        {
+          "id": "14:6787200004456790557",
+          "name": "ftpPort",
+          "type": 5
+        },
+        {
+          "id": "15:7394656945386801052",
+          "name": "ftpPasvMinPort",
+          "type": 5
+        },
+        {
+          "id": "16:5222995303753034802",
+          "name": "ftpPasvMaxPort",
+          "type": 5
+        },
+        {
+          "id": "17:146227413326452518",
+          "name": "ftpRootPath",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:8952884896528997052",
+      "lastPropertyId": "12:3825895171542417836",
+      "name": "StoredPage",
+      "properties": [
+        {
+          "id": "1:2536042684690757633",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1896858990460163243",
+          "name": "pageId",
+          "indexId": "4:8923610580789874062",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:924150928747853703",
+          "name": "pageName",
+          "type": 9
+        },
+        {
+          "id": "4:5594768317167938324",
+          "name": "playlistName",
+          "type": 9
+        },
+        {
+          "id": "5:5507213659480772321",
+          "name": "orderIndex",
+          "type": 5
+        },
+        {
+          "id": "6:8031140715132633933",
+          "name": "playHour",
+          "type": 5
+        },
+        {
+          "id": "7:7196120314953068077",
+          "name": "playMinute",
+          "type": 5
+        },
+        {
+          "id": "8:6160086331620071423",
+          "name": "playSecond",
+          "type": 5
+        },
+        {
+          "id": "9:3076022051511152222",
+          "name": "volume",
+          "type": 5
+        },
+        {
+          "id": "10:4250634003532080665",
+          "name": "landscape",
+          "type": 1
+        },
+        {
+          "id": "11:1609627482459145337",
+          "name": "canvasWidth",
+          "type": 8
+        },
+        {
+          "id": "12:3825895171542417836",
+          "name": "canvasHeight",
+          "type": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "5:7241311772159329731",
+      "lastPropertyId": "5:347713390174355896",
+      "name": "StoredPlayer",
+      "properties": [
+        {
+          "id": "1:8833479126971066061",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8937033347372438087",
+          "name": "playerId",
+          "indexId": "5:5495049738502493034",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:4813993428487150321",
+          "name": "playerName",
+          "type": 9
+        },
+        {
+          "id": "4:536897258746285029",
+          "name": "playlistName",
+          "type": 9
+        },
+        {
+          "id": "5:347713390174355896",
+          "name": "landscape",
+          "type": 1
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "6:8876972728629358308",
+      "lastPropertyId": "7:891800888816905649",
+      "name": "StoredSpecialScheduleCache",
+      "properties": [
+        {
+          "id": "1:2247817534243339781",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2084252145501118955",
+          "name": "id",
+          "indexId": "6:4592455446192530661",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:4307835498525636478",
+          "name": "playerId",
+          "type": 9
+        },
+        {
+          "id": "4:9074819000171144492",
+          "name": "playerName",
+          "type": 9
+        },
+        {
+          "id": "5:3996407404791810681",
+          "name": "updatedAt",
+          "type": 9
+        },
+        {
+          "id": "6:222838006117051659",
+          "name": "schedulesJson",
+          "type": 9
+        },
+        {
+          "id": "7:891800888816905649",
+          "name": "playlistsJson",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "7:6873257173526317637",
+      "lastPropertyId": "18:612979724280942278",
+      "name": "StoredUpdateQueue",
+      "properties": [
+        {
+          "id": "1:7225394041386710736",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1668663920017885625",
+          "name": "id",
+          "indexId": "7:6476771756532539428",
+          "type": 6,
+          "flags": 40
+        },
+        {
+          "id": "3:1117126069385414698",
+          "name": "type",
+          "type": 9
+        },
+        {
+          "id": "4:5680200670462834751",
+          "name": "payloadJson",
+          "type": 9
+        },
+        {
+          "id": "5:4954729830435303940",
+          "name": "downloadContentsJson",
+          "type": 9
+        },
+        {
+          "id": "6:8404962001489147250",
+          "name": "status",
+          "type": 9
+        },
+        {
+          "id": "7:1135462053273565525",
+          "name": "progress",
+          "type": 7
+        },
+        {
+          "id": "8:2412516884519356183",
+          "name": "downloadProgress",
+          "type": 7
+        },
+        {
+          "id": "9:171415466416429987",
+          "name": "validateProgress",
+          "type": 7
+        },
+        {
+          "id": "10:3589701845033478914",
+          "name": "errorCode",
+          "type": 9
+        },
+        {
+          "id": "11:5047037321593443971",
+          "name": "errorMessage",
+          "type": 9
+        },
+        {
+          "id": "12:1225968998489888850",
+          "name": "externalId",
+          "type": 9
+        },
+        {
+          "id": "13:8088174806751334872",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "14:1681590477387563658",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "15:5495665236941777586",
+          "name": "expiresAt",
+          "type": 6
+        },
+        {
+          "id": "16:427150608720661715",
+          "name": "retryCount",
+          "type": 5
+        },
+        {
+          "id": "17:6301000819779292487",
+          "name": "nextRetryAt",
+          "type": 6
+        },
+        {
+          "id": "18:612979724280942278",
+          "name": "scheduleQueue",
+          "type": 1
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "8:1965139273379554565",
+      "lastPropertyId": "37:3780733938957008733",
+      "name": "StoredWeeklySchedule",
+      "properties": [
+        {
+          "id": "1:8596850140772609787",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2245730226381430344",
+          "name": "playerId",
+          "indexId": "8:9024803337135108658",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:1246372424266277496",
+          "name": "monStartHour",
+          "type": 5
+        },
+        {
+          "id": "4:1343453165741227071",
+          "name": "monStartMinute",
+          "type": 5
+        },
+        {
+          "id": "5:6208006574062164932",
+          "name": "monEndHour",
+          "type": 5
+        },
+        {
+          "id": "6:1033325859302708279",
+          "name": "monEndMinute",
+          "type": 5
+        },
+        {
+          "id": "7:4543516157174625529",
+          "name": "monOnAir",
+          "type": 1
+        },
+        {
+          "id": "8:2680510067338196010",
+          "name": "tueStartHour",
+          "type": 5
+        },
+        {
+          "id": "9:4532257823176382070",
+          "name": "tueStartMinute",
+          "type": 5
+        },
+        {
+          "id": "10:2433073460724305934",
+          "name": "tueEndHour",
+          "type": 5
+        },
+        {
+          "id": "11:1310742200141277105",
+          "name": "tueEndMinute",
+          "type": 5
+        },
+        {
+          "id": "12:4399318355357465676",
+          "name": "tueOnAir",
+          "type": 1
+        },
+        {
+          "id": "13:4524312671614726987",
+          "name": "wedStartHour",
+          "type": 5
+        },
+        {
+          "id": "14:1248021617744613004",
+          "name": "wedStartMinute",
+          "type": 5
+        },
+        {
+          "id": "15:1455942977826334771",
+          "name": "wedEndHour",
+          "type": 5
+        },
+        {
+          "id": "16:8818451241034253609",
+          "name": "wedEndMinute",
+          "type": 5
+        },
+        {
+          "id": "17:5404473692265504672",
+          "name": "wedOnAir",
+          "type": 1
+        },
+        {
+          "id": "18:8778346121360329791",
+          "name": "thuStartHour",
+          "type": 5
+        },
+        {
+          "id": "19:6488105987208475045",
+          "name": "thuStartMinute",
+          "type": 5
+        },
+        {
+          "id": "20:3609147747718302401",
+          "name": "thuEndHour",
+          "type": 5
+        },
+        {
+          "id": "21:7781209492865675991",
+          "name": "thuEndMinute",
+          "type": 5
+        },
+        {
+          "id": "22:5889432800620211362",
+          "name": "thuOnAir",
+          "type": 1
+        },
+        {
+          "id": "23:4089001010646388504",
+          "name": "friStartHour",
+          "type": 5
+        },
+        {
+          "id": "24:4993059377257956547",
+          "name": "friStartMinute",
+          "type": 5
+        },
+        {
+          "id": "25:869305453267061849",
+          "name": "friEndHour",
+          "type": 5
+        },
+        {
+          "id": "26:9210970924619353587",
+          "name": "friEndMinute",
+          "type": 5
+        },
+        {
+          "id": "27:3036938997415753131",
+          "name": "friOnAir",
+          "type": 1
+        },
+        {
+          "id": "28:3349003184769194931",
+          "name": "satStartHour",
+          "type": 5
+        },
+        {
+          "id": "29:266881619101488274",
+          "name": "satStartMinute",
+          "type": 5
+        },
+        {
+          "id": "30:6173033888228667904",
+          "name": "satEndHour",
+          "type": 5
+        },
+        {
+          "id": "31:7944589631518851342",
+          "name": "satEndMinute",
+          "type": 5
+        },
+        {
+          "id": "32:7160494306330013412",
+          "name": "satOnAir",
+          "type": 1
+        },
+        {
+          "id": "33:1700237503641761170",
+          "name": "sunStartHour",
+          "type": 5
+        },
+        {
+          "id": "34:6731814680476106480",
+          "name": "sunStartMinute",
+          "type": 5
+        },
+        {
+          "id": "35:5136105307869725875",
+          "name": "sunEndHour",
+          "type": 5
+        },
+        {
+          "id": "36:4808641041107279365",
+          "name": "sunEndMinute",
+          "type": 5
+        },
+        {
+          "id": "37:3780733938957008733",
+          "name": "sunOnAir",
+          "type": 1
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "9:1847596208877636982",
+      "lastPropertyId": "6:631333588074746827",
+      "name": "StoredWelcome",
+      "properties": [
+        {
+          "id": "1:6514177216530065018",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:9098027084984399162",
+          "name": "elementId",
+          "indexId": "9:4742159180448037014",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:2533787183414902801",
+          "name": "pageId",
+          "type": 9
+        },
+        {
+          "id": "4:9079323006877673476",
+          "name": "elementName",
+          "type": 9
+        },
+        {
+          "id": "5:4147433842162015782",
+          "name": "imageFileName",
+          "type": 9
+        },
+        {
+          "id": "6:631333588074746827",
+          "name": "imageFilePath",
+          "type": 9
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "9:1847596208877636982",
+  "lastIndexId": "9:4742159180448037014",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}

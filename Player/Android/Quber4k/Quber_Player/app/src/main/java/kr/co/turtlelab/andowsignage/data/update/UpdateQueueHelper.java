@@ -13,17 +13,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.realm.Realm;
-import io.realm.RealmResults;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxResults;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
+import kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.services.HeartbeatService;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 
 /**
- * UpdateQueue Realm 모델을 다루는 헬퍼.
+ * UpdateQueue 로컬 모델을 다루는 헬퍼.
  * 향후 UpdateQueueProcessor 가 동일한 패턴으로 재사용할 수 있도록
  * 기본적인 enqueue/update/delete 유틸을 모아둔다.
  */
@@ -58,14 +58,14 @@ public final class UpdateQueueHelper {
         }
         return owner;
     }
-    public static RealmUpdateQueue enqueue(String type,
+    public static StoredUpdateQueue enqueue(String type,
                                            String payloadJson,
                                            String downloadContentsJson,
                                            long ttlMillis) {
         return enqueue(type, payloadJson, downloadContentsJson, ttlMillis, false);
     }
 
-    public static RealmUpdateQueue enqueue(String type,
+    public static StoredUpdateQueue enqueue(String type,
                                            String payloadJson,
                                            String downloadContentsJson,
                                            long ttlMillis,
@@ -73,26 +73,26 @@ public final class UpdateQueueHelper {
         return enqueue(type, payloadJson, downloadContentsJson, ttlMillis, isScheduleQueue, null);
     }
 
-    public static RealmUpdateQueue enqueue(String type,
+    public static StoredUpdateQueue enqueue(String type,
                                            String payloadJson,
                                            String downloadContentsJson,
                                            long ttlMillis,
                                            boolean isScheduleQueue,
                                            String externalIdOverride) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
             long now = System.currentTimeMillis();
             long expires = ttlMillis > 0 ? now + ttlMillis : 0;
-            AtomicReference<RealmUpdateQueue> ref = new AtomicReference<>();
-            realm.executeTransaction(r -> {
-                Number maxId = r.where(RealmUpdateQueue.class).max("id");
+            AtomicReference<StoredUpdateQueue> ref = new AtomicReference<>();
+            storeDb.executeTransaction(r -> {
+                Number maxId = r.where(StoredUpdateQueue.class).max("id");
                 long nextId = maxId == null ? 1 : maxId.longValue() + 1;
                 String owner = resolveOwnerPlayerIdFromPayload(payloadJson);
                 long ticks = toDotNetLocalTicks(now);
                 String externalId = !TextUtils.isEmpty(externalIdOverride)
                         ? externalIdOverride
                         : (TextUtils.isEmpty(owner) ? String.valueOf(nextId) : owner + ":" + ticks);
-                RealmUpdateQueue queue = r.createObject(RealmUpdateQueue.class, nextId);
+                StoredUpdateQueue queue = r.createObject(StoredUpdateQueue.class, nextId);
                 queue.setType(type);
                 queue.setPayloadJson(payloadJson);
                 queue.setDownloadContentsJson(downloadContentsJson);
@@ -105,7 +105,7 @@ public final class UpdateQueueHelper {
                 queue.setExpiresAt(expires);
                 queue.setExternalId(externalId);
                 queue.setScheduleQueue(isScheduleQueue);
-                ref.set(r.copyFromRealm(queue));
+                ref.set(r.copyEntity(queue));
                 UpdateQueueLogger.log("Queue #" + nextId + " enqueued type=" + type);
             });
             if (ref.get() != null) {
@@ -113,7 +113,7 @@ public final class UpdateQueueHelper {
             }
             return ref.get();
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -125,7 +125,7 @@ public final class UpdateQueueHelper {
                                     String status,
                                     String errorCode,
                                     String errorMessage) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
             long now = System.currentTimeMillis();
             String normalizedErrorMessage = normalizeLastError(errorCode, errorMessage);
@@ -133,8 +133,8 @@ public final class UpdateQueueHelper {
             AtomicBoolean deleteRemoteRecord = new AtomicBoolean(false);
             AtomicReference<String> playerRef = new AtomicReference<>("");
             AtomicBoolean removeLocal = new AtomicBoolean(false);
-            realm.executeTransaction(r -> {
-                RealmUpdateQueue queue = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                StoredUpdateQueue queue = r.where(StoredUpdateQueue.class)
                         .equalTo("id", queueId)
                         .findFirst();
                 if (queue == null) {
@@ -208,7 +208,7 @@ public final class UpdateQueueHelper {
                 }
                 statusSnapshot.set(buildSnapshot(queue, playerId));
                 if (removeLocal.get()) {
-                    queue.deleteFromRealm();
+                    r.delete(queue);
                 }
             });
             if (deleteRemoteRecord.get()) {
@@ -218,7 +218,7 @@ public final class UpdateQueueHelper {
             }
             sendStatusAsync(statusSnapshot.get());
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -230,11 +230,11 @@ public final class UpdateQueueHelper {
                                       float downloadPercent,
                                       float validatePercent,
                                       float overallPercent) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
             long now = System.currentTimeMillis();
-            realm.executeTransaction(r -> {
-                RealmUpdateQueue queue = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                StoredUpdateQueue queue = r.where(StoredUpdateQueue.class)
                         .equalTo("id", queueId)
                         .findFirst();
                 if (queue == null) {
@@ -255,15 +255,15 @@ public final class UpdateQueueHelper {
                 sendStatus(queue);
             });
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static void updateDownloadJournal(long queueId, String downloadJson) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            realm.executeTransaction(r -> {
-                RealmUpdateQueue queue = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                StoredUpdateQueue queue = r.where(StoredUpdateQueue.class)
                         .equalTo("id", queueId)
                         .findFirst();
                 if (queue == null) {
@@ -274,17 +274,17 @@ public final class UpdateQueueHelper {
                 sendStatus(queue);
             });
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static void scheduleLeaseRetry(long queueId, long nextRetryAt, String errorCode, String errorMessage) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
             long now = System.currentTimeMillis();
             String normalizedErrorMessage = normalizeLastError(errorCode, errorMessage);
-            realm.executeTransaction(r -> {
-                RealmUpdateQueue queue = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                StoredUpdateQueue queue = r.where(StoredUpdateQueue.class)
                         .equalTo("id", queueId)
                         .findFirst();
                 if (queue == null) {
@@ -304,7 +304,7 @@ public final class UpdateQueueHelper {
                 sendStatus(queue);
             });
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -312,25 +312,25 @@ public final class UpdateQueueHelper {
      * 만료 기간이 지난 큐 레코드를 정리한다.
      */
     public static void purgeExpired(long now) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            realm.executeTransaction(r -> {
-                RealmResults<RealmUpdateQueue> results = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                ObjectBoxResults<StoredUpdateQueue> results = r.where(StoredUpdateQueue.class)
                         .greaterThan("expiresAt", 0)
                         .lessThan("expiresAt", now)
                         .findAll();
-                results.deleteAllFromRealm();
+                results.deleteAll();
             });
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static void incrementRetry(long queueId, long nextRetryAt) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            realm.executeTransaction(r -> {
-                RealmUpdateQueue queue = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                StoredUpdateQueue queue = r.where(StoredUpdateQueue.class)
                         .equalTo("id", queueId)
                         .findFirst();
                 if (queue == null) {
@@ -345,14 +345,14 @@ public final class UpdateQueueHelper {
                 sendStatus(queue);
             });
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static boolean hasPendingQueue() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmUpdateQueue queue = realm.where(RealmUpdateQueue.class)
+            StoredUpdateQueue queue = storeDb.where(StoredUpdateQueue.class)
                     .in("status", new String[]{
                             UpdateQueueContract.Status.QUEUED,
                             UpdateQueueContract.Status.DOWNLOADING,
@@ -362,14 +362,14 @@ public final class UpdateQueueHelper {
                     .findFirst();
             return queue != null;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static boolean hasActiveQueue() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmUpdateQueue queue = realm.where(RealmUpdateQueue.class)
+            StoredUpdateQueue queue = storeDb.where(StoredUpdateQueue.class)
                     .notEqualTo("status", UpdateQueueContract.Status.DONE)
                     .notEqualTo("status", UpdateQueueContract.Status.FAILED)
                     .notEqualTo("status", UpdateQueueContract.Status.CANCELLED)
@@ -377,16 +377,16 @@ public final class UpdateQueueHelper {
                     .findFirst();
             return queue != null;
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static void recoverInterruptedQueues() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
             long now = System.currentTimeMillis();
-            realm.executeTransaction(r -> {
-                RealmResults<RealmUpdateQueue> stuck = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                ObjectBoxResults<StoredUpdateQueue> stuck = r.where(StoredUpdateQueue.class)
                         .in("status", new String[]{
                                 UpdateQueueContract.Status.DOWNLOADING,
                                 UpdateQueueContract.Status.DOWNLOADED,
@@ -395,7 +395,7 @@ public final class UpdateQueueHelper {
                         })
                         .findAll();
                 if (stuck != null) {
-                    for (RealmUpdateQueue queue : stuck) {
+                    for (StoredUpdateQueue queue : stuck) {
                         queue.setStatus(UpdateQueueContract.Status.QUEUED);
                         queue.setErrorCode(null);
                         queue.setErrorMessage("Recovered from interrupted state");
@@ -409,7 +409,7 @@ public final class UpdateQueueHelper {
                 }
             });
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
@@ -418,20 +418,20 @@ public final class UpdateQueueHelper {
     }
 
     public static int cancelActiveQueues(String reason) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         String message = (reason == null || reason.trim().isEmpty())
                 ? "Cancelled by manager"
                 : reason.trim();
         Set<String> releasePlayers = new HashSet<>();
         try {
             AtomicInteger cancelled = new AtomicInteger();
-            realm.executeTransaction(r -> {
-                RealmResults<RealmUpdateQueue> results = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                ObjectBoxResults<StoredUpdateQueue> results = r.where(StoredUpdateQueue.class)
                         .notEqualTo("status", UpdateQueueContract.Status.DONE)
                         .notEqualTo("status", UpdateQueueContract.Status.FAILED)
                         .findAll();
                 long now = System.currentTimeMillis();
-                for (RealmUpdateQueue queue : results) {
+                for (StoredUpdateQueue queue : results) {
                     queue.setStatus(UpdateQueueContract.Status.CANCELLED);
                     queue.setErrorCode("CANCELLED");
                     queue.setErrorMessage(message);
@@ -450,7 +450,7 @@ public final class UpdateQueueHelper {
                     if (!TextUtils.isEmpty(playerId)) {
                         releasePlayers.add(playerId);
                     }
-                    queue.deleteFromRealm();
+                    r.delete(queue);
                     cancelled.incrementAndGet();
                 }
             });
@@ -468,22 +468,22 @@ public final class UpdateQueueHelper {
             }
             return cancelled.get();
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
     public static int requeueFailedQueues(long now, int maxRetryCount) {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
             AtomicInteger requeued = new AtomicInteger();
-            realm.executeTransaction(r -> {
-                RealmResults<RealmUpdateQueue> results = r.where(RealmUpdateQueue.class)
+            storeDb.executeTransaction(r -> {
+                ObjectBoxResults<StoredUpdateQueue> results = r.where(StoredUpdateQueue.class)
                         .equalTo("status", UpdateQueueContract.Status.FAILED)
                         .greaterThan("nextRetryAt", 0L)
                         .lessThanOrEqualTo("nextRetryAt", now)
                         .lessThan("retryCount", maxRetryCount)
                         .findAll();
-                for (RealmUpdateQueue queue : results) {
+                for (StoredUpdateQueue queue : results) {
                     queue.setStatus(UpdateQueueContract.Status.QUEUED);
                     queue.setErrorCode(null);
                     queue.setErrorMessage(null);
@@ -497,15 +497,15 @@ public final class UpdateQueueHelper {
             });
             return requeued.get();
         } finally {
-            realm.close();
+            storeDb.close();
         }
     }
 
-    private static void sendStatus(RealmUpdateQueue queue) {
+    private static void sendStatus(StoredUpdateQueue queue) {
         sendStatus(queue, getPlayerId(queue));
     }
 
-    private static void sendStatus(RealmUpdateQueue queue, String playerId) {
+    private static void sendStatus(StoredUpdateQueue queue, String playerId) {
         sendStatusAsync(buildSnapshot(queue, playerId));
     }
 
@@ -569,7 +569,7 @@ public final class UpdateQueueHelper {
         });
     }
 
-    private static StatusSnapshot buildSnapshot(RealmUpdateQueue queue, String playerId) {
+    private static StatusSnapshot buildSnapshot(StoredUpdateQueue queue, String playerId) {
         if (queue == null) {
             return null;
         }
@@ -657,7 +657,7 @@ public final class UpdateQueueHelper {
                 queue.isScheduleQueue());
     }
 
-    public static String getPlayerId(RealmUpdateQueue queue) {
+    public static String getPlayerId(StoredUpdateQueue queue) {
         if (queue == null) {
             return "";
         }
@@ -683,7 +683,7 @@ public final class UpdateQueueHelper {
         return resolveOwnerPlayerIdFromPayload(queue.getPayloadJson());
     }
 
-    private static void cleanupTempFiles(RealmUpdateQueue queue) {
+    private static void cleanupTempFiles(StoredUpdateQueue queue) {
         if (queue == null) {
             return;
         }

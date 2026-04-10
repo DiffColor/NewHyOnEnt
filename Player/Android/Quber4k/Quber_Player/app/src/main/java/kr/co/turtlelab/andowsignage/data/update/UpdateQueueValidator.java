@@ -5,7 +5,7 @@ import android.text.TextUtils;
 import java.io.File;
 import java.util.List;
 
-import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
+import kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue;
 
 /**
  * READY 상태로 전환하기 전에 다운로드된 파일들이 모두 존재하고 무결한지 검증한다.
@@ -18,7 +18,7 @@ public class UpdateQueueValidator {
         return lastError;
     }
 
-    public boolean validate(RealmUpdateQueue queue, UpdateProgressTracker tracker) {
+    public boolean validate(StoredUpdateQueue queue, UpdateProgressTracker tracker) {
         lastError = "";
         if (queue == null) {
             return false;

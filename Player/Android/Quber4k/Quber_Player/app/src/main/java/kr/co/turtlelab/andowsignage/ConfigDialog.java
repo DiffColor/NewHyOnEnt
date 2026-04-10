@@ -30,7 +30,6 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.realm.Realm;
 import kr.co.turtlelab.andowsignage.datamodels.LocalSettingsModel;
 import kr.co.turtlelab.andowsignage.datamodels.WeeklyScheduleDataModel;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
@@ -85,7 +84,7 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 	Context ctx;
 	ScrollView m_svMain;
 	Button saveBtn;
-	Button exportRealmBtn;
+	Button exportStorageBtn;
 	RelativeLayout m_SchLayout_root;
 	
 	List<WeeklyScheduleDataModel> weeklySchDataList = new ArrayList<WeeklyScheduleDataModel>();
@@ -122,7 +121,7 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 	protected void onStart() {
 		super.onStart();
 		prepareDialogWindow(getWindow(), WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-		
+		refreshSourceKeyAndAuthState();
 		refreshWeeklyDataList();
 		focusTextInput(resolvePreferredTextInput(), false);
 	}
@@ -436,8 +435,8 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 		/*Player Schedule*/
 			saveBtn = (Button) findViewById(R.id.btnSave);
 			saveBtn.setOnClickListener(this);
-			exportRealmBtn = (Button) findViewById(R.id.btnExportRealm);
-			exportRealmBtn.setOnClickListener(this);
+			exportStorageBtn = (Button) findViewById(R.id.btnExportStorage);
+			exportStorageBtn.setOnClickListener(this);
 		
 		refreshWeeklyDataList();
 
@@ -449,21 +448,7 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 		bindEditableField(mAuthKey);
 		mAuthBtn = (Button) findViewById(R.id.authBtn);
 		mAuthBtn.setOnClickListener(this);
-
-		mSrcKey.setText(NetworkUtils.getMACAddress().replace(":", "").toUpperCase());
-
-		boolean hasStoredKey = false;
-		try {
-			hasStoredKey = AuthUtils.HasAuthKey(LocalPathUtils.getAuthFilePath(), mSrcKey.getText().toString());
-		} catch (Exception ignored) { }
-		if (!hasStoredKey) {
-			hasStoredKey = LocalSettingsProvider.hasStoredUsbKeyForDevice();
-		}
-		if(hasStoredKey){
-			mAuthBtn.setEnabled(false);
-			mAuthKey.setEnabled(false);
-			mAuthBg.setBackgroundColor(AndoWSignage.act.getResources().getColor(android.R.color.holo_green_dark));
-		}
+		refreshSourceKeyAndAuthState();
 	}
 	
 	void refreshWeeklyDataList() {
@@ -708,8 +693,8 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 				    //((AndoWSignage)ctx).runTimerAndElements();
 					break;
 
-				case R.id.btnExportRealm:
-					exportRealm();
+				case R.id.btnExportStorage:
+					exportStorage();
 					break;
 	
 				case R.id.authBtn:
@@ -726,10 +711,8 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 		return super.dispatchKeyEvent(event);
 	}
 
-		private void exportRealm() {
-			Realm realm = null;
+	private void exportStorage() {
 			try {
-				realm = Realm.getDefaultInstance();
 				File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
 				if (dir == null) {
 					throw new IllegalStateException("다운로드 폴더 경로를 확인할 수 없습니다.");
@@ -737,29 +720,54 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 				if (!dir.exists() && !dir.mkdirs()) {
 					throw new IllegalStateException("다운로드 폴더를 생성할 수 없습니다: " + dir.getAbsolutePath());
 				}
-				File exportFile = new File(dir, "andow_export.realm");
-				if (exportFile.exists() && !exportFile.delete()) {
-					throw new IllegalStateException("Failed to replace " + exportFile.getAbsolutePath());
+				File exportDir = new File(dir, "andow_export_objectbox");
+				if (exportDir.exists()) {
+					FileUtils.deleteFiles(exportDir.getAbsolutePath(), true);
 				}
-				realm.writeCopyTo(exportFile);
+				File sourceDir = new File(AndoWSignageApp.getDirPath(), "objectbox");
+				if (!sourceDir.exists()) {
+					throw new IllegalStateException("ObjectBox 데이터 경로가 없습니다: " + sourceDir.getAbsolutePath());
+				}
+				if (!exportDir.exists() && !exportDir.mkdirs()) {
+					throw new IllegalStateException("내보내기 폴더를 생성할 수 없습니다: " + exportDir.getAbsolutePath());
+				}
+				FileUtils.copyfolder(sourceDir, exportDir, true);
 				MediaScannerConnection.scanFile(ctx,
-						new String[]{exportFile.getAbsolutePath()},
+						new String[]{exportDir.getAbsolutePath()},
 						null,
 						null);
 				Toast.makeText(ctx,
-						ctx.getString(R.string.export_realm_success, exportFile.getAbsolutePath()),
+						ctx.getString(R.string.export_storage_success, exportDir.getAbsolutePath()),
 						Toast.LENGTH_LONG).show();
 			} catch (Exception e) {
 				Toast.makeText(ctx,
-						ctx.getString(R.string.export_realm_fail, e.getMessage()),
+						ctx.getString(R.string.export_storage_fail, e.getMessage()),
 						Toast.LENGTH_LONG).show();
-			} finally {
-				if (realm != null) {
-					realm.close();
-				}
 			}
 		}
-	
+
+	private void refreshSourceKeyAndAuthState() {
+		if (mSrcKey == null || mAuthBtn == null || mAuthKey == null || mAuthBg == null) {
+			return;
+		}
+
+		String sourceKey = NetworkUtils.getMACAddress().replace(":", "").toUpperCase();
+		mSrcKey.setText(sourceKey);
+
+		boolean hasStoredKey = false;
+		try {
+			hasStoredKey = AuthUtils.HasAuthKey(LocalPathUtils.getAuthFilePath(), sourceKey);
+		} catch (Exception ignored) { }
+		if (!hasStoredKey) {
+			hasStoredKey = LocalSettingsProvider.hasStoredUsbKeyForDevice();
+		}
+
+		mAuthBtn.setEnabled(!hasStoredKey);
+		mAuthKey.setEnabled(!hasStoredKey);
+		mAuthBg.setBackgroundColor(AndoWSignage.act.getResources().getColor(
+				hasStoredKey ? android.R.color.holo_green_dark : android.R.color.holo_red_dark));
+	}
+
 		private void setAuth(String srckey) {
 			String _authkey = mAuthKey.getText().toString();
 			String checkVal = AuthUtils.GetPasswd2(srckey);

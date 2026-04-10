@@ -55,7 +55,7 @@ import java.util.concurrent.Executors;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp.RP_STATUS;
 import kr.co.turtlelab.andowsignage.data.DataSyncManager;
 import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
-import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
+import kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue;
 import kr.co.turtlelab.andowsignage.datamodels.ElementDataModel;
 import kr.co.turtlelab.andowsignage.datamodels.MediaDataModel;
 import kr.co.turtlelab.andowsignage.datamodels.PageDataModel;
@@ -2710,7 +2710,7 @@ public class AndoWSignage extends Activity {
 				.append("  CurrentPage=").append(currentPageName == null ? "" : currentPageName);
 
 		sb.append("\n\n[QUEUE]\n");
-		RealmUpdateQueue queue = UpdateQueueProvider.getLatestQueueSnapshot();
+		StoredUpdateQueue queue = UpdateQueueProvider.getLatestQueueSnapshot();
 		if (queue == null) {
 			sb.append("No queue\n");
 		} else {

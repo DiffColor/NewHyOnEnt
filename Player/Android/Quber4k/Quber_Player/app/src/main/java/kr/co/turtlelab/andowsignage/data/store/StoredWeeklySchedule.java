@@ -1,14 +1,29 @@
-package kr.co.turtlelab.andowsignage.data.realm;
+package kr.co.turtlelab.andowsignage.data.store;
 
 import java.util.Locale;
 
-import io.realm.RealmObject;
-import io.realm.annotations.PrimaryKey;
+import io.objectbox.annotation.Entity;
+import io.objectbox.annotation.Id;
+import io.objectbox.annotation.Unique;
+import kr.co.turtlelab.andowsignage.data.objectbox.BusinessId;
 
-public class RealmWeeklySchedule extends RealmObject {
+@Entity
+public class StoredWeeklySchedule {
 
-    @PrimaryKey
+    @Id
+    private long objectBoxId;
+
+    @BusinessId
+    @Unique
     private String playerId;
+
+    public long getObjectBoxId() {
+        return objectBoxId;
+    }
+
+    public void setObjectBoxId(long objectBoxId) {
+        this.objectBoxId = objectBoxId;
+    }
 
     public String getPlayerId() {
         return playerId;
@@ -190,6 +205,42 @@ public class RealmWeeklySchedule extends RealmObject {
             case "SUN": sunOnAir = onAir; break;
         }
     }
+
+    public int getMonStartHour() { return monStartHour; }
+    public int getMonStartMinute() { return monStartMinute; }
+    public int getMonEndHour() { return monEndHour; }
+    public int getMonEndMinute() { return monEndMinute; }
+    public boolean getMonOnAir() { return monOnAir; }
+    public int getTueStartHour() { return tueStartHour; }
+    public int getTueStartMinute() { return tueStartMinute; }
+    public int getTueEndHour() { return tueEndHour; }
+    public int getTueEndMinute() { return tueEndMinute; }
+    public boolean getTueOnAir() { return tueOnAir; }
+    public int getWedStartHour() { return wedStartHour; }
+    public int getWedStartMinute() { return wedStartMinute; }
+    public int getWedEndHour() { return wedEndHour; }
+    public int getWedEndMinute() { return wedEndMinute; }
+    public boolean getWedOnAir() { return wedOnAir; }
+    public int getThuStartHour() { return thuStartHour; }
+    public int getThuStartMinute() { return thuStartMinute; }
+    public int getThuEndHour() { return thuEndHour; }
+    public int getThuEndMinute() { return thuEndMinute; }
+    public boolean getThuOnAir() { return thuOnAir; }
+    public int getFriStartHour() { return friStartHour; }
+    public int getFriStartMinute() { return friStartMinute; }
+    public int getFriEndHour() { return friEndHour; }
+    public int getFriEndMinute() { return friEndMinute; }
+    public boolean getFriOnAir() { return friOnAir; }
+    public int getSatStartHour() { return satStartHour; }
+    public int getSatStartMinute() { return satStartMinute; }
+    public int getSatEndHour() { return satEndHour; }
+    public int getSatEndMinute() { return satEndMinute; }
+    public boolean getSatOnAir() { return satOnAir; }
+    public int getSunStartHour() { return sunStartHour; }
+    public int getSunStartMinute() { return sunStartMinute; }
+    public int getSunEndHour() { return sunEndHour; }
+    public int getSunEndMinute() { return sunEndMinute; }
+    public boolean getSunOnAir() { return sunOnAir; }
 
     private String normalize(String day) {
         return day == null ? "" : day.toUpperCase(Locale.US);

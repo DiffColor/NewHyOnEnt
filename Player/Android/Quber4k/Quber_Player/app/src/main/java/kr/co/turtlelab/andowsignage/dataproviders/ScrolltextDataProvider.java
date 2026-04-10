@@ -3,10 +3,10 @@ package kr.co.turtlelab.andowsignage.dataproviders;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.realm.Realm;
-import kr.co.turtlelab.andowsignage.data.realm.RealmContent;
-import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
-import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.store.StoredContent;
+import kr.co.turtlelab.andowsignage.data.store.StoredElement;
+import kr.co.turtlelab.andowsignage.data.store.StoredPage;
 import kr.co.turtlelab.andowsignage.datamodels.ScrolltextDataModel;
 
 public class ScrolltextDataProvider {
@@ -19,17 +19,17 @@ public class ScrolltextDataProvider {
         if (pageId == null || elementName == null) {
             return contentList;
         }
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmPage page = realm.where(RealmPage.class)
+            StoredPage page = storeDb.where(StoredPage.class)
                     .equalTo("pageId", pageId)
                     .findFirst();
             if (page == null || page.getElements() == null) {
                 return contentList;
             }
-            RealmPage detached = realm.copyFromRealm(page);
-            RealmElement target = null;
-            for (RealmElement element : detached.getElements()) {
+            StoredPage detached = storeDb.copyEntity(page);
+            StoredElement target = null;
+            for (StoredElement element : detached.getElements()) {
                 if (elementName.equalsIgnoreCase(element.getName())) {
                     target = element;
                     break;
@@ -38,17 +38,17 @@ public class ScrolltextDataProvider {
             if (target == null || target.getContents() == null) {
                 return contentList;
             }
-            for (RealmContent realmContent : target.getContents()) {
+            for (StoredContent storedContent : target.getContents()) {
                 ScrolltextDataModel sdm = new ScrolltextDataModel();
-                sdm.setText(realmContent.getFileName());
-                sdm.setFont(realmContent.getContentType());
-                sdm.setBackColor(realmContent.getPlaySecond());
-                sdm.setForeColor(realmContent.getPlayMinute());
-                sdm.setScrolltime(String.valueOf(Math.max(1, realmContent.getScrollSpeedSec())));
+                sdm.setText(storedContent.getFileName());
+                sdm.setFont(storedContent.getContentType());
+                sdm.setBackColor(storedContent.getPlaySecond());
+                sdm.setForeColor(storedContent.getPlayMinute());
+                sdm.setScrolltime(String.valueOf(Math.max(1, storedContent.getScrollSpeedSec())));
                 contentList.add(sdm);
             }
         } finally {
-            realm.close();
+            storeDb.close();
         }
         return contentList;
     }

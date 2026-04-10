@@ -8,8 +8,7 @@ import android.view.WindowManager;
 
 import java.io.File;
 
-import io.realm.Realm;
-import io.realm.RealmConfiguration;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxStore;
 import kr.co.turtlelab.andowsignage.tools.CanvasUtils;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
@@ -75,7 +74,7 @@ public class AndoWSignageApp extends Application {
 		File appRootDir = prepareAppRoot();
 		setDirPath(appRootDir.getAbsolutePath());
 		QuberAgentClient.get().initialize(this);
-		initRealm(appRootDir);
+		initObjectBox(appRootDir);
 		init();
 	}
 
@@ -90,19 +89,8 @@ public class AndoWSignageApp extends Application {
 		return appRootDir;
 	}
 
-	private void initRealm(File appRootDir) {
-		Realm.init(this);
-		File realmDir = appRootDir;
-		if (!realmDir.exists()) {
-			realmDir.mkdirs();
-		}
-		RealmConfiguration config = new RealmConfiguration.Builder()
-				.directory(realmDir)
-				.name("andow.realm")
-				.deleteRealmIfMigrationNeeded()
-				.allowWritesOnUiThread(true)
-				.build();
-		Realm.setDefaultConfiguration(config);
+	private void initObjectBox(File appRootDir) {
+		ObjectBoxStore.init(this, appRootDir);
 	}
 	
 	synchronized public static AndoWSignageApp getApplication() {

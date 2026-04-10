@@ -4,10 +4,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.realm.Realm;
-import kr.co.turtlelab.andowsignage.data.realm.RealmContent;
-import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
-import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.store.StoredContent;
+import kr.co.turtlelab.andowsignage.data.store.StoredElement;
+import kr.co.turtlelab.andowsignage.data.store.StoredPage;
 import kr.co.turtlelab.andowsignage.datamodels.MediaDataModel;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 
@@ -21,17 +21,17 @@ public class MediaDataProvider {
         if (pageId == null || elementName == null) {
             return contentList;
         }
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmPage page = realm.where(RealmPage.class)
+            StoredPage page = storeDb.where(StoredPage.class)
                     .equalTo("pageId", pageId)
                     .findFirst();
             if (page == null || page.getElements() == null) {
                 return contentList;
             }
-            RealmPage detached = realm.copyFromRealm(page);
-            RealmElement target = null;
-            for (RealmElement element : detached.getElements()) {
+            StoredPage detached = storeDb.copyEntity(page);
+            StoredElement target = null;
+            for (StoredElement element : detached.getElements()) {
                 if (elementName.equalsIgnoreCase(element.getName())) {
                     target = element;
                     break;
@@ -40,26 +40,26 @@ public class MediaDataProvider {
             if (target == null || target.getContents() == null) {
                 return contentList;
             }
-            for (RealmContent realmContent : target.getContents()) {
+            for (StoredContent storedContent : target.getContents()) {
                 MediaDataModel mdm = new MediaDataModel();
-                if (realmContent.getFileFullPath() != null && !realmContent.getFileFullPath().isEmpty()) {
-                    String path = realmContent.getFileFullPath();
+                if (storedContent.getFileFullPath() != null && !storedContent.getFileFullPath().isEmpty()) {
+                    String path = storedContent.getFileFullPath();
                     File file = new File(path);
-                    if (!file.exists() && realmContent.getFileName() != null && !realmContent.getFileName().isEmpty()) {
-                        path = LocalPathUtils.getContentPath(realmContent.getFileName());
+                    if (!file.exists() && storedContent.getFileName() != null && !storedContent.getFileName().isEmpty()) {
+                        path = LocalPathUtils.getContentPath(storedContent.getFileName());
                     }
                     mdm.setFilePath(path);
-                } else if (realmContent.getFileName() != null) {
-                    mdm.setFileName(realmContent.getFileName());
+                } else if (storedContent.getFileName() != null) {
+                    mdm.setFileName(storedContent.getFileName());
                 }
-                mdm.setType(realmContent.getContentType());
-                mdm.setPlayTime(realmContent.getPlayMinute(), realmContent.getPlaySecond());
-                mdm.setValidState(String.valueOf(realmContent.isContentValid()));
+                mdm.setType(storedContent.getContentType());
+                mdm.setPlayTime(storedContent.getPlayMinute(), storedContent.getPlaySecond());
+                mdm.setValidState(String.valueOf(storedContent.isContentValid()));
                 mdm.setMuted(target.isMuted());
                 contentList.add(mdm);
             }
         } finally {
-            realm.close();
+            storeDb.close();
         }
         return contentList;
     }

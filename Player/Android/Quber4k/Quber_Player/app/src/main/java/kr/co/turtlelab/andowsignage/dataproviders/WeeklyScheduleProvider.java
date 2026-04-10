@@ -3,9 +3,9 @@ package kr.co.turtlelab.andowsignage.dataproviders;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.realm.Realm;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.data.realm.RealmWeeklySchedule;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.store.StoredWeeklySchedule;
 import kr.co.turtlelab.andowsignage.datamodels.WeeklyScheduleDataModel;
 
 public class WeeklyScheduleProvider {
@@ -19,26 +19,26 @@ public class WeeklyScheduleProvider {
 
     public static List<WeeklyScheduleDataModel> getWeeklyScheduleList() {
         List<WeeklyScheduleDataModel> list = new ArrayList<>();
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmWeeklySchedule schedule = realm.where(RealmWeeklySchedule.class)
+            StoredWeeklySchedule schedule = storeDb.where(StoredWeeklySchedule.class)
                     .equalTo("playerId", AndoWSignageApp.PLAYER_ID)
                     .findFirst();
             if (schedule == null) {
-                realm.executeTransaction(r -> ensureScheduleInTransaction(r));
-                schedule = realm.where(RealmWeeklySchedule.class)
+                storeDb.executeTransaction(r -> ensureScheduleInTransaction(r));
+                schedule = storeDb.where(StoredWeeklySchedule.class)
                         .equalTo("playerId", AndoWSignageApp.PLAYER_ID)
                         .findFirst();
             }
             if (schedule == null) {
                 return list;
             }
-            RealmWeeklySchedule detached = realm.copyFromRealm(schedule);
+            StoredWeeklySchedule detached = storeDb.copyEntity(schedule);
             for (String day : DAYS) {
                 addModel(list, detached, day);
             }
         } finally {
-            realm.close();
+            storeDb.close();
         }
         return list;
     }
@@ -52,21 +52,21 @@ public class WeeklyScheduleProvider {
     }
 
     public static void updateIsOnAir(String day, boolean isOnAir) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmWeeklySchedule schedule = ensureScheduleInTransaction(r);
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredWeeklySchedule schedule = ensureScheduleInTransaction(r);
             if (schedule == null) {
                 return;
             }
             schedule.setOnAir(day, isOnAir);
         });
-        realm.close();
+        storeDb.close();
     }
 
     private static void updateDay(String day, boolean isFrom, String hour, String minute) {
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmWeeklySchedule schedule = ensureScheduleInTransaction(r);
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredWeeklySchedule schedule = ensureScheduleInTransaction(r);
             if (schedule == null) {
                 return;
             }
@@ -82,11 +82,11 @@ public class WeeklyScheduleProvider {
                 schedule.setSchedule(day, startHour, startMinute, h, m);
             }
         });
-        realm.close();
+        storeDb.close();
     }
 
     private static void addModel(List<WeeklyScheduleDataModel> list,
-                                 RealmWeeklySchedule schedule,
+                                 StoredWeeklySchedule schedule,
                                  String day) {
         WeeklyScheduleDataModel model = new WeeklyScheduleDataModel();
         model.setDay(day);
@@ -96,11 +96,11 @@ public class WeeklyScheduleProvider {
         list.add(model);
     }
 
-    private static RealmWeeklySchedule ensureScheduleInTransaction(Realm realm) {
-        if (realm == null) {
+    private static StoredWeeklySchedule ensureScheduleInTransaction(ObjectBoxDb storeDb) {
+        if (storeDb == null) {
             return null;
         }
-        RealmWeeklySchedule schedule = realm.where(RealmWeeklySchedule.class)
+        StoredWeeklySchedule schedule = storeDb.where(StoredWeeklySchedule.class)
                 .equalTo("playerId", AndoWSignageApp.PLAYER_ID)
                 .findFirst();
         if (schedule != null) {
@@ -109,12 +109,12 @@ public class WeeklyScheduleProvider {
         if (AndoWSignageApp.PLAYER_ID == null) {
             return null;
         }
-        schedule = realm.createObject(RealmWeeklySchedule.class, AndoWSignageApp.PLAYER_ID);
+        schedule = storeDb.createObject(StoredWeeklySchedule.class, AndoWSignageApp.PLAYER_ID);
         applyDefaultSchedule(schedule);
         return schedule;
     }
 
-    private static void applyDefaultSchedule(RealmWeeklySchedule schedule) {
+    private static void applyDefaultSchedule(StoredWeeklySchedule schedule) {
         if (schedule == null) {
             return;
         }

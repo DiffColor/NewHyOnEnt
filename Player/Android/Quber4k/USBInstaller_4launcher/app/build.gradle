@@ -21,12 +21,12 @@ android {
             keyPassword keyPasswordValue
         }
     }
-    compileSdkVersion 22
-    buildToolsVersion "29.0.2"
+    compileSdkVersion 30
+    buildToolsVersion "30.0.3"
     defaultConfig {
         applicationId "kr.co.turtlelab.startnow.usbinstaller"
         minSdkVersion 17
-        targetSdkVersion 17
+        targetSdkVersion 30
         versionCode 1
         versionName "1.0"
     }

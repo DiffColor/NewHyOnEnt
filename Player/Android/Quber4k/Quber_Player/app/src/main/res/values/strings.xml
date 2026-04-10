@@ -22,8 +22,8 @@
 	<string name="confirm">적용</string>
 	<string name="hint1">Player_123</string>
 	<string name="hint_server_address">주소 입력</string>
-	<string name="export_realm_button">설정 백업</string>
-	<string name="export_realm_success">설정 백업 완료: %1$s</string>
-	<string name="export_realm_fail">설정 백업 실패: %1$s</string>
+	<string name="export_storage_button">설정 백업</string>
+	<string name="export_storage_success">설정 백업 완료: %1$s</string>
+	<string name="export_storage_fail">설정 백업 실패: %1$s</string>
 
 </resources>

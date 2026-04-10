@@ -4,6 +4,7 @@ import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 
 import java.util.Calendar;
 import java.util.List;
@@ -35,8 +36,8 @@ public class AlarmUtils {
 		wakeup_intent.setAction("andowsignage.intent.action.WAKEUP");
 		sleep_intent.setAction("andowsignage.intent.action.SLEEP");		
 		
-		wakeupPending = PendingIntent.getBroadcast(context, 0, wakeup_intent, 0);
-		sleepPending = PendingIntent.getBroadcast(context, 0, sleep_intent, 0);
+		wakeupPending = PendingIntent.getBroadcast(context, 0, wakeup_intent, getPendingIntentFlags());
+		sleepPending = PendingIntent.getBroadcast(context, 0, sleep_intent, getPendingIntentFlags());
 
 		Calendar calendar = Calendar.getInstance();
 		
@@ -92,8 +93,15 @@ public class AlarmUtils {
     public static void cancelAlarm(Context context)
     {
         Intent intent = new Intent(context, WakeOrSleepReceiver.class);
-        PendingIntent sender = PendingIntent.getBroadcast(context, 0, intent, 0);
+        PendingIntent sender = PendingIntent.getBroadcast(context, 0, intent, getPendingIntentFlags());
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         alarmManager.cancel(sender);
     }
+
+	private static int getPendingIntentFlags() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			return PendingIntent.FLAG_IMMUTABLE;
+		}
+		return 0;
+	}
 }

@@ -116,12 +116,12 @@
 		                android:enabled="false"/>
 
                     <Button
-                        android:id="@+id/btnExportRealm"
+                        android:id="@+id/btnExportStorage"
                         android:layout_width="100dp"
                         android:layout_height="30dp"
                         android:layout_marginLeft="18dp"
                         android:background="@android:color/darker_gray"
-                        android:text="@string/export_realm_button"
+                        android:text="@string/export_storage_button"
                         android:visibility="gone"/>
 	            </LinearLayout>
 	            

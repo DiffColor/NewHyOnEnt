@@ -1,16 +1,23 @@
-package kr.co.turtlelab.andowsignage.data.realm;
+package kr.co.turtlelab.andowsignage.data.store;
 
-import io.realm.RealmObject;
-import io.realm.annotations.PrimaryKey;
+import io.objectbox.annotation.Entity;
+import io.objectbox.annotation.Id;
+import io.objectbox.annotation.Unique;
+import kr.co.turtlelab.andowsignage.data.objectbox.BusinessId;
 
 /**
- * 업데이트 세트(대기열) 상태를 보관하는 Realm 모델.
+ * 업데이트 세트(대기열) 상태를 보관하는 로컬 모델.
  * 실제 플레이어 데이터(페이지/요소/콘텐츠)는 기존 스키마를 유지하고,
  * 이 테이블에 JSON 블롭과 진행 상태만 관리한다.
  */
-public class RealmUpdateQueue extends RealmObject {
+@Entity
+public class StoredUpdateQueue {
 
-    @PrimaryKey
+    @Id
+    private long objectBoxId;
+
+    @BusinessId
+    @Unique
     private long id;
     private String type;
     private String payloadJson;
@@ -28,6 +35,14 @@ public class RealmUpdateQueue extends RealmObject {
     private int retryCount;
     private long nextRetryAt;
     private boolean scheduleQueue;
+
+    public long getObjectBoxId() {
+        return objectBoxId;
+    }
+
+    public void setObjectBoxId(long objectBoxId) {
+        this.objectBoxId = objectBoxId;
+    }
 
     public long getId() {
         return id;

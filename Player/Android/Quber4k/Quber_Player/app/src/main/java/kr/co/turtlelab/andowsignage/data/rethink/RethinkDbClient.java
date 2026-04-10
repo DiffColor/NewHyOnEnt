@@ -34,10 +34,10 @@ import java.util.UUID;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import io.realm.Realm;
+import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.DataSyncManager;
-import kr.co.turtlelab.andowsignage.data.realm.RealmPlayer;
+import kr.co.turtlelab.andowsignage.data.store.StoredPlayer;
 import kr.co.turtlelab.andowsignage.data.update.UpdateQueueContract;
 import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
 
@@ -238,7 +238,7 @@ public class RethinkDbClient {
         }
         RethinkModels.PlayerInfoRecord record = convert(result.get(0), RethinkModels.PlayerInfoRecord.class);
         if (persistSkeleton) {
-            saveRealmPlayerSkeleton(record);
+            saveStoredPlayerSkeleton(record);
         }
         return record;
     }
@@ -255,7 +255,7 @@ public class RethinkDbClient {
             return null;
         }
         RethinkModels.PlayerInfoRecord record = convert(map, RethinkModels.PlayerInfoRecord.class);
-        saveRealmPlayerSkeleton(record);
+        saveStoredPlayerSkeleton(record);
         return record;
     }
 
@@ -846,7 +846,7 @@ public class RethinkDbClient {
             String playerNameToSave = !TextUtils.isEmpty(normalizedPlayerName)
                     ? normalizedPlayerName
                     : storedPlayerName;
-            saveRealmPlayerSkeleton(guid, playerNameToSave);
+            saveStoredPlayerSkeleton(guid, playerNameToSave);
         }
 
         guidVerified = !TextUtils.isEmpty(guid);
@@ -855,46 +855,46 @@ public class RethinkDbClient {
     }
 
     public String getStoredPlayerGuid() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmPlayer player = realm.where(RealmPlayer.class).findFirst();
+            StoredPlayer player = storeDb.where(StoredPlayer.class).findFirst();
             if (player != null) {
                 return player.getPlayerId();
             }
         } finally {
-            realm.close();
+            storeDb.close();
         }
         return null;
     }
 
     public String getStoredPlayerName() {
-        Realm realm = Realm.getDefaultInstance();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
-            RealmPlayer player = realm.where(RealmPlayer.class).findFirst();
+            StoredPlayer player = storeDb.where(StoredPlayer.class).findFirst();
             if (player != null) {
                 return player.getPlayerName();
             }
         } finally {
-            realm.close();
+            storeDb.close();
         }
         return null;
     }
 
-    private void saveRealmPlayerSkeleton(RethinkModels.PlayerInfoRecord record) {
+    private void saveStoredPlayerSkeleton(RethinkModels.PlayerInfoRecord record) {
         if (record == null || TextUtils.isEmpty(record.getGuid())) {
             return;
         }
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmPlayer existing = r.where(RealmPlayer.class).findFirst();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredPlayer existing = r.where(StoredPlayer.class).findFirst();
             if (existing != null && !TextUtils.isEmpty(existing.getPlayerId())
                     && !existing.getPlayerId().equals(record.getGuid())) {
-                existing.deleteFromRealm();
+                r.delete(existing);
                 existing = null;
             }
-            RealmPlayer target = existing;
+            StoredPlayer target = existing;
             if (target == null) {
-                target = r.createObject(RealmPlayer.class, record.getGuid());
+                target = r.createObject(StoredPlayer.class, record.getGuid());
             }
             target.setPlayerName(record.getPlayerName());
             if (record.getPlaylist() != null) {
@@ -902,30 +902,30 @@ public class RethinkDbClient {
             }
             target.setLandscape(record.isLandscape());
         });
-        realm.close();
+        storeDb.close();
     }
 
-    private void saveRealmPlayerSkeleton(String guid, String playerName) {
+    private void saveStoredPlayerSkeleton(String guid, String playerName) {
         if (TextUtils.isEmpty(guid)) {
             return;
         }
-        Realm realm = Realm.getDefaultInstance();
-        realm.executeTransaction(r -> {
-            RealmPlayer existing = r.where(RealmPlayer.class).findFirst();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        storeDb.executeTransaction(r -> {
+            StoredPlayer existing = r.where(StoredPlayer.class).findFirst();
             if (existing != null && !TextUtils.isEmpty(existing.getPlayerId())
                     && !existing.getPlayerId().equals(guid)) {
-                existing.deleteFromRealm();
+                r.delete(existing);
                 existing = null;
             }
-            RealmPlayer target = existing;
+            StoredPlayer target = existing;
             if (target == null) {
-                target = r.createObject(RealmPlayer.class, guid);
+                target = r.createObject(StoredPlayer.class, guid);
             }
             if (!TextUtils.isEmpty(playerName)) {
                 target.setPlayerName(playerName);
             }
         });
-        realm.close();
+        storeDb.close();
     }
 
     private void resetDeviceInfoSyncWhenGuidChanged(String guid) {
@@ -976,7 +976,7 @@ public class RethinkDbClient {
                     .insert(payload)
                     .optArg("conflict", "update")
                     .runNoReply(getConnection());
-            saveRealmPlayerSkeleton(guid, playerName);
+            saveStoredPlayerSkeleton(guid, playerName);
             return guid;
         } catch (Exception ex) {
             Log.e(TAG, "RethinkDbClient: operation failed", ex);

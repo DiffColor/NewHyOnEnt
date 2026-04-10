@@ -9,7 +9,7 @@ import java.util.Locale;
 
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
+import kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
 import kr.co.turtlelab.andowsignage.tools.FTP4JUtil;
 import kr.co.turtlelab.andowsignage.tools.NetworkUtils;
@@ -21,7 +21,7 @@ public class UpdateQueueDownloader {
 
     public interface LeaseHandler {
         UpdateThrottleModels.UpdateThrottleSettings getSettings();
-        boolean ensureLease(RealmUpdateQueue queue, UpdateThrottleModels.UpdateThrottleSettings settings);
+        boolean ensureLease(StoredUpdateQueue queue, UpdateThrottleModels.UpdateThrottleSettings settings);
         boolean tryRenewLeaseIfNeeded(UpdateThrottleModels.UpdateThrottleSettings settings);
     }
 
@@ -47,11 +47,11 @@ public class UpdateQueueDownloader {
         this.leaseHandler = leaseHandler;
     }
 
-    public DownloadOutcome download(RealmUpdateQueue queue, UpdateProgressTracker tracker) {
+    public DownloadOutcome download(StoredUpdateQueue queue, UpdateProgressTracker tracker) {
         return download(queue, tracker, false);
     }
 
-    public DownloadOutcome download(RealmUpdateQueue queue, UpdateProgressTracker tracker, boolean ignoreLease) {
+    public DownloadOutcome download(StoredUpdateQueue queue, UpdateProgressTracker tracker, boolean ignoreLease) {
         DownloadOutcome outcome = new DownloadOutcome();
         UpdateThrottleModels.UpdateThrottleSettings settings = ignoreLease ? null
                 : (leaseHandler == null ? null : leaseHandler.getSettings());

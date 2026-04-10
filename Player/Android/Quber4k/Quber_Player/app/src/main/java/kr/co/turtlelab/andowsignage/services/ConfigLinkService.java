@@ -5,6 +5,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.os.Build;
 import android.os.IBinder;
 
 import kr.co.turtlelab.andowsignage.R;
@@ -48,7 +49,10 @@ public class ConfigLinkService extends Service {
 		//PendingIntent contentIntent = PendingIntent.getActivity(this, 0, new Intent(this, PlayerConfig.class), 0);
 		//PendingIntent contentIntent = PendingIntent.getActivity(this, 0, new Intent(this, PlayerPreferences.class), 0);
 		Intent customIntent = new Intent("andowsignage.intent.action.CALL_SETTINGS");
-		PendingIntent contentIntent = PendingIntent.getBroadcast(this, 0, customIntent, 0);
+		int pendingIntentFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+				? PendingIntent.FLAG_IMMUTABLE
+				: 0;
+		PendingIntent contentIntent = PendingIntent.getBroadcast(this, 0, customIntent, pendingIntentFlags);
 		
 		//		Notification noti = new Notification(R.drawable.ic_launcher, text, System.currentTimeMillis());
 //		noti.flags |= Notification.FLAG_ONGOING_EVENT;

@@ -1,12 +1,22 @@
-package kr.co.turtlelab.andowsignage.data.realm;
+package kr.co.turtlelab.andowsignage.data.store;
 
-import io.realm.RealmList;
-import io.realm.RealmObject;
-import io.realm.annotations.PrimaryKey;
+import java.util.ArrayList;
+import java.util.List;
 
-public class RealmPage extends RealmObject {
+import io.objectbox.annotation.Entity;
+import io.objectbox.annotation.Id;
+import io.objectbox.annotation.Transient;
+import io.objectbox.annotation.Unique;
+import kr.co.turtlelab.andowsignage.data.objectbox.BusinessId;
 
-    @PrimaryKey
+@Entity
+public class StoredPage {
+
+    @Id
+    private long objectBoxId;
+
+    @BusinessId
+    @Unique
     private String pageId;
     private String pageName;
     private String playlistName;
@@ -18,7 +28,16 @@ public class RealmPage extends RealmObject {
     private boolean landscape;
     private double canvasWidth = 1920;
     private double canvasHeight = 1080;
-    private RealmList<RealmElement> elements;
+    @Transient
+    private List<StoredElement> elements = new ArrayList<>();
+
+    public long getObjectBoxId() {
+        return objectBoxId;
+    }
+
+    public void setObjectBoxId(long objectBoxId) {
+        this.objectBoxId = objectBoxId;
+    }
 
     public String getPageId() {
         return pageId;
@@ -108,11 +127,11 @@ public class RealmPage extends RealmObject {
         this.canvasHeight = canvasHeight;
     }
 
-    public RealmList<RealmElement> getElements() {
+    public List<StoredElement> getElements() {
         return elements;
     }
 
-    public void setElements(RealmList<RealmElement> elements) {
+    public void setElements(List<StoredElement> elements) {
         this.elements = elements;
     }
 }

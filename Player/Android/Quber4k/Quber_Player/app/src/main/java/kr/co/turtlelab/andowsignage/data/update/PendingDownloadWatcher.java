@@ -1,6 +1,6 @@
 package kr.co.turtlelab.andowsignage.data.update;
 
-import kr.co.turtlelab.andowsignage.data.realm.RealmUpdateQueue;
+import kr.co.turtlelab.andowsignage.data.store.StoredUpdateQueue;
 
 /**
  * 다운로드 도중 장시간 정체된 항목을 초기화하여 재시도하도록 만드는 간단한 워처.
@@ -11,7 +11,7 @@ public final class PendingDownloadWatcher {
 
     private PendingDownloadWatcher() { }
 
-    public static void resetStaleDownloads(RealmUpdateQueue queue) {
+    public static void resetStaleDownloads(StoredUpdateQueue queue) {
         if (queue == null) {
             return;
         }
