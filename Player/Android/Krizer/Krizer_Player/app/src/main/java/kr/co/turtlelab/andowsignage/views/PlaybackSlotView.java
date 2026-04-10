@@ -130,6 +130,12 @@ public class PlaybackSlotView extends RelativeLayout {
         }
     }
 
+    public void pausePlayback() {
+        if (isMediaSlot()) {
+            mediaView.pausePlaylist();
+        }
+    }
+
     public void tick() {
         if (isMediaSlot()) {
             mediaView.count();

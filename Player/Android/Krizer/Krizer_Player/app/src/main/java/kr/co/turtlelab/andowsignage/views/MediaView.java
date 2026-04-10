@@ -369,13 +369,27 @@ public class MediaView extends RelativeLayout {
         } catch (Exception e) {
 
         } finally {
-            mStopTaskRunnable.run();
-            mPopContentRunnable.run();
+            cancelLoopPlayback(true);
             initialPrepared = false;
             preparedContentShown = false;
             preparedPlaybackStarted = false;
             waitingForPreparedAdvance = false;
             pendingPreparationCallback = null;
+            pendingPlaybackReadyCallback = null;
+            playbackReadyNotified = false;
+            removeCallbacks(playbackReadyFallbackRunnable);
+        }
+    }
+
+    public void pausePlaylist() {
+        try {
+            pauseVideoPlayback();
+        } catch (Exception e) {
+
+        } finally {
+            cancelLoopPlayback(true);
+            preparedPlaybackStarted = false;
+            waitingForPreparedAdvance = false;
             pendingPlaybackReadyCallback = null;
             playbackReadyNotified = false;
             removeCallbacks(playbackReadyFallbackRunnable);
@@ -876,6 +890,32 @@ public class MediaView extends RelativeLayout {
         } finally {
             videoView.setVisibility(View.GONE);
             resetViewPosition(videoView);
+        }
+    }
+
+    private void pauseVideoPlayback() {
+        if (videoView == null) {
+            return;
+        }
+        try {
+            videoView.setMediaInfoListener(null);
+            if (videoView.isPlaying()) {
+                videoView.pause();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void cancelLoopPlayback(boolean wakeLoop) {
+        LoopPlay currentLoop = mLoopPlay;
+        if (currentLoop == null) {
+            return;
+        }
+        synchronized (currentLoop) {
+            currentLoop.cancel(true);
+            if (wakeLoop) {
+                currentLoop.notifyAll();
+            }
         }
     }
 

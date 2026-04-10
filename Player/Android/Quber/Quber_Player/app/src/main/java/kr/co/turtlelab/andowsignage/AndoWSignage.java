@@ -1613,6 +1613,15 @@ public class AndoWSignage extends Activity {
 		}
 	}
 
+	private void pauseRuntime(PageRuntime runtime) {
+		if (runtime == null) {
+			return;
+		}
+		for (PlaybackSlotView slotView : runtime.slots) {
+			slotView.pausePlayback();
+		}
+	}
+
 	private void clearRuntime(PageRuntime runtime) {
 		if (runtime == null) {
 			return;
@@ -1647,7 +1656,7 @@ public class AndoWSignage extends Activity {
 			runtime.container.setVisibility(View.VISIBLE);
 			moveContainerOffScreen(runtime.container);
 		}
-		stopRuntime(runtime);
+		pauseRuntime(runtime);
 	}
 
 	private void beginRuntimeActivation(PageRuntime nextRuntime) {
@@ -1690,7 +1699,7 @@ public class AndoWSignage extends Activity {
 		} else {
 			startRuntimePlayback(nextRuntime);
 			hideContainerImmediately(previousRuntime.container);
-			stopRuntime(previousRuntime);
+			pauseRuntime(previousRuntime);
 			schedulePreviousRuntimeCleanup(previousRuntime, new Runnable() {
 				@Override
 				public void run() {
