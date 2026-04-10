@@ -83,7 +83,7 @@ public sealed class FirewallRuleService
         definition.Type switch
         {
             AppType.Rdb => definition.Port.GetValueOrDefault(DefaultRethinkPort),
-            AppType.Msg or AppType.Msg472 or AppType.Msg90 => definition.Port.GetValueOrDefault(DefaultSignalRPort),
+            AppType.Msg or AppType.Msg472 or AppType.Msg10 => definition.Port.GetValueOrDefault(DefaultSignalRPort),
             AppType.Ftp => definition.Port.GetValueOrDefault(AppDependencyService.DefaultFtpPort),
             _ => 0
         };
@@ -136,7 +136,7 @@ public sealed class FirewallRuleService
             AppType.Ftp => "ftp",
             AppType.Msg => "signalr",
             AppType.Msg472 => "signalr472",
-            AppType.Msg90 => "signalr90",
+            AppType.Msg10 => "signalr10",
             _ => "app"
         };
 
@@ -285,7 +285,7 @@ public sealed class FirewallRuleService
         || type == AppType.Ftp
         || type == AppType.Msg
         || type == AppType.Msg472
-        || type == AppType.Msg90;
+        || type == AppType.Msg10;
 
     private enum RuleSyncMode
     {

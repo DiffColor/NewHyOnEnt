@@ -796,7 +796,7 @@ public partial class MainWindow : FluentWindow
                 break;
             case AppType.Msg:
             case AppType.Msg472:
-            case AppType.Msg90:
+            case AppType.Msg10:
                 definition.Port = definition.Port ?? 5000;
                 if (string.IsNullOrWhiteSpace(definition.MsgHubPath))
                 {

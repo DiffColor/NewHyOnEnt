@@ -29,7 +29,7 @@ public partial class AppSettingsWindow : FluentWindow
                 || _workingCopy.Type == AppType.Ftp
                 || _workingCopy.Type == AppType.Msg
                 || _workingCopy.Type == AppType.Msg472
-                || _workingCopy.Type == AppType.Msg90))
+                || _workingCopy.Type == AppType.Msg10))
         {
             _workingCopy.ExecutablePath = dependencyService.GetExecutablePath(_workingCopy.Type);
         }
@@ -123,7 +123,7 @@ public partial class AppSettingsWindow : FluentWindow
         }
         else if (_workingCopy.Type == AppType.Msg
                  || _workingCopy.Type == AppType.Msg472
-                 || _workingCopy.Type == AppType.Msg90)
+                 || _workingCopy.Type == AppType.Msg10)
         {
             if (_workingCopy.Port is null || _workingCopy.Port <= 0)
             {

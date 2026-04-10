@@ -26,7 +26,7 @@ public partial class AppEntryViewModel : ObservableObject
         AppType.Ftp => "FTP",
         AppType.Msg => "MSG",
         AppType.Msg472 => "MSG472",
-        AppType.Msg90 => "MSG90",
+        AppType.Msg10 => "MSG10",
         _ => "APP"
     };
 

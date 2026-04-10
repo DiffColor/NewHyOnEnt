@@ -7,5 +7,5 @@ public enum AppType
     Msg,
     App,
     Msg472,
-    Msg90
+    Msg10
 }

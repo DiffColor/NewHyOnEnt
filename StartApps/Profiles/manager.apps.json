@@ -8,8 +8,8 @@
     "port": 28015
   },
   {
-    "name": "SignalR472",
-    "type": "Msg472",
+    "name": "SignalR10",
+    "type": "Msg10",
     "zone": "Parallel",
     "isEnabled": true,
     "runAsAdministrator": true,

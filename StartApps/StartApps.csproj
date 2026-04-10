@@ -48,7 +48,7 @@
     <None Remove="Assets\startapps.ico" />
     <None Remove="ftpsrv.zip" />
     <None Remove="signalr_net472.zip" />
-    <None Remove="signalr_net90.zip" />
+    <None Remove="signalr_net10.zip" />
   </ItemGroup>
 
   <ItemGroup>
@@ -70,7 +70,7 @@
     <EmbeddedResource Include="Profiles\*.apps.json" />
     <EmbeddedResource Include="rethinkdb.zip" />
     <EmbeddedResource Include="signalr_net472.zip" />
-    <EmbeddedResource Include="signalr_net90.zip" />
+    <EmbeddedResource Include="signalr_net10.zip" />
   </ItemGroup>
 
 </Project>

@@ -339,7 +339,7 @@ public class AppManager
                 break;
             case AppType.Msg:
             case AppType.Msg472:
-            case AppType.Msg90:
+            case AppType.Msg10:
                 startInfo.Arguments = BuildSignalrArguments(definition);
                 break;
             default:
@@ -371,7 +371,7 @@ public class AppManager
             AppType.Ftp => _dependencyService.GetExecutablePath(AppType.Ftp),
             AppType.Msg => _dependencyService.GetExecutablePath(AppType.Msg),
             AppType.Msg472 => _dependencyService.GetExecutablePath(AppType.Msg472),
-            AppType.Msg90 => _dependencyService.GetExecutablePath(AppType.Msg90),
+            AppType.Msg10 => _dependencyService.GetExecutablePath(AppType.Msg10),
             _ => string.Empty
         };
     }
@@ -382,7 +382,7 @@ public class AppManager
         var hubPath = string.IsNullOrWhiteSpace(definition.MsgHubPath) ? "/Data" : definition.MsgHubPath.Trim();
         var hubArg = QuoteArgumentIfNeeded(hubPath);
         var portText = port.ToString(CultureInfo.InvariantCulture);
-        if (definition.Type == AppType.Msg90)
+        if (definition.Type == AppType.Msg10)
         {
             return $"--port={portText} --hubPath={hubArg}";
         }

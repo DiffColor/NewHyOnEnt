@@ -454,7 +454,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         else if (definition.Type == AppType.Msg
                  || definition.Type == AppType.Msg472
-                 || definition.Type == AppType.Msg90)
+                 || definition.Type == AppType.Msg10)
         {
             changed |= ApplyRunAsAdministratorDefault(definition, defaultValue: false);
             definition.Port ??= 5000;

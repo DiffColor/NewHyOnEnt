@@ -20,11 +20,11 @@ public class AppDependencyService
     private const string FtpSrvFolderName = "ftpsrv";
     private const string FileZillaConfigFileName = "FileZilla Server.xml";
     private const string SignalrNet472ArchiveName = "signalr_net472.zip";
-    private const string SignalrNet90ArchiveName = "signalr_net90.zip";
+    private const string SignalrNet10ArchiveName = "signalr_net10.zip";
     private const string SignalrNet472FolderName = "signalr";
-    private const string SignalrNet90FolderName = "signalr_net90";
+    private const string SignalrNet10FolderName = "signalr10";
     private const string SignalrNet472ExeName = "SignalR_Net472.exe";
-    private const string SignalrNet90ExeName = "SignalRServer.exe";
+    private const string SignalrNet10ExeName = "signalr_net10linux.exe";
     private const string DefaultWorkspaceFolderName = "Turtle Lab";
     private const string DefaultNewHyOnFolderName = "NewHyOn Manger";
     private const string DefaultDataFolderName = "Data";
@@ -59,7 +59,7 @@ public class AppDependencyService
             AppType.Ftp => Path.Combine(StorageRoot, FtpSrvFolderName, "FileZilla Server.exe"),
             AppType.Msg => Path.Combine(StorageRoot, SignalrNet472FolderName, SignalrNet472ExeName),
             AppType.Msg472 => Path.Combine(StorageRoot, SignalrNet472FolderName, SignalrNet472ExeName),
-            AppType.Msg90 => Path.Combine(StorageRoot, SignalrNet90FolderName, SignalrNet90ExeName),
+            AppType.Msg10 => Path.Combine(StorageRoot, SignalrNet10FolderName, SignalrNet10ExeName),
             _ => string.Empty
         };
 
@@ -131,12 +131,12 @@ public class AppDependencyService
                 await ExtractEmbeddedZipAsync(SignalrNet472ArchiveName, Path.Combine(StorageRoot, SignalrNet472FolderName), cancellationToken);
             }
         }
-        else if (type == AppType.Msg90)
+        else if (type == AppType.Msg10)
         {
-            var executablePath = GetExecutablePath(AppType.Msg90);
+            var executablePath = GetExecutablePath(AppType.Msg10);
             if (!File.Exists(executablePath))
             {
-                await ExtractEmbeddedZipAsync(SignalrNet90ArchiveName, Path.Combine(StorageRoot, SignalrNet90FolderName), cancellationToken);
+                await ExtractEmbeddedZipAsync(SignalrNet10ArchiveName, Path.Combine(StorageRoot, SignalrNet10FolderName), cancellationToken);
             }
         }
     }
@@ -333,8 +333,8 @@ public class AppDependencyService
             },
             new AppDefinition
             {
-                Name = "SignalR472",
-                Type = AppType.Msg472,
+                Name = "SignalR10",
+                Type = AppType.Msg10,
                 Zone = AppExecutionZone.Parallel,
                 IsEnabled = true,
                 Port = 5000,
