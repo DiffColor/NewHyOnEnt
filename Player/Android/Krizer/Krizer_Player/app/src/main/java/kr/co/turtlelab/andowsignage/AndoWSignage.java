@@ -1639,6 +1639,7 @@ public class AndoWSignage extends Activity {
 			return;
 		}
 		runtime.prepareCancelled = true;
+		stopRuntime(runtime);
 		runtime.pendingPreparationCount = 0;
 		runtime.prepared = false;
 		runtime.startInProgress = false;
@@ -1688,6 +1689,7 @@ public class AndoWSignage extends Activity {
 			scheduleDeferredStageNextPlayback(NEXT_LAYOUT_STAGE_DELAY_MS);
 		} else {
 			startRuntimePlayback(nextRuntime);
+			stopRuntime(previousRuntime);
 			hideContainerImmediately(previousRuntime.container);
 			schedulePreviousRuntimeCleanup(previousRuntime, new Runnable() {
 				@Override
