@@ -604,7 +604,7 @@ namespace NewHyOnPlayer
                     queue.Status = UpdateQueueStatus.Queued;
                     queue.RetryCount++;
                     queue.NextAttempt = DateTime.Now.Add(RetryPolicy(queue.RetryCount));
-                    queue.DownloadProgress = CalculateDownloadProgress(downloadEntries);
+                    ResetRetryProgress(queue);
                     queueRepository.Upsert(queue);
                     LogStatus(queue, "Downloading failed, will retry");
                     SendQueueStatus(queue);
@@ -644,7 +644,7 @@ namespace NewHyOnPlayer
                 queue.Status = UpdateQueueStatus.Queued;
                 queue.RetryCount++;
                 queue.NextAttempt = DateTime.Now.Add(RetryPolicy(queue.RetryCount));
-                queue.DownloadProgress = CalculateDownloadProgress(downloadEntries);
+                ResetRetryProgress(queue);
                 queueRepository.Upsert(queue);
                 LogStatus(queue, "Validating failed, will retry");
                 SendQueueStatus(queue);
@@ -1006,10 +1006,22 @@ namespace NewHyOnPlayer
             queue.Status = UpdateQueueStatus.Queued;
             queue.NextAttempt = DateTime.Now.AddSeconds(retrySeconds);
             queue.LastError = reason ?? "LEASE_WAIT";
+            ResetRetryProgress(queue);
             queueRepository.Upsert(queue);
             LogStatus(queue, $"Lease wait: {queue.LastError}");
             SendQueueStatus(queue);
             SyncQueueToRethink(queue);
+        }
+
+        private static void ResetRetryProgress(UpdateQueue queue)
+        {
+            if (queue == null)
+            {
+                return;
+            }
+
+            queue.DownloadProgress = 0;
+            queue.ValidateProgress = 0;
         }
 
         private static string BuildQueueId(string playerId, long ticks)
@@ -1311,10 +1323,10 @@ namespace NewHyOnPlayer
                         entry.Attempts++;
                         ResetChunksToPending(entry);
                         queue.DownloadJson = JsonConvert.SerializeObject(entries);
-                        queue.DownloadProgress = CalculateDownloadProgress(entries);
                         queue.RetryCount++;
                         queue.NextAttempt = DateTime.Now.Add(RetryPolicy(queue.RetryCount));
                         queue.Status = UpdateQueueStatus.Queued;
+                        ResetRetryProgress(queue);
                         queueRepository.Upsert(queue);
                         queue.LastError = string.IsNullOrWhiteSpace(entry.LastError)
                             ? $"Download failed: {entry.FileName}"
@@ -1345,10 +1357,10 @@ namespace NewHyOnPlayer
                     entry.Attempts++;
                     ResetChunksToPending(entry);
                     queue.DownloadJson = JsonConvert.SerializeObject(entries);
-                    queue.DownloadProgress = CalculateDownloadProgress(entries);
                     queue.RetryCount++;
                     queue.NextAttempt = DateTime.Now.Add(RetryPolicy(queue.RetryCount));
                     queue.Status = UpdateQueueStatus.Queued;
+                    ResetRetryProgress(queue);
                     queueRepository.Upsert(queue);
                     queue.LastError = $"Download failed: {entry.FileName} / {ex.Message}";
                     LogStatus(queue, queue.LastError);

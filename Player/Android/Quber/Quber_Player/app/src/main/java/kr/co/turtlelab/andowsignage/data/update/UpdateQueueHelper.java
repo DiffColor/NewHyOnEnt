@@ -145,7 +145,9 @@ public final class UpdateQueueHelper {
                 String oldStatus = queue.getStatus();
                 queue.setStatus(status);
                 queue.setUpdatedAt(now);
-                if (UpdateQueueContract.Status.READY.equals(status)) {
+                if (UpdateQueueContract.Status.QUEUED.equals(status)) {
+                    resetProgressForRetry(queue);
+                } else if (UpdateQueueContract.Status.READY.equals(status)) {
                     queue.setProgress(100f);
                     queue.setDownloadProgress(100f);
                     queue.setValidateProgress(100f);
@@ -291,6 +293,7 @@ public final class UpdateQueueHelper {
                     return;
                 }
                 queue.setStatus(UpdateQueueContract.Status.QUEUED);
+                resetProgressForRetry(queue);
                 queue.setNextRetryAt(nextRetryAt);
                 queue.setUpdatedAt(now);
                 if (!TextUtils.isEmpty(errorCode)) {
@@ -397,13 +400,11 @@ public final class UpdateQueueHelper {
                 if (stuck != null) {
                     for (RealmUpdateQueue queue : stuck) {
                         queue.setStatus(UpdateQueueContract.Status.QUEUED);
+                        resetProgressForRetry(queue);
                         queue.setErrorCode(null);
                         queue.setErrorMessage("Recovered from interrupted state");
                         queue.setUpdatedAt(now);
                         queue.setNextRetryAt(0L);
-                        queue.setDownloadProgress(0f);
-                        queue.setValidateProgress(0f);
-                        queue.setProgress(0f);
                         sendStatus(queue);
                     }
                 }
@@ -485,6 +486,7 @@ public final class UpdateQueueHelper {
                         .findAll();
                 for (RealmUpdateQueue queue : results) {
                     queue.setStatus(UpdateQueueContract.Status.QUEUED);
+                    resetProgressForRetry(queue);
                     queue.setErrorCode(null);
                     queue.setErrorMessage(null);
                     queue.setNextRetryAt(0L);
@@ -503,6 +505,15 @@ public final class UpdateQueueHelper {
 
     private static void sendStatus(RealmUpdateQueue queue) {
         sendStatus(queue, getPlayerId(queue));
+    }
+
+    private static void resetProgressForRetry(RealmUpdateQueue queue) {
+        if (queue == null) {
+            return;
+        }
+        queue.setProgress(0f);
+        queue.setDownloadProgress(0f);
+        queue.setValidateProgress(0f);
     }
 
     private static void sendStatus(RealmUpdateQueue queue, String playerId) {
