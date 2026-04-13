@@ -231,15 +231,42 @@ public class AndoWSignageApp extends Application {
 		return null;
 	}
 
-	public static void beginShutdown() {
+	private static volatile long shutdownToken = 0L;
+
+	public static synchronized long beginShutdown() {
 		shutdownInProgress = true;
+		shutdownToken++;
+		return shutdownToken;
+	}
+
+	public static void markPlayingState() {
+		state = RP_STATUS.playing.toString();
+	}
+
+	public static void markUpdatingState() {
+		state = RP_STATUS.updating.toString();
+	}
+
+	public static void markStoppedState() {
+		state = RP_STATUS.stopped.toString();
 	}
 
 	public static void clearShutdownInProgress() {
 		shutdownInProgress = false;
+		synchronized (AndoWSignageApp.class) {
+			shutdownToken++;
+		}
 	}
 
 	public static boolean isShutdownInProgress() {
 		return shutdownInProgress;
+	}
+
+	public static synchronized boolean matchesShutdownToken(long token) {
+		return shutdownInProgress && shutdownToken == token;
+	}
+
+	public static boolean shouldReportStoppedState() {
+		return isSlept || shutdownInProgress;
 	}
 }

@@ -83,7 +83,7 @@ public class PowerService extends Service {
 	        ctx.sendBroadcast(sleepIntent);
 		}
 		AndoWSignageApp.isSlept = true;
-        AndoWSignageApp.state = AndoWSignageApp.RP_STATUS.stopped.toString();
+        AndoWSignageApp.markStoppedState();
 	}
 	
 	public void WakeUp() {

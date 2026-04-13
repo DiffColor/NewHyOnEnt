@@ -1,82 +1,113 @@
 package kr.co.turtlelab.andowsignage.tools;
 
 import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 
 public class LightestTimer {
-	  
-	long _interval; 
-	long getInterval() { return _interval; } 
-	void setInterval(int delay) { _interval = delay; } 
-	Handler handler; 
-	Runnable _tickHandler; 
-	Runnable delegate; 
-	boolean ticking; 
-	  
-	public boolean getIsTicking(){ return ticking; } 
-		  
-	public LightestTimer(int interval) 
-	{ 
-		_interval = interval; 
-		handler = new Handler(); 
+
+	private long intervalMs;
+	long getInterval() { return intervalMs; }
+	void setInterval(int delay) { intervalMs = normalizeInterval(delay); }
+	private final Handler handler;
+	private Runnable tickHandler;
+	private boolean ticking;
+	private long nextTickAtUptimeMs = -1L;
+	private final Runnable delegate = new Runnable() {
+		@Override
+		public void run() {
+			Runnable localTickHandler;
+			synchronized (LightestTimer.this) {
+				if (!ticking) {
+					return;
+				}
+				localTickHandler = tickHandler;
+			}
+
+			if (localTickHandler != null) {
+				localTickHandler.run();
+			}
+
+			synchronized (LightestTimer.this) {
+				if (!ticking) {
+					return;
+				}
+				scheduleNextLocked(true);
+			}
+		}
+	};
+
+	public synchronized boolean getIsTicking(){ return ticking; }
+
+	public LightestTimer(int interval)
+	{
+		intervalMs = normalizeInterval(interval);
+		handler = new Handler(Looper.getMainLooper());
 	}
-	
+
 	public LightestTimer(Runnable onTickHandler) {
-		setOnTickHandler(onTickHandler); 
-		handler = new Handler(); 
+		handler = new Handler(Looper.getMainLooper());
+		setOnTickHandler(onTickHandler);
 	}
-	 
-	public LightestTimer(int interval, Runnable onTickHandler) 
-	{ 
-		_interval = interval; 
-		setOnTickHandler(onTickHandler); 
-		handler = new Handler(); 
-	} 
-	  
-	public void start(int interval, Runnable onTickHandler) 
-	{ 
-		if (ticking) return; 
-		
-		_interval = interval; 
-		setOnTickHandler(onTickHandler); 
-		handler.postDelayed(delegate, _interval); 
-		ticking = true; 
-	} 
-	  
-	public void start() 
-	{ 
-		if (ticking) return; 
-		
-		handler.postDelayed(delegate, _interval); 
-		ticking = true; 
-	} 
-	  
-	public void stop() 
-	{ 
-		handler.removeCallbacks(delegate); 
-	    //handler.removeCallbacksAndMessages(null);
-	    ticking = false; 
-	} 
-	
-	public void changeInterval(long interval) {
+
+	public LightestTimer(int interval, Runnable onTickHandler)
+	{
+		intervalMs = normalizeInterval(interval);
+		handler = new Handler(Looper.getMainLooper());
+		setOnTickHandler(onTickHandler);
+	}
+
+	public synchronized void start(int interval, Runnable onTickHandler)
+	{
+		intervalMs = normalizeInterval(interval);
+		setOnTickHandler(onTickHandler);
+		start();
+	}
+
+	public synchronized void start()
+	{
+		if (ticking || tickHandler == null) {
+			return;
+		}
+
+		ticking = true;
+		scheduleNextLocked(false);
+	}
+
+	public synchronized void stop()
+	{
+		ticking = false;
+		nextTickAtUptimeMs = -1L;
 		handler.removeCallbacks(delegate);
-	    //handler.removeCallbacksAndMessages(null);
-		_interval = interval;
-		handler.postDelayed(delegate, _interval);
 	}
-	  
-	public void setOnTickHandler(Runnable onTickHandler) 
-	{ 
-	    if (onTickHandler == null) return; 
-	    
-	    _tickHandler = onTickHandler; 
-	    
-	    delegate = new Runnable() { 
-	    	public void run() 
-	    	{ 
-	    		if (_tickHandler == null) return; 
-	    		_tickHandler.run(); 
-	    		handler.postDelayed(delegate, _interval); 
-	    	} 
-	    }; 
+
+	public synchronized void changeInterval(long interval) {
+		intervalMs = normalizeInterval(interval);
+		if (!ticking) {
+			return;
+		}
+		handler.removeCallbacks(delegate);
+		scheduleNextLocked(false);
+	}
+
+	public synchronized void setOnTickHandler(Runnable onTickHandler)
+	{
+	    tickHandler = onTickHandler;
+	}
+
+	private void scheduleNextLocked(boolean keepPhase) {
+		long now = SystemClock.uptimeMillis();
+		if (!keepPhase || nextTickAtUptimeMs < 0L) {
+			nextTickAtUptimeMs = now + intervalMs;
+		} else {
+			do {
+				nextTickAtUptimeMs += intervalMs;
+			} while (nextTickAtUptimeMs <= now);
+		}
+		handler.postAtTime(delegate, nextTickAtUptimeMs);
+	}
+
+	private long normalizeInterval(long interval) {
+		return Math.max(1L, interval);
 	}
 }

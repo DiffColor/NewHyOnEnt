@@ -526,9 +526,9 @@ public class UpdateManagerService extends Service implements SignalRClientServic
         if (player == null) {
             return;
         }
-        AndoWSignageApp.state = RP_STATUS.updating.toString();
+        AndoWSignageApp.markUpdatingState();
         long queueId = syncManager.enqueuePlaylistUpdate(player);
-        AndoWSignageApp.state = RP_STATUS.playing.toString();
+        AndoWSignageApp.markPlayingState();
         if (queueId <= 0) {
             return;
         }

@@ -4,6 +4,10 @@ import android.content.Context;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 
+import java.io.File;
+
+import kr.co.turtlelab.andowsignage.AndoWSignageApp;
+
 public class MediaScanner implements MediaScannerConnection.MediaScannerConnectionClient {
     private MediaScannerConnection mScanner;
     private String mFilepath = null;
@@ -16,9 +20,29 @@ public class MediaScanner implements MediaScannerConnection.MediaScannerConnecti
     }
 
     public void notify(String filepath, boolean isDeleted) {
+    	if (shouldSkipScan(filepath)) {
+    		return;
+    	}
     	mIsDeleted = isDeleted;
         mFilepath = filepath;
         mScanner.connect(); // 이 함수 호출 후 onMediaScannerConnected가 호출 됨.
+    }
+
+    private boolean shouldSkipScan(String filepath) {
+        if (filepath == null || filepath.length() < 1) {
+            return true;
+        }
+        File appRoot = AndoWSignageApp.getAppRootDir();
+        if (appRoot == null) {
+            return false;
+        }
+        try {
+            String appRootPath = appRoot.getCanonicalPath();
+            String targetPath = new File(filepath).getCanonicalPath();
+            return targetPath.equals(appRootPath) || targetPath.startsWith(appRootPath + File.separator);
+        } catch (Exception ignore) {
+            return false;
+        }
     }
 
     @Override
@@ -39,4 +63,3 @@ public class MediaScanner implements MediaScannerConnection.MediaScannerConnecti
     }
     
 }
-

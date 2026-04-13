@@ -1,10 +1,15 @@
 package kr.co.turtlelab.andowsignage.dataproviders;
 
+import android.text.TextUtils;
+
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import io.realm.Realm;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
+import kr.co.turtlelab.andowsignage.data.realm.RealmPlayer;
 import kr.co.turtlelab.andowsignage.data.realm.RealmWeeklySchedule;
 import kr.co.turtlelab.andowsignage.datamodels.WeeklyScheduleDataModel;
 
@@ -21,15 +26,7 @@ public class WeeklyScheduleProvider {
         List<WeeklyScheduleDataModel> list = new ArrayList<>();
         Realm realm = Realm.getDefaultInstance();
         try {
-            RealmWeeklySchedule schedule = realm.where(RealmWeeklySchedule.class)
-                    .equalTo("playerId", AndoWSignageApp.PLAYER_ID)
-                    .findFirst();
-            if (schedule == null) {
-                realm.executeTransaction(r -> ensureScheduleInTransaction(r));
-                schedule = realm.where(RealmWeeklySchedule.class)
-                        .equalTo("playerId", AndoWSignageApp.PLAYER_ID)
-                        .findFirst();
-            }
+            RealmWeeklySchedule schedule = findSchedule(realm);
             if (schedule == null) {
                 return list;
             }
@@ -100,18 +97,65 @@ public class WeeklyScheduleProvider {
         if (realm == null) {
             return null;
         }
-        RealmWeeklySchedule schedule = realm.where(RealmWeeklySchedule.class)
-                .equalTo("playerId", AndoWSignageApp.PLAYER_ID)
-                .findFirst();
+        RealmWeeklySchedule schedule = findSchedule(realm);
         if (schedule != null) {
             return schedule;
         }
-        if (AndoWSignageApp.PLAYER_ID == null) {
+        String scheduleKey = resolvePreferredScheduleKey(realm);
+        if (TextUtils.isEmpty(scheduleKey)) {
             return null;
         }
-        schedule = realm.createObject(RealmWeeklySchedule.class, AndoWSignageApp.PLAYER_ID);
+        schedule = realm.createObject(RealmWeeklySchedule.class, scheduleKey);
         applyDefaultSchedule(schedule);
         return schedule;
+    }
+
+    private static RealmWeeklySchedule findSchedule(Realm realm) {
+        if (realm == null) {
+            return null;
+        }
+        for (String key : resolveScheduleKeys(realm)) {
+            RealmWeeklySchedule schedule = realm.where(RealmWeeklySchedule.class)
+                    .equalTo("playerId", key)
+                    .findFirst();
+            if (schedule != null) {
+                return schedule;
+            }
+        }
+        return null;
+    }
+
+    private static String resolvePreferredScheduleKey(Realm realm) {
+        RealmPlayer player = realm.where(RealmPlayer.class).findFirst();
+        if (player != null && !TextUtils.isEmpty(player.getPlayerId())) {
+            return player.getPlayerId();
+        }
+        if (!TextUtils.isEmpty(AndoWSignageApp.PLAYER_ID)) {
+            return AndoWSignageApp.PLAYER_ID;
+        }
+        if (player != null && !TextUtils.isEmpty(player.getPlayerName())) {
+            return player.getPlayerName();
+        }
+        return null;
+    }
+
+    private static List<String> resolveScheduleKeys(Realm realm) {
+        Set<String> keys = new LinkedHashSet<>();
+        RealmPlayer player = realm.where(RealmPlayer.class).findFirst();
+        if (player != null) {
+            addKey(keys, player.getPlayerId());
+        }
+        addKey(keys, AndoWSignageApp.PLAYER_ID);
+        if (player != null) {
+            addKey(keys, player.getPlayerName());
+        }
+        return new ArrayList<>(keys);
+    }
+
+    private static void addKey(Set<String> keys, String value) {
+        if (!TextUtils.isEmpty(value)) {
+            keys.add(value);
+        }
     }
 
     private static void applyDefaultSchedule(RealmWeeklySchedule schedule) {

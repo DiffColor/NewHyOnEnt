@@ -9,6 +9,7 @@ import android.util.Log;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -30,6 +31,7 @@ public class HeartbeatService extends Service {
     public static final String ACTION_SEND_STOPPED = "kr.co.turtlelab.andowsignage.services.action.SEND_HEARTBEAT_STOPPED";
     public static final String ACTION_SEND_NOW = "kr.co.turtlelab.andowsignage.services.action.SEND_HEARTBEAT_NOW";
     private static final String EXTRA_UPDATE_REVISION = "kr.co.turtlelab.andowsignage.services.extra.UPDATE_REVISION";
+    public static final String EXTRA_SHUTDOWN_TOKEN = "kr.co.turtlelab.andowsignage.services.extra.SHUTDOWN_TOKEN";
     private static final long DEFAULT_INTERVAL_MS = 5000L;
     private static final long MIN_INTERVAL_MS = 1000L;
     private static final long CLIENT_ID_REFRESH_MS = 5000L;
@@ -56,9 +58,17 @@ public class HeartbeatService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_SEND_STOPPED.equals(intent.getAction())) {
-            AndoWSignageApp.beginShutdown();
+            final long shutdownToken = intent.getLongExtra(EXTRA_SHUTDOWN_TOKEN, 0L);
             executor.execute(() -> {
+                if (!AndoWSignageApp.matchesShutdownToken(shutdownToken)) {
+                    stopSelfResult(startId);
+                    return;
+                }
                 ensureSignalRReady();
+                if (!AndoWSignageApp.matchesShutdownToken(shutdownToken)) {
+                    stopSelfResult(startId);
+                    return;
+                }
                 publishHeartbeatStoppedAndStop();
                 stopManagedServicesForShutdown();
                 stopSelfResult(startId);
@@ -176,7 +186,7 @@ public class HeartbeatService extends Service {
             return;
         }
         String playerName = resolvePlayerName();
-        String status = AndoWSignageApp.state;
+        String status = resolvePlaybackAwareStatus(AndoWSignageApp.state);
         int process = parseProcess(AndoWSignageApp.process);
         SignalRClientService.HeartbeatGuard heartbeatGuard = null;
         UpdateHeartbeatState.Snapshot updateSnapshot = UpdateHeartbeatState.captureForPublish(forceUpdateReport, expectedRevision);
@@ -206,6 +216,22 @@ public class HeartbeatService extends Service {
             payload.PlayerName = playerName;
             signalRClient.sendHeartbeat(payload, heartbeatGuard);
         }
+    }
+
+    private String resolvePlaybackAwareStatus(String rawStatus) {
+        String normalized = TextUtils.isEmpty(rawStatus)
+                ? AndoWSignageApp.RP_STATUS.stopped.toString()
+                : rawStatus.trim().toLowerCase(Locale.US);
+
+        if (AndoWSignageApp.RP_STATUS.updating.toString().equals(normalized)) {
+            return normalized;
+        }
+
+        if (AndoWSignage.hasActiveContentPlaybackForHeartbeat()) {
+            return AndoWSignageApp.RP_STATUS.playing.toString();
+        }
+
+        return normalized;
     }
 
     public void publishHeartbeatStoppedAndStop() {

@@ -9,6 +9,9 @@ import android.media.MediaPlayer;
 import android.media.MediaPlayer.OnCompletionListener;
 import android.media.MediaPlayer.OnErrorListener;
 import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -82,9 +85,34 @@ public class MediaView extends RelativeLayout {
     private final Runnable playbackReadyFallbackRunnable = new Runnable() {
         @Override
         public void run() {
+            markVideoPresentationStarted();
             notifyPlaybackReady();
         }
     };
+    private static final long VIDEO_PRESENTATION_FALLBACK_MS = 300L;
+    private final Handler playbackTimingHandler = new Handler(Looper.getMainLooper());
+    private final Runnable videoPresentationFallbackRunnable = new Runnable() {
+        @Override
+        public void run() {
+            markVideoPresentationStarted();
+        }
+    };
+    private final Runnable contentAdvanceRunnable = new Runnable() {
+        @Override
+        public void run() {
+            requestContentAdvance();
+        }
+    };
+    private boolean advancePending = false;
+    private int advanceSignalCount = 0;
+    private int consumedAdvanceSignalCount = 0;
+    private boolean videoPresentationStarted = false;
+    private long currentContentStartedAtElapsedRealtimeMs = 0L;
+    private long currentContentDeadlineAtElapsedRealtimeMs = 0L;
+    private long lastContentBoundaryAtElapsedRealtimeMs = 0L;
+    private boolean currentContentBlocksLayoutSwitch = false;
+    private int contentRenderWidth;
+    private int contentRenderHeight;
 
     DisplayImageOptions imgOpt;
     private static final ExecutorService loopExecutor = Executors.newCachedThreadPool();
@@ -98,6 +126,8 @@ public class MediaView extends RelativeLayout {
         this.cdmList = cdmList != null ? cdmList : new ArrayList<MediaDataModel>();
         ctx = context;
         this.act = act;
+        contentRenderWidth = Math.max(1, width);
+        contentRenderHeight = Math.max(1, height);
 
         setMinimumWidth(width);
         setMinimumHeight(height);
@@ -110,6 +140,8 @@ public class MediaView extends RelativeLayout {
     }
 
     public void configureMediaContents(int width, int height, List<MediaDataModel> contents) {
+        contentRenderWidth = Math.max(1, width);
+        contentRenderHeight = Math.max(1, height);
         setMinimumWidth(width);
         setMinimumHeight(height);
         List<MediaDataModel> nextContents = copyMediaContents(contents);
@@ -187,9 +219,7 @@ public class MediaView extends RelativeLayout {
 
             @Override
             public void onCompletion(MediaPlayer mp) {
-                synchronized (mLoopPlay) {
-                    mLoopPlay.notify();
-                }
+                handleVideoCompletion();
             }
         });
 
@@ -209,9 +239,7 @@ public class MediaView extends RelativeLayout {
 
             @Override
             public void run() {
-                synchronized (mLoopPlay) {
-                    mLoopPlay.notify();
-                }
+                signalAdvanceReady();
             }
         };
 
@@ -235,19 +263,21 @@ public class MediaView extends RelativeLayout {
     }
 
     public void runPlaylist() {
+        resetContentTimingState();
         preparedContentShown = false;
         preparedPlaybackStarted = false;
         waitingForPreparedAdvance = false;
         initialPrepared = false;
         pendingPlaybackReadyCallback = null;
         playbackReadyNotified = false;
-        removeCallbacks(playbackReadyFallbackRunnable);
+        cancelPlaybackReadyFallback();
         s_isFirst = true;
         mLoopPlay = new LoopPlay();
         mLoopPlay.executeOnExecutor(loopExecutor);
     }
 
     public void prepareInitialContent(PreparationCallback callback) {
+        resetContentTimingState();
         pendingPreparationCallback = callback;
         initialPrepared = false;
         preparedContentShown = false;
@@ -255,7 +285,7 @@ public class MediaView extends RelativeLayout {
         waitingForPreparedAdvance = false;
         pendingPlaybackReadyCallback = null;
         playbackReadyNotified = false;
-        removeCallbacks(playbackReadyFallbackRunnable);
+        cancelPlaybackReadyFallback();
         tick = 0;
         contentIdx = 0;
         s_isFirst = true;
@@ -307,7 +337,7 @@ public class MediaView extends RelativeLayout {
         preparedPlaybackStarted = true;
         pendingPlaybackReadyCallback = callback;
         playbackReadyNotified = false;
-        removeCallbacks(playbackReadyFallbackRunnable);
+        cancelPlaybackReadyFallback();
         tick = 0;
         manual = false;
         s_isFirst = false;
@@ -321,7 +351,12 @@ public class MediaView extends RelativeLayout {
         if (preparedInitialType == CONTENT_TYPE.Video) {
             startPreparedVideoPlayback();
         } else {
-            notifyPlaybackReady();
+            notifyContentActuallyPresented(getVisibleImageView(), new Runnable() {
+                @Override
+                public void run() {
+                    notifyPlaybackReady();
+                }
+            });
         }
 
         if (cdmList.size() == 1) {
@@ -370,6 +405,7 @@ public class MediaView extends RelativeLayout {
 
         } finally {
             cancelLoopPlayback(true);
+            resetContentTimingState();
             initialPrepared = false;
             preparedContentShown = false;
             preparedPlaybackStarted = false;
@@ -377,7 +413,6 @@ public class MediaView extends RelativeLayout {
             pendingPreparationCallback = null;
             pendingPlaybackReadyCallback = null;
             playbackReadyNotified = false;
-            removeCallbacks(playbackReadyFallbackRunnable);
         }
     }
 
@@ -388,11 +423,11 @@ public class MediaView extends RelativeLayout {
 
         } finally {
             cancelLoopPlayback(true);
+            resetContentTimingState();
             preparedPlaybackStarted = false;
             waitingForPreparedAdvance = false;
             pendingPlaybackReadyCallback = null;
             playbackReadyNotified = false;
-            removeCallbacks(playbackReadyFallbackRunnable);
         }
     }
 
@@ -414,34 +449,11 @@ public class MediaView extends RelativeLayout {
     }
 
     public void count() {
-        ++tick;
-
-        if (this.cdmList == null || this.cdmList.isEmpty()) {
-            tick = 0;
+        if (currentContentStartedAtElapsedRealtimeMs <= 0L) {
+            tick = 0L;
             return;
         }
-
-        if (this.cdmList.size() == 1) {
-            if (s_usedType == CONTENT_TYPE.Video) {
-                videoView.setLoop(true);
-            }
-            tick = 0;
-            return;
-        }
-
-        if (s_usedType == CONTENT_TYPE.Video) {
-            int duration = videoView.getDuration();
-            if (duration > 0 && playTime * 1000 >= duration && duration - (tick * 1000) <= 1000) {
-                videoView.setLoop(false);
-                tick = 0;
-                return;
-            }
-        }
-
-        if (tick >= playTime) {
-            tick = 0;
-            popContent();
-        }
+        tick = Math.max(0L, (SystemClock.elapsedRealtime() - currentContentStartedAtElapsedRealtimeMs) / 1000L);
     }
 
     public void nextContent() {
@@ -464,10 +476,7 @@ public class MediaView extends RelativeLayout {
     }
 
     public void popContent() {
-        mPopContentRunnable.run();
-        if (AndoWSignage.act != null) {
-            AndoWSignage.act.onMediaContentComplete();
-        }
+        requestContentAdvance();
     }
 
     int contentIdx = 0;
@@ -484,11 +493,8 @@ public class MediaView extends RelativeLayout {
             int j = 0;
             if (waitingForPreparedAdvance) {
                 waitingForPreparedAdvance = false;
-                try {
-                    synchronized (mLoopPlay) {
-                        mLoopPlay.wait();
-                    }
-                } catch (Exception ignored) {
+                if (!waitForAdvanceSignal()) {
+                    return null;
                 }
             }
             while (!isCancelled()) {
@@ -527,11 +533,8 @@ public class MediaView extends RelativeLayout {
                             cdmList.get(j).getFilePath()
                     });
 
-                    try {
-                        synchronized (mLoopPlay) {
-                            mLoopPlay.wait();
-                        }
-                    } catch (Exception e) {
+                    if (!waitForAdvanceSignal()) {
+                        break;
                     }
 
                     if (s_isFirst)
@@ -548,6 +551,22 @@ public class MediaView extends RelativeLayout {
             }
 
             return null;
+        }
+
+        private boolean waitForAdvanceSignal() {
+            synchronized (this) {
+                while (!isCancelled() && consumedAdvanceSignalCount >= advanceSignalCount) {
+                    try {
+                        wait();
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+                if (isCancelled()) {
+                    return false;
+                }
+                consumedAdvanceSignalCount++;
+                return true;
+            }
         }
 
         @Override
@@ -567,6 +586,7 @@ public class MediaView extends RelativeLayout {
                             case Image:
                                 boolean deferVideoStop = usedType == CONTENT_TYPE.Video;
                                 releaseUsedResources(usedType, type1, false, deferVideoStop);
+                                prepareForNewContentWindow(false);
                                 showImageWithCrossfade(
                                         contentData[1],
                                         s_isFirst,
@@ -585,6 +605,7 @@ public class MediaView extends RelativeLayout {
                             case Video:
                                 boolean deferImageHide = usedType == CONTENT_TYPE.Image;
                                 releaseUsedResources(usedType, type1, deferImageHide, false);
+                                prepareForNewContentWindow(true);
                                 showVideoWithImageFade(contentData[1], muted1, type2, contentData[4]);
                                 break;
 
@@ -701,10 +722,15 @@ public class MediaView extends RelativeLayout {
                 if (currentView != null) {
                     currentView.setVisibility(View.GONE);
                 }
-                preloadNextImageIfNeeded(nextType, nextPath, currentView);
-                if (endAction != null) {
-                    endAction.run();
-                }
+                notifyContentActuallyPresented(nextView, new Runnable() {
+                    @Override
+                    public void run() {
+                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
+                        if (endAction != null) {
+                            endAction.run();
+                        }
+                    }
+                });
                 return;
             }
 
@@ -714,10 +740,15 @@ public class MediaView extends RelativeLayout {
                 crossfadeImages(null, nextView, IMAGE_CROSSFADE_DURATION_MS, new Runnable() {
                     @Override
                     public void run() {
-                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
-                        if (endAction != null) {
-                            endAction.run();
-                        }
+                        notifyContentActuallyPresented(nextView, new Runnable() {
+                            @Override
+                            public void run() {
+                                preloadNextImageIfNeeded(nextType, nextPath, currentView);
+                                if (endAction != null) {
+                                    endAction.run();
+                                }
+                            }
+                        });
                     }
                 });
                 return;
@@ -731,10 +762,15 @@ public class MediaView extends RelativeLayout {
                     crossfadeImages(currentView, nextView, IMAGE_CROSSFADE_DURATION_MS, new Runnable() {
                         @Override
                         public void run() {
-                            preloadNextImageIfNeeded(nextType, nextPath, currentView);
-                            if (endAction != null) {
-                                endAction.run();
-                            }
+                            notifyContentActuallyPresented(nextView, new Runnable() {
+                                @Override
+                                public void run() {
+                                    preloadNextImageIfNeeded(nextType, nextPath, currentView);
+                                    if (endAction != null) {
+                                        endAction.run();
+                                    }
+                                }
+                            });
                         }
                     });
                 }
@@ -744,39 +780,49 @@ public class MediaView extends RelativeLayout {
 
         if (shouldImmediate) {
             nextView.setTag(filePath);
-            ImageLoader.getInstance().displayImage(uri, new SafeImageViewAware(nextView), imgOpt, new SimpleImageLoadingListener() {
+            displayImageAtRenderSize(nextView, filePath, new SimpleImageLoadingListener() {
                 @Override
-                public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
-                    nextView.setAlpha(1f);
-                    nextView.setVisibility(View.VISIBLE);
-                    if (currentView != null) {
-                        currentView.setVisibility(View.GONE);
-                    }
-                    preloadNextImageIfNeeded(nextType, nextPath, currentView);
-                    if (endAction != null) {
-                        endAction.run();
-                    }
+            public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
+                nextView.setAlpha(1f);
+                nextView.setVisibility(View.VISIBLE);
+                if (currentView != null) {
+                    currentView.setVisibility(View.GONE);
                 }
+                notifyContentActuallyPresented(nextView, new Runnable() {
+                    @Override
+                    public void run() {
+                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
+                        if (endAction != null) {
+                            endAction.run();
+                        }
+                    }
+                });
+            }
 
-                @Override
-                public void onLoadingFailed(String imageUri, View view, FailReason failReason) {
-                    nextView.setAlpha(1f);
+            @Override
+            public void onLoadingFailed(String imageUri, View view, FailReason failReason) {
+                nextView.setAlpha(1f);
                     nextView.setVisibility(View.VISIBLE);
-                    if (currentView != null) {
-                        currentView.setVisibility(View.GONE);
-                        currentView.setAlpha(1f);
-                    }
-                    preloadNextImageIfNeeded(nextType, nextPath, currentView);
-                    if (endAction != null) {
-                        endAction.run();
-                    }
+                if (currentView != null) {
+                    currentView.setVisibility(View.GONE);
+                    currentView.setAlpha(1f);
                 }
-            });
-            return;
+                notifyContentActuallyPresented(nextView, new Runnable() {
+                    @Override
+                    public void run() {
+                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
+                        if (endAction != null) {
+                            endAction.run();
+                        }
+                    }
+                });
+            }
+        });
+        return;
         }
 
         nextView.setTag(filePath);
-        ImageLoader.getInstance().displayImage(uri, new SafeImageViewAware(nextView), imgOpt, new SimpleImageLoadingListener() {
+        displayImageAtRenderSize(nextView, filePath, new SimpleImageLoadingListener() {
             @Override
             public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
                 nextView.post(new Runnable() {
@@ -787,10 +833,15 @@ public class MediaView extends RelativeLayout {
                         crossfadeImages(currentView, nextView, IMAGE_CROSSFADE_DURATION_MS, new Runnable() {
                             @Override
                             public void run() {
-                                preloadNextImageIfNeeded(nextType, nextPath, currentView);
-                                if (endAction != null) {
-                                    endAction.run();
-                                }
+                                notifyContentActuallyPresented(nextView, new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
+                                        if (endAction != null) {
+                                            endAction.run();
+                                        }
+                                    }
+                                });
                             }
                         });
                     }
@@ -805,10 +856,15 @@ public class MediaView extends RelativeLayout {
                     currentView.setVisibility(View.GONE);
                     currentView.setAlpha(1f);
                 }
-                preloadNextImageIfNeeded(nextType, nextPath, currentView);
-                if (endAction != null) {
-                    endAction.run();
-                }
+                notifyContentActuallyPresented(nextView, new Runnable() {
+                    @Override
+                    public void run() {
+                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
+                        if (endAction != null) {
+                            endAction.run();
+                        }
+                    }
+                });
             }
         });
     }
@@ -864,7 +920,7 @@ public class MediaView extends RelativeLayout {
         targetView.setAlpha(1f);
         targetView.setVisibility(View.GONE);
         targetView.setTag(nextPath);
-        ImageLoader.getInstance().displayImage(LocalPathUtils.getUriStringFromAbsPath(nextPath), new SafeImageViewAware(targetView), imgOpt);
+        displayImageAtRenderSize(targetView, nextPath, null);
     }
 
     private void hideAllImageOverlays() {
@@ -884,6 +940,7 @@ public class MediaView extends RelativeLayout {
 
     private void stopVideoPlayback() {
         try {
+            cancelVideoPresentationFallback();
             videoView.setMediaInfoListener(null);
             videoView.stopPlayback();
         } catch (Exception e) {
@@ -898,6 +955,7 @@ public class MediaView extends RelativeLayout {
             return;
         }
         try {
+            cancelVideoPresentationFallback();
             videoView.setMediaInfoListener(null);
             if (videoView.isPlaying()) {
                 videoView.pause();
@@ -961,8 +1019,18 @@ public class MediaView extends RelativeLayout {
             overlayToFade.bringToFront();
         }
 
+        cancelVideoPresentationFallback();
         videoView.setVisibility(View.VISIBLE);
         videoView.setMuted(muted);
+        videoView.setMediaInfoListener(new MediaPlayer.OnInfoListener() {
+            @Override
+            public boolean onInfo(MediaPlayer mp, int what, int extra) {
+                if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                    markVideoPresentationStarted();
+                }
+                return false;
+            }
+        });
         videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
             @Override
             public void onPrepared(MediaPlayer mp) {
@@ -987,6 +1055,7 @@ public class MediaView extends RelativeLayout {
 
         videoView.setVideoPath(normalizedPath);
         videoView.start();
+        scheduleVideoPresentationFallback();
 
         if (nextType == CONTENT_TYPE.Image) {
             ImageView target = overlay != null ? getHiddenImageView(overlay) : preloadTarget;
@@ -1054,10 +1123,9 @@ public class MediaView extends RelativeLayout {
         target.setAlpha(0f);
         target.setVisibility(View.VISIBLE);
         target.setTag(filePath);
-        ImageLoader.getInstance().displayImage(
-                LocalPathUtils.getUriStringFromAbsPath(filePath),
-                new SafeImageViewAware(target),
-                imgOpt,
+        displayImageAtRenderSize(
+                target,
+                filePath,
                 new SimpleImageLoadingListener() {
                     @Override
                     public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
@@ -1084,6 +1152,47 @@ public class MediaView extends RelativeLayout {
                 });
     }
 
+    private void displayImageAtRenderSize(ImageView targetView, String filePath, SimpleImageLoadingListener listener) {
+        if (targetView == null || TextUtils.isEmpty(filePath)) {
+            return;
+        }
+        ImageLoader.getInstance().displayImage(
+                LocalPathUtils.getUriStringFromAbsPath(filePath),
+                new SafeImageViewAware(targetView, getTargetDecodeWidth(), getTargetDecodeHeight()),
+                imgOpt,
+                listener);
+    }
+
+    private int getTargetDecodeWidth() {
+        if (contentRenderWidth > 0) {
+            return contentRenderWidth;
+        }
+        int width = getWidth();
+        if (width > 0) {
+            return width;
+        }
+        width = getMeasuredWidth();
+        if (width > 0) {
+            return width;
+        }
+        return AndoWSignageApp.getDeviceWidth();
+    }
+
+    private int getTargetDecodeHeight() {
+        if (contentRenderHeight > 0) {
+            return contentRenderHeight;
+        }
+        int height = getHeight();
+        if (height > 0) {
+            return height;
+        }
+        height = getMeasuredHeight();
+        if (height > 0) {
+            return height;
+        }
+        return AndoWSignageApp.getDeviceHeight();
+    }
+
     private void prepareInitialVideo(final String videoPath,
                                      final boolean muted,
                                      final CONTENT_TYPE nextType,
@@ -1101,7 +1210,7 @@ public class MediaView extends RelativeLayout {
         videoView.setAlpha(0f);
         videoView.setVisibility(View.VISIBLE);
         videoView.setMuted(muted);
-        videoView.setLoop(cdmList == null || cdmList.size() <= 1);
+        videoView.setLoop(true);
         videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
             @Override
             public void onPrepared(MediaPlayer mp) {
@@ -1151,17 +1260,21 @@ public class MediaView extends RelativeLayout {
 
     private void startPreparedVideoPlayback() {
         restoreVisibleOutputs();
+        cancelVideoPresentationFallback();
         videoView.setMediaInfoListener(new MediaPlayer.OnInfoListener() {
             @Override
             public boolean onInfo(MediaPlayer mp, int what, int extra) {
                 if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                    markVideoPresentationStarted();
                     notifyPlaybackReady();
                 }
                 return false;
             }
         });
+        videoView.setLoop(true);
         videoView.start();
         schedulePlaybackReadyFallback();
+        scheduleVideoPresentationFallback();
     }
 
     private void notifyPrepared() {
@@ -1173,8 +1286,10 @@ public class MediaView extends RelativeLayout {
     }
 
     private void schedulePlaybackReadyFallback() {
-        removeCallbacks(playbackReadyFallbackRunnable);
-        postDelayed(playbackReadyFallbackRunnable, PLAYBACK_READY_FALLBACK_MS);
+        cancelPlaybackReadyFallback();
+        playbackTimingHandler.postAtTime(
+                playbackReadyFallbackRunnable,
+                SystemClock.uptimeMillis() + PLAYBACK_READY_FALLBACK_MS);
     }
 
     private void notifyPlaybackReady() {
@@ -1182,7 +1297,7 @@ public class MediaView extends RelativeLayout {
             return;
         }
         playbackReadyNotified = true;
-        removeCallbacks(playbackReadyFallbackRunnable);
+        cancelPlaybackReadyFallback();
         PlaybackReadyCallback callback = pendingPlaybackReadyCallback;
         pendingPlaybackReadyCallback = null;
         if (callback != null) {
@@ -1230,6 +1345,193 @@ public class MediaView extends RelativeLayout {
 
     private boolean isCurrentMediaConfiguration(int configVersion) {
         return configVersion == mediaConfigurationVersion;
+    }
+
+    public boolean shouldDelayLayoutTransition() {
+        if (!hasConfiguredContents() || cdmList == null || cdmList.size() <= 1) {
+            return false;
+        }
+        if (!currentContentBlocksLayoutSwitch) {
+            return false;
+        }
+        if (currentContentStartedAtElapsedRealtimeMs <= 0L) {
+            return false;
+        }
+        return getRemainingContentIntervalMs() > 0L;
+    }
+
+    public boolean isPlaybackActiveForHeartbeat() {
+        if (!hasConfiguredContents() || getVisibility() != View.VISIBLE) {
+            return false;
+        }
+        if (currentContentStartedAtElapsedRealtimeMs > 0L) {
+            return true;
+        }
+        if (preparedPlaybackStarted) {
+            return true;
+        }
+        if (videoPresentationStarted) {
+            return true;
+        }
+        if (videoView != null && videoView.getVisibility() == View.VISIBLE) {
+            try {
+                if (videoView.isPlaying()) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
+    }
+
+    private void requestContentAdvance() {
+        if (advancePending) {
+            return;
+        }
+        advancePending = true;
+        cancelContentAdvanceTimer();
+        markContentBoundaryReached();
+        boolean consumedByLayoutTransition = false;
+        if (AndoWSignage.act != null) {
+            consumedByLayoutTransition = AndoWSignage.act.onMediaContentComplete();
+        }
+        if (!consumedByLayoutTransition) {
+            mPopContentRunnable.run();
+        }
+    }
+
+    private void prepareForNewContentWindow(boolean videoContent) {
+        cancelContentAdvanceTimer();
+        cancelVideoPresentationFallback();
+        advancePending = false;
+        videoPresentationStarted = !videoContent;
+        currentContentBlocksLayoutSwitch = false;
+        lastContentBoundaryAtElapsedRealtimeMs = 0L;
+    }
+
+    private void markCurrentContentPresented() {
+        long durationMs = getConfiguredPlayTimeMs();
+        currentContentStartedAtElapsedRealtimeMs = SystemClock.elapsedRealtime();
+        currentContentDeadlineAtElapsedRealtimeMs = currentContentStartedAtElapsedRealtimeMs + durationMs;
+        currentContentBlocksLayoutSwitch = shouldBlockLayoutSwitchForCurrentContent();
+        if (!currentContentBlocksLayoutSwitch) {
+            cancelContentAdvanceTimer();
+            return;
+        }
+        scheduleContentAdvanceTimer(durationMs);
+    }
+
+    private void notifyContentActuallyPresented(View anchorView, final Runnable afterPresentation) {
+        final View targetView = anchorView != null ? anchorView : this;
+        Runnable presentationRunnable = new Runnable() {
+            @Override
+            public void run() {
+                markCurrentContentPresented();
+                if (afterPresentation != null) {
+                    afterPresentation.run();
+                }
+            }
+        };
+        if (targetView != null) {
+            targetView.postOnAnimation(presentationRunnable);
+        } else {
+            presentationRunnable.run();
+        }
+    }
+
+    private void markVideoPresentationStarted() {
+        if (videoPresentationStarted) {
+            return;
+        }
+        videoPresentationStarted = true;
+        cancelVideoPresentationFallback();
+        markCurrentContentPresented();
+    }
+
+    private void handleVideoCompletion() {
+        if (!advancePending && currentContentBlocksLayoutSwitch && !videoPresentationStarted) {
+            markVideoPresentationStarted();
+        }
+        if (currentContentBlocksLayoutSwitch && !advancePending) {
+            requestContentAdvance();
+            return;
+        }
+        signalAdvanceReady();
+    }
+
+    private void signalAdvanceReady() {
+        LoopPlay currentLoop = mLoopPlay;
+        if (currentLoop == null) {
+            return;
+        }
+        synchronized (currentLoop) {
+            advanceSignalCount++;
+            currentLoop.notifyAll();
+        }
+    }
+
+    private void scheduleContentAdvanceTimer(long delayMs) {
+        cancelContentAdvanceTimer();
+        playbackTimingHandler.postAtTime(
+                contentAdvanceRunnable,
+                SystemClock.uptimeMillis() + Math.max(1L, delayMs));
+    }
+
+    private void cancelContentAdvanceTimer() {
+        playbackTimingHandler.removeCallbacks(contentAdvanceRunnable);
+    }
+
+    private void scheduleVideoPresentationFallback() {
+        cancelVideoPresentationFallback();
+        playbackTimingHandler.postAtTime(
+                videoPresentationFallbackRunnable,
+                SystemClock.uptimeMillis() + VIDEO_PRESENTATION_FALLBACK_MS);
+    }
+
+    private void cancelVideoPresentationFallback() {
+        playbackTimingHandler.removeCallbacks(videoPresentationFallbackRunnable);
+    }
+
+    private void cancelPlaybackReadyFallback() {
+        playbackTimingHandler.removeCallbacks(playbackReadyFallbackRunnable);
+    }
+
+    private void resetContentTimingState() {
+        cancelContentAdvanceTimer();
+        cancelVideoPresentationFallback();
+        cancelPlaybackReadyFallback();
+        advancePending = false;
+        advanceSignalCount = 0;
+        consumedAdvanceSignalCount = 0;
+        videoPresentationStarted = false;
+        currentContentStartedAtElapsedRealtimeMs = 0L;
+        currentContentDeadlineAtElapsedRealtimeMs = 0L;
+        currentContentBlocksLayoutSwitch = false;
+        lastContentBoundaryAtElapsedRealtimeMs = 0L;
+    }
+
+    private void markContentBoundaryReached() {
+        lastContentBoundaryAtElapsedRealtimeMs = SystemClock.elapsedRealtime();
+        currentContentStartedAtElapsedRealtimeMs = 0L;
+        currentContentDeadlineAtElapsedRealtimeMs = 0L;
+        currentContentBlocksLayoutSwitch = false;
+        videoPresentationStarted = false;
+    }
+
+    private boolean shouldBlockLayoutSwitchForCurrentContent() {
+        return cdmList != null && cdmList.size() > 1;
+    }
+
+    private long getRemainingContentIntervalMs() {
+        if (currentContentStartedAtElapsedRealtimeMs <= 0L) {
+            return 0L;
+        }
+        long contentElapsedMs = Math.max(0L, SystemClock.elapsedRealtime() - currentContentStartedAtElapsedRealtimeMs);
+        return Math.max(0L, getConfiguredPlayTimeMs() - contentElapsedMs);
+    }
+
+    private long getConfiguredPlayTimeMs() {
+        return Math.max(1L, playTime) * 1000L;
     }
 
 }

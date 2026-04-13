@@ -48,20 +48,22 @@ public class PowerService extends Service {
 		Date date = new Date();
 		SimpleDateFormat df = new SimpleDateFormat("ccc HH mm", Locale.ENGLISH);
 		String[] curTime = df.format(date).split(" ");
+		boolean handled = false;
 		
 		for (WeeklyScheduleDataModel sch : weeklySchDataList) {
 			if(sch.getDayStr().toLowerCase(Locale.US).equalsIgnoreCase(curTime[0].toLowerCase(Locale.US))) {
+				handled = true;
 				if(sch.getOnAir()) {					
 					int[] from = sch.getFrom();
 					int[] to = sch.getTo();
-					long currSec = Utils.getSecondsADay(Integer.parseInt(curTime[1]), Integer.parseInt(curTime[2]));
-					long fromSec = Utils.getSecondsADay(from[0], from[1]);
-					long toSec = Utils.getSecondsADay(to[0], to[1]);
-					if (from[0] == 0 && from[1] == 0 && to[0] == 0 && to[1] == 0) {
+					int currentMinutes = (Integer.parseInt(curTime[1]) * 60) + Integer.parseInt(curTime[2]);
+					int startMinutes = (from[0] * 60) + from[1];
+					int endMinutes = (to[0] * 60) + to[1];
+					if (startMinutes == endMinutes) {
 						WakeUp();
 						break;
 					}
-					if(currSec >= fromSec && currSec <= toSec) {
+					if (isWithinOnAirWindow(currentMinutes, startMinutes, endMinutes)) {
 						WakeUp();
 					} else {
 						Sleep();
@@ -73,6 +75,20 @@ public class PowerService extends Service {
 				}
 			}
 		}
+
+		if (!handled) {
+			WakeUp();
+		}
+	}
+
+	private boolean isWithinOnAirWindow(int currentMinutes, int startMinutes, int endMinutes) {
+		if (startMinutes == endMinutes) {
+			return true;
+		}
+		if (endMinutes > startMinutes) {
+			return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+		}
+		return currentMinutes >= startMinutes || currentMinutes < endMinutes;
 	}
 	
 	public void Sleep() {
@@ -83,7 +99,7 @@ public class PowerService extends Service {
 	        ctx.sendBroadcast(sleepIntent);
 		}
 		AndoWSignageApp.isSlept = true;
-        AndoWSignageApp.state = AndoWSignageApp.RP_STATUS.stopped.toString();
+        AndoWSignageApp.markStoppedState();
 	}
 	
 	public void WakeUp() {

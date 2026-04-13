@@ -150,6 +150,7 @@ public class AndoWSignage extends Activity {
 	private PageRuntime activePageRuntime;
 	private PageRuntime stagedPageRuntime;
 	private PageRuntime specialPageRuntime;
+	private PageRuntime pendingActivationRuntime;
 	private PageBuildSpec stagedPageSpec;
 	private PageBuildSpec specialPageSpec;
 	private static final long NEXT_LAYOUT_STAGE_DELAY_MS = 1200L;
@@ -582,7 +583,7 @@ public class AndoWSignage extends Activity {
 
 		AndoWSignageApp.isRunning = true;
 //		AndoWSignageApp.isSleeping = false;
-		AndoWSignageApp.state = RP_STATUS.playing.toString();
+		AndoWSignageApp.markPlayingState();
 
 		startServices();
 	}
@@ -629,10 +630,11 @@ public class AndoWSignage extends Activity {
 	}
 
 	private void requestFinalHeartbeat() {
-        AndoWSignageApp.beginShutdown();
+        long shutdownToken = AndoWSignageApp.beginShutdown();
         pendingHeartbeatServiceStop = true;
 		Intent intent = new Intent(this, HeartbeatService.class);
 		intent.setAction(HeartbeatService.ACTION_SEND_STOPPED);
+        intent.putExtra(HeartbeatService.EXTRA_SHUTDOWN_TOKEN, shutdownToken);
 		startService(intent);
 	}
 	
@@ -813,12 +815,14 @@ public class AndoWSignage extends Activity {
 		if(tickTimer != null)
 			tickTimer.stop();
 		
-		if(pageTimer != null)
+        if(pageTimer != null)
 			pageTimer.stop();
 
         AndoWSignageApp.isRunning = false;
-        AndoWSignageApp.state = RP_STATUS.stopped.toString();
-        requestFinalHeartbeat();
+        if (manualStopRequested || AndoWSignageApp.isSlept || isFinishing()) {
+            AndoWSignageApp.markStoppedState();
+            requestFinalHeartbeat();
+        }
 
 //		if(!AndoWSignageApp.isForceStopped) {
 			unRegistreRcv();
@@ -1218,6 +1222,7 @@ public class AndoWSignage extends Activity {
 		elementDataList.clear();
 		currentPageName = "";
 		currentPageDeadlineAtMillis = -1L;
+		pendingActivationRuntime = null;
 		nextStageAllowedAtMillis = 0L;
 	}
 
@@ -1246,6 +1251,41 @@ public class AndoWSignage extends Activity {
 			}
 		}
 		return null;
+	}
+
+	private boolean hasActiveContentPlaybackForHeartbeatInternal() {
+		if (!AndoWSignageApp.isRunning || AndoWSignageApp.isSlept) {
+			return false;
+		}
+
+		if (usbPlaybackActive && usbPlaybackView != null && usbPlaybackView.isPlaybackActiveForHeartbeat()) {
+			return true;
+		}
+
+		if (activePageRuntime != null) {
+			for (PlaybackSlotView slotView : activePageRuntime.slots) {
+				if (slotView != null && slotView.isPlaybackActiveForHeartbeat()) {
+					return true;
+				}
+			}
+
+			if (activePageRuntime.container != null
+					&& activePageRuntime.container.getVisibility() == View.VISIBLE
+					&& !TextUtils.isEmpty(activePageRuntime.pageName)) {
+				return true;
+			}
+		}
+
+		return !TextUtils.isEmpty(currentPageName);
+	}
+
+	public static boolean hasActiveContentPlaybackForHeartbeat() {
+		if (act != null) {
+			return act.hasActiveContentPlaybackForHeartbeatInternal();
+		}
+		return AndoWSignageApp.isRunning
+				&& !AndoWSignageApp.isSlept
+				&& !TextUtils.isEmpty(currentPageName);
 	}
 	
 	private PageRuntime buildPageRuntime(RelativeLayout container, PlaybackTarget target) {
@@ -1458,9 +1498,13 @@ public class AndoWSignage extends Activity {
 			return;
 		}
 		if (runtime.activateWhenPrepared) {
-			runtime.activateWhenPrepared = false;
-			stopAnim();
-			beginRuntimeActivation(runtime);
+			if (pendingActivationRuntime == runtime) {
+				tryActivatePendingRuntime();
+			} else {
+				runtime.activateWhenPrepared = false;
+				stopAnim();
+				beginRuntimeActivation(runtime);
+			}
 		}
 	}
 
@@ -1595,7 +1639,7 @@ public class AndoWSignage extends Activity {
 		}
 	}
 
-	private void startRuntimePlayback(PageRuntime runtime) {
+	private void startRuntimePlayback(final PageRuntime runtime) {
 		if (runtime == null || !runtime.startInProgress) {
 			return;
 		}
@@ -1626,6 +1670,7 @@ public class AndoWSignage extends Activity {
 		if (runtime == null) {
 			return;
 		}
+		clearPendingActivation(runtime);
 		runtime.prepareCancelled = true;
 		stopRuntime(runtime);
 		if (runtime.container != null) {
@@ -1647,6 +1692,7 @@ public class AndoWSignage extends Activity {
 		if (runtime == null) {
 			return;
 		}
+		clearPendingActivation(runtime);
 		runtime.prepareCancelled = true;
 		runtime.pendingPreparationCount = 0;
 		runtime.prepared = false;
@@ -1672,6 +1718,7 @@ public class AndoWSignage extends Activity {
 		if (nextRuntime == null) {
 			return;
 		}
+		clearPendingActivation(nextRuntime);
 		PageRuntime previousRuntime = activePageRuntime;
 		if (nextRuntime == stagedPageRuntime) {
 			RelativeLayout previousContainer = activePageContainer;
@@ -1690,8 +1737,8 @@ public class AndoWSignage extends Activity {
 		activePageRuntime = nextRuntime;
 		lastRuntimeActivationAtMillis = System.currentTimeMillis();
 		syncActiveViews(activePageRuntime);
-		configurePageTimers(nextRuntime.pageData);
 		pageIdx = nextRuntime.nextPageIndexAfterActivate;
+		configurePageTimers(nextRuntime.pageData);
 		if (previousRuntime == null || previousRuntime == nextRuntime) {
 			startRuntimePlayback(nextRuntime);
 			nextStageAllowedAtMillis = System.currentTimeMillis() + NEXT_LAYOUT_STAGE_DELAY_MS;
@@ -1753,7 +1800,18 @@ public class AndoWSignage extends Activity {
 			return;
 		}
 		runtime.nextPageIndexAfterActivate = nextPageIndex;
+		if (runtime == activePageRuntime) {
+			clearPendingActivation(runtime);
+			return;
+		}
+		if (shouldDelayRuntimeActivation(runtime)) {
+			markPendingActivation(runtime);
+			tryActivatePendingRuntime();
+			return;
+		}
+		clearPendingActivation(runtime);
 		if (runtime.prepared) {
+			runtime.activateWhenPrepared = false;
 			stopAnim();
 			beginRuntimeActivation(runtime);
 			return;
@@ -1772,6 +1830,73 @@ public class AndoWSignage extends Activity {
 		if(!pageTimer.getIsTicking()) {
 			pageTimer.start();
 		}
+	}
+
+	private boolean shouldDelayRuntimeActivation(PageRuntime runtime) {
+		return runtime != null
+				&& activePageRuntime != null
+				&& activePageRuntime != runtime
+				&& shouldDelayActiveRuntimeSwitch();
+	}
+
+	private boolean shouldDelayActiveRuntimeSwitch() {
+		if (activePageRuntime == null) {
+			return false;
+		}
+		for (PlaybackSlotView slotView : activePageRuntime.slots) {
+			if (slotView != null && slotView.shouldDelayLayoutTransition()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void markPendingActivation(PageRuntime runtime) {
+		if (runtime == null) {
+			return;
+		}
+		if (pendingActivationRuntime != runtime) {
+			if (pendingActivationRuntime != null) {
+				pendingActivationRuntime.activateWhenPrepared = false;
+			}
+			pendingActivationRuntime = runtime;
+		}
+		runtime.activateWhenPrepared = true;
+		pageTimer.stop();
+	}
+
+	private void clearPendingActivation(PageRuntime runtime) {
+		if (runtime != null && pendingActivationRuntime != runtime) {
+			return;
+		}
+		if (pendingActivationRuntime != null) {
+			pendingActivationRuntime.activateWhenPrepared = false;
+		}
+		pendingActivationRuntime = null;
+	}
+
+	private boolean tryActivatePendingRuntime() {
+		PageRuntime runtime = pendingActivationRuntime;
+		if (runtime == null) {
+			return false;
+		}
+		if (runtime == activePageRuntime) {
+			clearPendingActivation(runtime);
+			return false;
+		}
+		if (!runtime.prepared) {
+			runtime.activateWhenPrepared = true;
+			return false;
+		}
+		if (shouldDelayActiveRuntimeSwitch()) {
+			runtime.activateWhenPrepared = true;
+			return false;
+		}
+		runtime.activateWhenPrepared = false;
+		clearPendingActivation(runtime);
+		stopAnim();
+		beginRuntimeActivation(runtime);
+		return true;
 	}
 
 	private void stageNextPlaybackTarget() {
@@ -2375,10 +2500,11 @@ public class AndoWSignage extends Activity {
 		mUpdateMgrSrv.CheckOrRestartTimer();
 	}
 
-	public void onMediaContentComplete() {
+	public boolean onMediaContentComplete() {
 		if (pendingUpdateReady) {
 			maybeApplyQueuedUpdate();
 		}
+		return tryActivatePendingRuntime();
 	}
 
 	private void checkReadyQueue() {
