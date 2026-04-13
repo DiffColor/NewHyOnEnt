@@ -30,6 +30,7 @@ namespace ConfigPlayer
             //Thread.CurrentThread.CurrentUICulture = new CultureInfo("en-US");
 
             InitializeComponent();
+            ConfigureScrollableLayout();
 
             DisplayPortInfoData();
             InitEventHandler();
@@ -37,6 +38,7 @@ namespace ConfigPlayer
             try
             {
                 InitComboBoxes();
+                ConfigureComboBoxDisplay();
 
                 sourceKey = NetworkTools.GetMACAddressBySystemNet();
 
@@ -62,6 +64,85 @@ namespace ConfigPlayer
             else
             {
                 SetEnablePasswdBox(false);
+            }
+        }
+
+        private void ConfigureScrollableLayout()
+        {
+            AutoScroll = true;
+            AutoScrollMinSize = CalculateScrollMinSize();
+        }
+
+        private Size CalculateScrollMinSize()
+        {
+            int maxRight = ClientSize.Width;
+            int maxBottom = ClientSize.Height;
+
+            foreach (Control control in Controls)
+            {
+                if (control == null)
+                {
+                    continue;
+                }
+
+                maxRight = Math.Max(maxRight, control.Right + control.Margin.Right + 24);
+                maxBottom = Math.Max(maxBottom, control.Bottom + control.Margin.Bottom + 24);
+            }
+
+            return new Size(maxRight, maxBottom);
+        }
+
+        private void ConfigureComboBoxDisplay()
+        {
+            foreach (ComboBox comboBox in EnumerateControls<ComboBox>(this))
+            {
+                comboBox.IntegralHeight = false;
+                comboBox.MaxDropDownItems = 12;
+                comboBox.DropDown -= ComboBox_DropDown;
+                comboBox.DropDown += ComboBox_DropDown;
+            }
+        }
+
+        private void ComboBox_DropDown(object sender, EventArgs e)
+        {
+            ComboBox comboBox = sender as ComboBox;
+            if (comboBox == null)
+            {
+                return;
+            }
+
+            Rectangle workingArea = Screen.FromControl(comboBox).WorkingArea;
+            Point screenLocation = comboBox.PointToScreen(Point.Empty);
+            int availableBelow = Math.Max(0, workingArea.Bottom - (screenLocation.Y + comboBox.Height) - 8);
+            int availableAbove = Math.Max(0, screenLocation.Y - workingArea.Top - 8);
+            int visibleItems = comboBox.Items.Count > 0 ? Math.Min(comboBox.Items.Count, comboBox.MaxDropDownItems) : comboBox.MaxDropDownItems;
+            int desiredHeight = (comboBox.ItemHeight * visibleItems) + 2;
+            int availableHeight = Math.Max(availableBelow, availableAbove);
+            if (availableHeight > comboBox.ItemHeight) {
+                comboBox.DropDownHeight = Math.Min(desiredHeight, availableHeight);
+            } else {
+                comboBox.DropDownHeight = desiredHeight;
+            }
+        }
+
+        private IEnumerable<T> EnumerateControls<T>(Control parent) where T : Control
+        {
+            if (parent == null)
+            {
+                yield break;
+            }
+
+            foreach (Control control in parent.Controls)
+            {
+                if (control is T match)
+                {
+                    yield return match;
+                }
+
+                foreach (T child in EnumerateControls<T>(control))
+                {
+                    yield return child;
+                }
             }
         }
         

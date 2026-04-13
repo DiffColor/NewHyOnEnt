@@ -1,7 +1,11 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Reflection;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Markup;
+using System.Windows.Threading;
 using System.Linq;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -151,6 +155,136 @@ namespace TurtleTools
             }
 
             return list;
+        }
+    }
+
+    public static class ComboBoxDropDownBehavior
+    {
+        private const double DefaultDropDownMaxHeight = 320d;
+        private const double MinimumVisibleDropDownHeight = 120d;
+        private const double DropDownPadding = 8d;
+        private const double ApproximateItemHeight = 28d;
+
+        public static void ApplyToWindow(Window window)
+        {
+            if (window == null)
+            {
+                return;
+            }
+
+            window.Loaded += (_, __) => AttachToDescendants(window);
+            window.ContentRendered += (_, __) => AttachToDescendants(window);
+        }
+
+        public static void ApplyToControl(FrameworkElement control)
+        {
+            if (control == null)
+            {
+                return;
+            }
+
+            control.Loaded += (_, __) => AttachToDescendants(control);
+        }
+
+        private static void AttachToDescendants(DependencyObject root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            foreach (ComboBox comboBox in FindVisualChildren<ComboBox>(root))
+            {
+                comboBox.DropDownOpened -= ComboBox_DropDownOpened;
+                comboBox.DropDownOpened += ComboBox_DropDownOpened;
+            }
+        }
+
+        private static void ComboBox_DropDownOpened(object sender, EventArgs e)
+        {
+            if (!(sender is ComboBox comboBox))
+            {
+                return;
+            }
+
+            comboBox.Dispatcher.BeginInvoke(new Action(() => AdjustDropDown(comboBox)), DispatcherPriority.Loaded);
+        }
+
+        private static void AdjustDropDown(ComboBox comboBox)
+        {
+            Window ownerWindow = Window.GetWindow(comboBox);
+            if (ownerWindow == null || comboBox.ActualHeight <= 0)
+            {
+                return;
+            }
+
+            Popup popup = comboBox.Template?.FindName("PART_Popup", comboBox) as Popup;
+            if (popup == null)
+            {
+                return;
+            }
+
+            Point comboTopLeft = comboBox.TransformToAncestor(ownerWindow).Transform(new Point(0, 0));
+            double availableBelow = ownerWindow.ActualHeight - comboTopLeft.Y - comboBox.ActualHeight - DropDownPadding;
+            double availableAbove = comboTopLeft.Y - DropDownPadding;
+            double desiredHeight = GetDesiredDropDownHeight(comboBox);
+
+            bool openUpward = availableBelow < Math.Min(desiredHeight, MinimumVisibleDropDownHeight) &&
+                              availableAbove > availableBelow;
+
+            double availableHeight = openUpward ? availableAbove : availableBelow;
+            double boundedHeight = Math.Max(comboBox.ActualHeight, Math.Min(desiredHeight, Math.Max(availableHeight, comboBox.ActualHeight)));
+
+            comboBox.MaxDropDownHeight = boundedHeight;
+            popup.PlacementTarget = comboBox;
+            popup.Placement = openUpward ? PlacementMode.Top : PlacementMode.Bottom;
+            popup.VerticalOffset = 0;
+        }
+
+        private static double GetDesiredDropDownHeight(ComboBox comboBox)
+        {
+            if (comboBox.Items.Count <= 0)
+            {
+                return comboBox.ActualHeight;
+            }
+
+            double itemHeight = ApproximateItemHeight;
+            if (comboBox.ItemContainerStyle != null)
+            {
+                object configuredHeight = comboBox.ItemContainerStyle.Setters
+                    .OfType<Setter>()
+                    .FirstOrDefault(setter => setter.Property == FrameworkElement.HeightProperty)?.Value;
+
+                if (configuredHeight is double styleHeight && styleHeight > 0)
+                {
+                    itemHeight = styleHeight;
+                }
+            }
+
+            return Math.Min(DefaultDropDownMaxHeight, comboBox.Items.Count * itemHeight + DropDownPadding);
+        }
+
+        private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null)
+            {
+                yield break;
+            }
+
+            int childCount = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                DependencyObject child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is T match)
+                {
+                    yield return match;
+                }
+
+                foreach (T descendant in FindVisualChildren<T>(child))
+                {
+                    yield return descendant;
+                }
+            }
         }
     }
 }

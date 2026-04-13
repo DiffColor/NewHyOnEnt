@@ -31,6 +31,7 @@ namespace AndoW_Manager
                     if (sender is Window window)
                     {
                         ModernScrollViewerBehavior.ApplyToWindow(window);
+                        ComboBoxDropDownBehavior.ApplyToWindow(window);
                     }
                 }));
 

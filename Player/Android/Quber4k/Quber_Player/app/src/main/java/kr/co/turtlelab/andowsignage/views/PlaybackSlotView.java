@@ -17,6 +17,10 @@ public class PlaybackSlotView extends RelativeLayout {
         void onPrepared(PlaybackSlotView view);
     }
 
+    public interface SlotPlaybackReadyCallback {
+        void onPlaybackReady(PlaybackSlotView view);
+    }
+
     private final MediaView mediaView;
     private boolean mediaActive = false;
 
@@ -119,8 +123,23 @@ public class PlaybackSlotView extends RelativeLayout {
     }
 
     public void startPreparedPlayback() {
+        startPreparedPlayback(null);
+    }
+
+    public void startPreparedPlayback(final SlotPlaybackReadyCallback callback) {
         if (isMediaSlot()) {
-            mediaView.startPreparedPlayback();
+            mediaView.startPreparedPlayback(new MediaView.PlaybackReadyCallback() {
+                @Override
+                public void onPlaybackReady(MediaView view) {
+                    if (callback != null) {
+                        callback.onPlaybackReady(PlaybackSlotView.this);
+                    }
+                }
+            });
+            return;
+        }
+        if (callback != null) {
+            callback.onPlaybackReady(this);
         }
     }
 
@@ -156,5 +175,9 @@ public class PlaybackSlotView extends RelativeLayout {
 
     public boolean isMediaSlot() {
         return mediaActive && mediaView.hasConfiguredContents();
+    }
+
+    public boolean shouldDelayLayoutTransition() {
+        return isMediaSlot() && mediaView.shouldDelayLayoutTransition();
     }
 }
