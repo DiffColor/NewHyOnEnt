@@ -122,6 +122,7 @@ public class AndoWSignage extends Activity {
 	List<View> elementViewList = new ArrayList<View>();
 	WelcomeDataModel wdm = new WelcomeDataModel();
 	private boolean pendingUpdateReady = false;
+	private boolean queuedUpdateRestartPending = false;
 	private TextView debugOverlay;
 	private boolean debugOverlayVisible = false;
 	private KeyCaptureEditText keyInputOverlay;
@@ -877,19 +878,20 @@ public class AndoWSignage extends Activity {
 	}
 	
 	public void updateAndRestart(boolean setOrientation) {
+		queuedUpdateRestartPending = false;
 		if(tickTimer != null)
 			tickTimer.stop();
 		
 		if(pageTimer != null)
 			pageTimer.stop();
 
+		stopTimerAndElements();
 		applyPendingReadyQueuesSync();
 		
 		playerData = PlayerDataProvider.getPlayerData();
 		basePlaylistName = TextUtils.isEmpty(playerData.getPlaylist()) ? "" : playerData.getPlaylist();
 		refreshSchedulePlaybackState(System.currentTimeMillis());
 		syncCurrentPlaylistPages();
-		stopTimerAndElements();
 		settingsForPlaying();	
 
 		if(setOrientation) setOrientation();
@@ -2554,17 +2556,17 @@ public class AndoWSignage extends Activity {
 	}
 
 	private void maybeApplyQueuedUpdate() {
-		if (!pendingUpdateReady) {
+		if (!pendingUpdateReady || queuedUpdateRestartPending) {
 			return;
 		}
-		DataSyncManager manager = new DataSyncManager();
-		boolean applied = manager.applyNextReadyQueue(false);
-		if (applied) {
-			pendingUpdateReady = false;
-			SystemUtils.runOnUiThread(() -> updateAndRestart(true));
-		} else {
-			pendingUpdateReady = UpdateQueueProvider.hasReadyQueue();
-		}
+		queuedUpdateRestartPending = true;
+		SystemUtils.runOnUiThread(() -> {
+			if (!pendingUpdateReady) {
+				queuedUpdateRestartPending = false;
+				return;
+			}
+			updateAndRestart(true);
+		});
 	}
 
 	public void showReadyUpdateIndicator() {
