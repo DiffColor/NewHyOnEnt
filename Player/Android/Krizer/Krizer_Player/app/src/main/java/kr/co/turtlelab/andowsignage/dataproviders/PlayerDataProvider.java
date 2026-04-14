@@ -6,6 +6,7 @@ import io.realm.Realm;
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPlayer;
+import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.datamodels.LocalSettingsModel;
 import kr.co.turtlelab.andowsignage.datamodels.PlayerDataModel;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
@@ -64,6 +65,7 @@ public class PlayerDataProvider {
 
     public static void updatePlayerName() {
         LocalSettingsProvider.updatePlayerId(AndoWSignageApp.PLAYER_ID);
+        RethinkDbClient.getInstance().preparePlayerNameChange(AndoWSignageApp.PLAYER_ID);
     }
 
     public static void updateCurrentPListName(String playlistName) {

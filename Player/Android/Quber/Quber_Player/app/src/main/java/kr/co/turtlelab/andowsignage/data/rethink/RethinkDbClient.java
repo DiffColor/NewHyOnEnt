@@ -894,6 +894,37 @@ public class RethinkDbClient {
         return null;
     }
 
+    public void preparePlayerNameChange(String playerName) {
+        String normalizedPlayerName = playerName == null ? "" : playerName.trim();
+        if (TextUtils.isEmpty(normalizedPlayerName)) {
+            return;
+        }
+        updateStoredPlayerName(normalizedPlayerName);
+        synchronized (deviceInfoLock) {
+            deviceInfoSynced = false;
+            deviceInfoSyncInProgress = false;
+            lastSyncedPlayerGuid = null;
+        }
+        guidVerified = false;
+        lastGuidVerificationEpochMs = 0L;
+    }
+
+    public String refreshPlayerGuidForPlayerName(String playerName) {
+        preparePlayerNameChange(playerName);
+        return ensurePlayerGuid(playerName);
+    }
+
+    private void updateStoredPlayerName(String playerName) {
+        Realm realm = Realm.getDefaultInstance();
+        realm.executeTransaction(r -> {
+            RealmPlayer player = r.where(RealmPlayer.class).findFirst();
+            if (player != null) {
+                player.setPlayerName(playerName);
+            }
+        });
+        realm.close();
+    }
+
     private void saveRealmPlayerSkeleton(RethinkModels.PlayerInfoRecord record) {
         if (record == null || TextUtils.isEmpty(record.getGuid())) {
             return;

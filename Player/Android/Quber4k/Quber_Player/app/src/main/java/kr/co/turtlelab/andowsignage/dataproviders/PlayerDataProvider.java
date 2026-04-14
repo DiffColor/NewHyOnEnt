@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
+import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.data.store.StoredPlayer;
 import kr.co.turtlelab.andowsignage.datamodels.LocalSettingsModel;
 import kr.co.turtlelab.andowsignage.datamodels.PlayerDataModel;
@@ -64,6 +65,7 @@ public class PlayerDataProvider {
 
     public static void updatePlayerName() {
         LocalSettingsProvider.updatePlayerId(AndoWSignageApp.PLAYER_ID);
+        RethinkDbClient.getInstance().preparePlayerNameChange(AndoWSignageApp.PLAYER_ID);
     }
 
     public static void updateCurrentPListName(String playlistName) {

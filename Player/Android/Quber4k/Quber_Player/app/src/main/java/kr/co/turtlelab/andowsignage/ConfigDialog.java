@@ -30,6 +30,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+import kr.co.turtlelab.andowsignage.data.rethink.RethinkDbClient;
 import kr.co.turtlelab.andowsignage.datamodels.LocalSettingsModel;
 import kr.co.turtlelab.andowsignage.datamodels.WeeklyScheduleDataModel;
 import kr.co.turtlelab.andowsignage.dataproviders.LocalSettingsProvider;
@@ -588,6 +589,15 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 	//			AlarmUtils.setWeeklyAlarm(ctx);
 				
 				writeLocalSettings();
+				String rethinkHost = LocalSettingsProvider.getDataServerIp();
+				if (TextUtils.isEmpty(rethinkHost)) {
+					rethinkHost = AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(AndoWSignageApp.MANUAL_IP)
+							? AndoWSignageApp.MANUAL_IP
+							: AndoWSignageApp.MANAGER_IP;
+				}
+				RethinkDbClient.getInstance().updateHost(rethinkHost);
+				RethinkDbClient.getInstance().refreshPlayerGuidForPlayerName(idStr);
+				AndoWSignage.act.playerData = PlayerDataProvider.getPlayerData();
 				
 				SystemUtils.runOnUiThread(new Runnable() {
 					@Override
