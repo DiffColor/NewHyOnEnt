@@ -2578,6 +2578,7 @@ public class AndoWSignage extends Activity {
 
 	public void showReadyUpdateIndicator() {
 		pendingUpdateReady = true;
+		maybeApplyQueuedUpdate();
 	}
 
 	private String formatTimestamp(long millis) {

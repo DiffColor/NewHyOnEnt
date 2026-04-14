@@ -20,10 +20,11 @@ import kr.co.turtlelab.andowsignage.tools.Utils;
 public class PowerService extends Service {
 	private static final String ACTION_REAL_SLEEP = "rk.android.realsleepmode.action";
 	private static final String ACTION_WAKE_UP = "rk.android.wakeupmode.action";
+	private static final int CHECK_INTERVAL_MS = 15000;
 
 	List<WeeklyScheduleDataModel> weeklySchDataList = new ArrayList<WeeklyScheduleDataModel>();
 	
-	LightestTimer checkTimer = new LightestTimer(15000, new Runnable() {
+	LightestTimer checkTimer = new LightestTimer(CHECK_INTERVAL_MS, new Runnable() {
 		
 		@Override
 		public void run() {
@@ -136,6 +137,7 @@ public class PowerService extends Service {
 		
 		ctx = getApplicationContext();
 
+		checkIsOnTime();
 		checkTimer.start();
 
 //		skip_count = SKIP_COUNT;
