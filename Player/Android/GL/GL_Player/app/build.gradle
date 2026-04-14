@@ -1,0 +1,89 @@
+apply plugin: 'com.android.application'
+apply plugin: 'realm-android'
+
+def runGitCommand = { List<String> args ->
+    try {
+        def stdout = new ByteArrayOutputStream()
+        def stderr = new ByteArrayOutputStream()
+        def result = exec {
+            workingDir repoRootDir
+            commandLine args
+            standardOutput = stdout
+            errorOutput = stderr
+            ignoreExitValue true
+        }
+        if (result.exitValue != 0) {
+            return null
+        }
+        def output = stdout.toString().trim()
+        return output ? output : null
+    } catch (Exception ignored) {
+        return null
+    }
+}
+
+def resolveAppVersion = {
+    def propertyVersion = project.findProperty("APP_VERSION")?.toString()?.trim()
+    if (propertyVersion) {
+        return propertyVersion
+    }
+
+    def exactTag = runGitCommand(["git", "describe", "--tags", "--exact-match"])
+    if (exactTag) {
+        return exactTag
+    }
+
+    def gitDescribe = runGitCommand(["git", "describe", "--tags", "--always", "--dirty"])
+    if (gitDescribe) {
+        return gitDescribe
+    }
+
+    return "local"
+}.call()
+
+android {
+    ndkVersion "26.1.10909125"
+    namespace "kr.co.turtlelab.andowsignage"
+    compileSdk 22
+
+    defaultConfig {
+        applicationId "kr.co.turtlelab.andowsignage"
+        minSdk 17
+        targetSdk 17
+        versionName resolveAppVersion
+        resValue "string", "app_version", resolveAppVersion
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+    buildFeatures {
+        aidl true
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    lint {
+        disable += 'ExpiredTargetSdkVersion'
+    }
+}
+
+repositories {
+    flatDir {
+        dirs 'libs'
+    }
+}
+
+dependencies {
+    implementation 'com.android.support:support-v4:22.0.0'
+    implementation 'com.google.code.gson:gson:2.8.5'
+    implementation files('libs/ftp4j-1.7.2.jar')
+    implementation files('libs/universal-image-loader-1.9.3.jar')
+    implementation files('libs/commons-io-2.6.jar')
+    implementation 'com.rethinkdb:rethinkdb-driver:2.4.4'
+    implementation 'com.microsoft.signalr:signalr:7.0.20'
+}
