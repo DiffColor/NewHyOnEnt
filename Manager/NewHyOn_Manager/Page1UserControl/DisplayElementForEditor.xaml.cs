@@ -95,14 +95,25 @@ namespace AndoW_Manager
 
         void MenuFullScreen_Click(object sender, RoutedEventArgs e)
         {
-            if(Page1.Instance.g_DspElmtList.Count > 1)
+            Page1 page = Page1.Instance;
+            if (page == null)
+            {
+                return;
+            }
+
+            if (page.g_DspElmtList.Count > 1)
             {
                 MessageTools.ShowMessageBox("미디어 객체는 겹칠 수 없습니다.", "확인");
                 return;
             }
 
-            this.Width = 1920;
-            this.Height = 1080;
+            double canvasWidth = Math.Max(1, page.DesignerCanvas.Width > 0 ? page.DesignerCanvas.Width : page.DesignerCanvas.ActualWidth);
+            double canvasHeight = Math.Max(1, page.DesignerCanvas.Height > 0 ? page.DesignerCanvas.Height : page.DesignerCanvas.ActualHeight);
+            int columnSpan = Math.Max(1, page.GuideGrid.ColumnDefinitions.Count);
+            int rowSpan = Math.Max(1, page.GuideGrid.RowDefinitions.Count);
+
+            this.Width = canvasWidth;
+            this.Height = canvasHeight;
 
             Canvas.SetTop(this, 0);
             Canvas.SetLeft(this, 0);
@@ -111,12 +122,9 @@ namespace AndoW_Manager
             this.g_ElementInfoClass.EIF_PosLeft = 0;
 
             this.g_ElementInfoClass.EIF_RowVal = 0;
-            this.g_ElementInfoClass.EIF_RowSpanVal = 24;
+            this.g_ElementInfoClass.EIF_RowSpanVal = rowSpan;
             this.g_ElementInfoClass.EIF_ColVal = 0;
-            this.g_ElementInfoClass.EIF_ColSpanVal = 24;
-
-            if (MainWindow.Instance.isPortraitEditor)
-                WindowTools.ConvertInScaledUserCtrl(this, MainWindow.Instance.g_wPortScale, MainWindow.Instance.g_hPortScale);
+            this.g_ElementInfoClass.EIF_ColSpanVal = columnSpan;
 
             UpdateElementLandSizeAndPos();
         }
