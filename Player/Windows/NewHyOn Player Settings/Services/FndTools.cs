@@ -54,34 +54,13 @@ public static class FndTools
 
     public static string GetCurrentExecutablePath()
     {
-#if NET6_0_OR_GREATER
         string? processPath = Environment.ProcessPath;
         if (!string.IsNullOrWhiteSpace(processPath))
         {
             return Path.GetFullPath(processPath);
         }
-#endif
 
-        try
-        {
-            using Process currentProcess = Process.GetCurrentProcess();
-            string? mainModulePath = currentProcess.MainModule?.FileName;
-            if (!string.IsNullOrWhiteSpace(mainModulePath))
-            {
-                return Path.GetFullPath(mainModulePath);
-            }
-        }
-        catch
-        {
-        }
-
-        string[] commandLineArgs = Environment.GetCommandLineArgs();
-        if (commandLineArgs.Length > 0 && string.IsNullOrWhiteSpace(commandLineArgs[0]) == false)
-        {
-            return Path.GetFullPath(commandLineArgs[0]);
-        }
-
-        throw new InvalidOperationException("실행 중인 파일 경로를 확인할 수 없습니다.");
+        throw new InvalidOperationException("Environment.ProcessPath를 확인할 수 없습니다.");
     }
 
     private static string? TryGetRunningProcessPath(string processName)

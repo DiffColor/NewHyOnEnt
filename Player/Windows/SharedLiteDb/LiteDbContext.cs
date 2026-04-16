@@ -9,7 +9,7 @@ namespace AndoW.LiteDb
 {
     /// <summary>
     /// 단일 파일 LiteDB 컨텍스트.
-    /// 실제 실행 파일 기준 경로(local.db)에 DB 파일을 생성하고 공유 커넥션 문자열을 유지한다.
+    /// AppContext.BaseDirectory 기준 경로(local.db)에 DB 파일을 생성하고 공유 커넥션 문자열을 유지한다.
     /// </summary>
     public static class LiteDbContext
     {
@@ -34,7 +34,7 @@ namespace AndoW.LiteDb
                     return;
                 }
 
-                string baseDirectory = ResolveExecutableDirectory();
+                string baseDirectory = ResolveBaseDirectory();
                 _databasePath = Path.Combine(baseDirectory, "local.db");
                 Directory.CreateDirectory(Path.GetDirectoryName(_databasePath) ?? baseDirectory);
                 _connectionString = $"Filename={_databasePath};Connection=shared;Password=turtle04!9";
@@ -43,33 +43,44 @@ namespace AndoW.LiteDb
             }
         }
 
-        private static string ResolveExecutableDirectory()
+        private static string ResolveBaseDirectory()
         {
+#if PLAYER_SETTINGS_USE_APP_CONTEXT_BASE_DIRECTORY
+            string baseDirectory = AppContext.BaseDirectory;
+            if (string.IsNullOrWhiteSpace(baseDirectory))
+            {
+                throw new InvalidOperationException("AppContext.BaseDirectory를 확인할 수 없습니다.");
+            }
+
+            return Path.GetFullPath(baseDirectory);
+#else
             string executablePath = ResolveExecutablePath();
-            string? directory = Path.GetDirectoryName(executablePath);
+            string directory = Path.GetDirectoryName(executablePath);
             if (string.IsNullOrWhiteSpace(directory))
             {
                 throw new InvalidOperationException("실행 파일 디렉터리를 확인할 수 없습니다.");
             }
 
             return Path.GetFullPath(directory);
+#endif
         }
 
         private static string ResolveExecutablePath()
         {
 #if NET6_0_OR_GREATER
             string? processPath = Environment.ProcessPath;
-            if (string.IsNullOrWhiteSpace(processPath) == false)
+            if (string.IsNullOrWhiteSpace(processPath))
             {
-                return Path.GetFullPath(processPath);
+                throw new InvalidOperationException("Environment.ProcessPath를 확인할 수 없습니다.");
             }
-#endif
 
+            return Path.GetFullPath(processPath);
+#else
             try
             {
                 using (Process currentProcess = Process.GetCurrentProcess())
                 {
-                    string? mainModulePath = currentProcess.MainModule?.FileName;
+                    string mainModulePath = currentProcess.MainModule?.FileName;
                     if (string.IsNullOrWhiteSpace(mainModulePath) == false)
                     {
                         return Path.GetFullPath(mainModulePath);
@@ -80,13 +91,8 @@ namespace AndoW.LiteDb
             {
             }
 
-            string[] commandLineArgs = Environment.GetCommandLineArgs();
-            if (commandLineArgs.Length > 0 && string.IsNullOrWhiteSpace(commandLineArgs[0]) == false)
-            {
-                return Path.GetFullPath(commandLineArgs[0]);
-            }
-
             throw new InvalidOperationException("실행 중인 파일 경로를 확인할 수 없습니다.");
+#endif
         }
 
         private static void ConfigureMapper()
