@@ -70,6 +70,12 @@ public static class AuthRegistryService
         return !string.IsNullOrEmpty(keyValue) && int.TryParse(keyValue, out int tryCount) && tryCount > 2;
     }
 
+    public static bool HasTryAuthHistory()
+    {
+        string? keyValue = ReadRegKey("ILYcode", "TryNewHyOn");
+        return !string.IsNullOrWhiteSpace(keyValue);
+    }
+
     public static string GetUuid12FromWmi()
     {
         using ManagementClass computerSystemProduct = new("Win32_ComputerSystemProduct");

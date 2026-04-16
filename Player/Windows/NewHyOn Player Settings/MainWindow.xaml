@@ -76,6 +76,21 @@
             <Setter Property="Padding" Value="0" />
         </Style>
 
+        <Style x:Key="ReadOnlyValueTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource CompactTextInputStyle}">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="10,0" />
+        </Style>
+
+        <Style x:Key="WrappedReadOnlyValueTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource ReadOnlyValueTextBoxStyle}">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            
+        </Style>
+
         <Style x:Key="PasswordInputStyle" TargetType="PasswordBox">
             <Setter Property="Height" Value="30" />
             <Setter Property="Padding" Value="0" />
@@ -381,7 +396,7 @@
     </Window.Resources>
 
     <Border>
-        <Grid>
+        <Grid x:Name="MainContentGrid">
             <Grid.RowDefinitions>
                 <RowDefinition Height="34" />
                 <RowDefinition Height="Auto" />
@@ -420,12 +435,20 @@
                                 MouseLeftButtonDown="Header_MouseLeftButtonDown">
                         <Canvas>
                             <StackPanel Canvas.Left="0"
-                                            Canvas.Top="0">
+                                            Canvas.Top="0"
+                                            Width="620">
                                 <TextBlock Text="NewHyOn Player Settings"
                                                FontFamily="Segoe UI"
                                                FontSize="26"
                                                FontWeight="Bold"
                                                Foreground="{StaticResource PrimaryBrush}" />
+
+                                <TextBlock x:Name="TransferServerStatusTextBlock"
+                                               Margin="0,4,0,0"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               TextWrapping="Wrap" />
                             </StackPanel>
 
                             <Button x:Name="ShowIpButton"
@@ -434,7 +457,7 @@
                                         Width="113"
                                         Height="40"
                                         Style="{StaticResource SecondaryButtonStyle}"
-                                        Content="Show IP"
+                                        Content="주소 보기"
                                         Click="ShowIpButton_Click" />
 
                             <StackPanel Canvas.Left="826"
@@ -448,11 +471,35 @@
                                             Content="종료"
                                             Click="ExitButton_Click" />
                                 <Button x:Name="SaveButton"
-                                            Width="84"
+                                            Width="98"
                                             Height="40"
                                             Style="{StaticResource PrimaryButtonStyle}"
-                                            Content="저 장"
-                                            Click="SaveButton_Click" />
+                                            Click="SaveButton_Click">
+                                    <StackPanel Orientation="Horizontal"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center">
+                                        <Grid x:Name="SaveButtonSpinner"
+                                              Width="12"
+                                              Height="12"
+                                              Margin="0,0,6,0"
+                                              Visibility="Collapsed">
+                                            <Path Stroke="#7EE3EB"
+                                                  StrokeThickness="1.8"
+                                                  StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round"
+                                                  Data="M 10,6 A 4,4 0 1 1 6,2">
+                                                <Path.RenderTransform>
+                                                    <RotateTransform x:Name="SaveButtonSpinnerRotateTransform"
+                                                                     CenterX="6"
+                                                                     CenterY="6" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                        </Grid>
+                                        <TextBlock x:Name="SaveButtonTextBlock"
+                                                   Text="저 장"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Canvas>
                     </Border>
@@ -462,116 +509,126 @@
                                 Width="260"
                                 Height="709"
                                 ClipToBounds="True">
-                        <Border Canvas.Left="13"
-                                    Canvas.Top="0"
-                                    Width="242"
-                                    Style="{StaticResource CardBorderStyle}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource CardTitleStyle}"
-                                               Text="네트워크 설정" />
+                        <StackPanel Canvas.Left="13"
+                                        Canvas.Top="0"
+                                        Width="242">
+                            <Border Style="{StaticResource CardBorderStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource CardTitleStyle}"
+                                                   Text="플레이어 기본 정보" />
 
-                                <StackPanel Margin="0,14,0,0">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="서버 IP" />
-                                    <TextBox x:Name="ManagerIpTextBox" Style="{StaticResource TextInputStyle}" />
-                                </StackPanel>
-
-                                <StackPanel Margin="0,12,0,0">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="플레이어 IP" />
-                                    <TextBox x:Name="PlayerIpTextBox" Style="{StaticResource TextInputStyle}" />
-                                </StackPanel>
-
-                                <StackPanel Margin="0,12,0,12">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="플레이어 이름" />
-                                    <TextBox x:Name="PlayerNameTextBox" Style="{StaticResource TextInputStyle}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Canvas.Left="15"
-                                    Canvas.Top="294"
-                                    Width="240"
-                                    Height="138"
-                                    Style="{StaticResource CardBorderStyle}">
-                            <Canvas>
-                                <TextBlock Canvas.Left="0"
-                                               Canvas.Top="0"
-                                               Style="{StaticResource CardTitleStyle}"
-                                               Text="네트워크 포트 설정" />
-
-                                <Grid Canvas.Left="0"
-                                          Canvas.Top="42"
-                                          Width="208">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="98" />
-                                        <ColumnDefinition Width="12" />
-                                        <ColumnDefinition Width="98" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="SignalR 포트" />
-                                        <TextBox x:Name="SignalRPortTextBox"
+                                    <StackPanel Margin="0,12,0,0">
+                                        <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="데이터 서버 주소" />
+                                        <TextBox x:Name="ManagerIpTextBox"
                                                  Style="{StaticResource CompactTextInputStyle}"
-                                                 IsReadOnly="True"
-                                                 IsTabStop="False" />
+                                                 TextChanged="ManagerIpTextBox_TextChanged" />
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="2">
-                                        <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="전송 포트" />
-                                        <TextBox x:Name="FtpPortTextBox" Style="{StaticResource CompactTextInputStyle}" />
+                                    <StackPanel Margin="0,10,0,0">
+                                        <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="플레이어 주소" />
+                                        <TextBox x:Name="PlayerIpTextBox" Style="{StaticResource CompactTextInputStyle}" />
                                     </StackPanel>
-                                </Grid>
 
-                            </Canvas>
-                        </Border>
-
-                        <Border Canvas.Left="15"
-                                    Canvas.Top="462"
-                                    Width="242"
-                                    Height="200"
-                                    Style="{StaticResource CardBorderStyle}">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
-
-                                <TextBlock x:Name="AuthStatusTextBlock"
-                                               FontSize="16"
-                                               FontWeight="Bold"
-                                               Foreground="{StaticResource SuccessBrush}" />
-
-                                <StackPanel Grid.Row="1"
-                                                Margin="0,14,0,0">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="승인키" />
-                                    <TextBox x:Name="SourceKeyTextBox"
-                                                 Style="{StaticResource TextInputStyle}"
-                                                 IsReadOnly="True" />
+                                    <StackPanel Margin="0,10,0,0">
+                                        <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="플레이어 이름" />
+                                        <TextBox x:Name="PlayerNameTextBox" Style="{StaticResource CompactTextInputStyle}" />
+                                    </StackPanel>
                                 </StackPanel>
+                            </Border>
 
-                                <Canvas Grid.Row="2"
-                                            Margin="0,12,0,0"
-                                            Height="82">
-                                    <StackPanel Canvas.Left="0"
-                                                    Canvas.Top="0"
-                                                    Width="102">
-                                        <TextBlock Style="{StaticResource FieldLabelStyle}" Text="인증 암호" />
-                                        <PasswordBox x:Name="AuthPasswordBox"
-                                                         Width="100"
-                                                         Style="{StaticResource PasswordInputStyle}" />
+                            <Border Margin="0,14,0,0"
+                                        Style="{StaticResource CardBorderStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource CardTitleStyle}"
+                                                   Text="전송 서버 설정" />
+
+                                    <Border Margin="0,12,0,0"
+                                                Padding="10"
+                                                Background="{StaticResource SurfaceBrush}"
+                                                BorderBrush="#E2E8F0"
+                                                BorderThickness="1"
+                                                CornerRadius="12">
+                                        <StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="메시지 서버 주소" />
+                                                <TextBox x:Name="MessageServerAddressTextBox" Style="{StaticResource ReadOnlyValueTextBoxStyle}" />
+                                            </StackPanel>
+
+                                            <StackPanel Margin="0,8,0,0">
+                                                <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="FTP 저장소 경로" />
+                                                <TextBox x:Name="FtpRootPathTextBox" Style="{StaticResource WrappedReadOnlyValueTextBoxStyle}" />
+                                            </StackPanel>
+
+                                            <Grid Margin="0,8,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition  />
+                                                    <ColumnDefinition Width="12"  />
+                                                    <ColumnDefinition  />
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="메시지 포트" />
+                                                    <TextBox x:Name="SignalRPortTextBox"
+                                                             Style="{StaticResource ReadOnlyValueTextBoxStyle}" />
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Style="{StaticResource CompactFieldLabelStyle}" Text="전송 포트" />
+                                                    <TextBox x:Name="FtpPortTextBox" Style="{StaticResource CompactTextInputStyle}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,14,0,0" Height="190"
+                                        Style="{StaticResource CardBorderStyle}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock x:Name="AuthStatusTextBlock"
+                                                   FontSize="16"
+                                                   FontWeight="Bold"
+                                                   Foreground="DarkRed"
+                                                   Text="인증 상태 : 미인증" />
+
+                                    <StackPanel Grid.Row="1"
+                                                    Margin="0,14,0,0">
+                                        <TextBlock Style="{StaticResource FieldLabelStyle}" Text="승인키" />
+                                        <TextBox x:Name="SourceKeyTextBox"
+                                                     Style="{StaticResource TextInputStyle}"
+                                                     IsReadOnly="True" />
                                     </StackPanel>
 
-                                    <Button x:Name="AuthButton"
-                                                Canvas.Left="123"
-                                                Canvas.Top="14"
-                                                Width="88"
-                                                Height="38"
-                                                Style="{StaticResource PrimaryButtonStyle}"
-                                                Content="인 증"
-                                                Click="AuthButton_Click" />
-                                </Canvas>
-                            </Grid>
-                        </Border>
+                                    <Canvas Grid.Row="2"
+                                                Margin="0,12,0,0"
+                                                Height="82">
+                                        <StackPanel Canvas.Left="0"
+                                                        Canvas.Top="0"
+                                                        Width="102">
+                                            <TextBlock Style="{StaticResource FieldLabelStyle}" Text="인증 암호" />
+                                            <PasswordBox x:Name="AuthPasswordBox"
+                                                             Width="100"
+                                                             Style="{StaticResource PasswordInputStyle}" />
+                                        </StackPanel>
+
+                                        <Button x:Name="AuthButton"
+                                                    Canvas.Left="123"
+                                                    Canvas.Top="14"
+                                                    Width="88"
+                                                    Height="38"
+                                                    Style="{StaticResource PrimaryButtonStyle}"
+                                                    Content="인 증"
+                                                    Click="AuthButton_Click" />
+                                    </Canvas>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
                     </Canvas>
 
                     <Border Canvas.Left="277"
@@ -728,7 +785,7 @@
                                          SelectionChanged="SyncIpListBox_SelectionChanged" />
 
                             <StackPanel Margin="0,12,0,0">
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="클라이언트 IP" />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="클라이언트 주소" />
                                 <TextBox x:Name="SyncIpTextBox" Style="{StaticResource TextInputStyle}" />
                             </StackPanel>
 

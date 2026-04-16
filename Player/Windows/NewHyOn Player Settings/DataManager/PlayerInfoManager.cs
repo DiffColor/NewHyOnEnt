@@ -42,11 +42,6 @@ public sealed class PlayerInfoManager
             PlayerInfo.PIF_GUID = Guid.NewGuid().ToString();
         }
 
-        if (string.IsNullOrWhiteSpace(PlayerInfo.PIF_AuthKey))
-        {
-            PlayerInfo.PIF_AuthKey = Guid.NewGuid().ToString("N");
-        }
-
         PlayerInfo.Id = 0;
         repository.ReplaceAll(new[] { PlayerInfo });
     }

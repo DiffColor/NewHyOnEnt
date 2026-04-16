@@ -58,7 +58,7 @@ namespace NewHyOnPlayer
         public int Id { get; set; } = 0;
 
         public string TTInfo_Data1 { get; set; } = "NO";
-        public string TTInfo_DAta2 { get; set; } = "YES";
+        public string TTInfo_DAta2 { get; set; } = "NO";
         public string TTInfo_Data3 { get; set; } = "NO";
         public string TTInfo_DAta4 { get; set; } = "NO";
         public string TTInfo_Data5 { get; set; } = string.Empty;
@@ -83,7 +83,7 @@ namespace NewHyOnPlayer
         public void Clear()
         {
             TTInfo_Data1 = "NO";
-            TTInfo_DAta2 = "YES";
+            TTInfo_DAta2 = "NO";
             TTInfo_Data3 = "NO";
             TTInfo_DAta4 = "NO";
             TTInfo_Data5 = string.Empty;

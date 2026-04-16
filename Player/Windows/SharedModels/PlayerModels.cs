@@ -72,7 +72,7 @@ namespace AndoW.Shared
         public bool IsLocalPlay { get; set; }
         public bool HideCursor { get; set; } = true;
         public bool IsCheckInternetForFlash { get; set; } = true;
-        public bool BlockMonitorOnEndTime { get; set; } = true;
+        public bool BlockMonitorOnEndTime { get; set; }
         public string TvSourceName { get; set; } = string.Empty;
         public int DisplayOrder { get; set; } = 0;
 
@@ -81,5 +81,9 @@ namespace AndoW.Shared
         public bool IsSyncEnabled { get; set; }
         public bool IsLeading { get; set; }
         public List<string> SyncClientIps { get; set; } = new List<string>();
+        public string CachedDataServerAddress { get; set; } = string.Empty;
+        public string CachedMessageServerAddress { get; set; } = string.Empty;
+        public string CachedFtpRootPath { get; set; } = string.Empty;
+        public int CachedFtpPort { get; set; }
     }
 }

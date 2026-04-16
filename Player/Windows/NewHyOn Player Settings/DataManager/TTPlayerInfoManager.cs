@@ -64,7 +64,7 @@ public sealed class TTPlayerInfoClass
     public int Id { get; set; }
 
     public string TTInfo_Data1 { get; set; } = "NO";
-    public string TTInfo_DAta2 { get; set; } = "YES";
+    public string TTInfo_DAta2 { get; set; } = "NO";
     public string TTInfo_Data3 { get; set; } = "NO";
     public string TTInfo_DAta4 { get; set; } = "NO";
     public string TTInfo_Data5 { get; set; } = string.Empty;

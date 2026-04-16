@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectPath = Join-Path $ScriptDir "NewHyOn.Settings.Wpf.csproj"
+$ProjectPath = Join-Path $ScriptDir "NewHyOn.Settings.csproj"
 $OutputDir = Join-Path $ScriptDir "bin/publish"
 
 Write-Host "[publish] project: $ProjectPath"

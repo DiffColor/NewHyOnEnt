@@ -406,21 +406,21 @@ namespace NewHyOnPlayer
         {
             try
             {
-                string configPlayerPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ConfigPlayer.exe");
+                string configPlayerPath = Path.Combine(AppContext.BaseDirectory, "NewHyOn Player Settings.exe");
                 if (!File.Exists(configPlayerPath))
                 {
-                    Logger.WriteErrorLog($"ConfigPlayer not found: {configPlayerPath}", Logger.GetLogFileName());
+                    Logger.WriteErrorLog($"NewHyOn Player Settings not found: {configPlayerPath}", Logger.GetLogFileName());
                     return;
                 }
 
-                if (!ProcessTools.CheckExeProcessAlive("ConfigPlayer"))
+                if (!ProcessTools.CheckExeProcessAlive("NewHyOn Player Settings"))
                 {
                     ProcessTools.LaunchProcess(configPlayerPath);
                 }
             }
             catch (Exception ex)
             {
-                Logger.WriteErrorLog($"ConfigPlayer launch failed: {ex}", Logger.GetLogFileName());
+                Logger.WriteErrorLog($"NewHyOn Player Settings launch failed: {ex}", Logger.GetLogFileName());
             }
         }
 

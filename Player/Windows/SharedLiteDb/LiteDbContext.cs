@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using LiteDB;
 using AndoW.Shared;
@@ -8,13 +9,14 @@ namespace AndoW.LiteDb
 {
     /// <summary>
     /// 단일 파일 LiteDB 컨텍스트.
-    /// 앱 기준 경로(local.db)에 DB 파일을 생성하고 공유 커넥션 문자열을 유지한다.
+    /// 실제 실행 파일 기준 경로(local.db)에 DB 파일을 생성하고 공유 커넥션 문자열을 유지한다.
     /// </summary>
     public static class LiteDbContext
     {
         private static readonly object SyncRoot = new object();
         private static readonly HashSet<string> EnsuredCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private static string _connectionString;
+        private static string _connectionString = string.Empty;
+        private static string _databasePath = string.Empty;
         private static bool _initialized;
         private static bool _mapperConfigured;
 
@@ -32,12 +34,59 @@ namespace AndoW.LiteDb
                     return;
                 }
 
-                string dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "local.db");
-                Directory.CreateDirectory(Path.GetDirectoryName(dbPath) ?? AppDomain.CurrentDomain.BaseDirectory);
-                _connectionString = $"Filename={dbPath};Connection=shared;Password=turtle04!9";
+                string baseDirectory = ResolveExecutableDirectory();
+                _databasePath = Path.Combine(baseDirectory, "local.db");
+                Directory.CreateDirectory(Path.GetDirectoryName(_databasePath) ?? baseDirectory);
+                _connectionString = $"Filename={_databasePath};Connection=shared;Password=turtle04!9";
                 ConfigureMapper();
                 _initialized = true;
             }
+        }
+
+        private static string ResolveExecutableDirectory()
+        {
+            string executablePath = ResolveExecutablePath();
+            string? directory = Path.GetDirectoryName(executablePath);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                throw new InvalidOperationException("실행 파일 디렉터리를 확인할 수 없습니다.");
+            }
+
+            return Path.GetFullPath(directory);
+        }
+
+        private static string ResolveExecutablePath()
+        {
+#if NET6_0_OR_GREATER
+            string? processPath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(processPath) == false)
+            {
+                return Path.GetFullPath(processPath);
+            }
+#endif
+
+            try
+            {
+                using (Process currentProcess = Process.GetCurrentProcess())
+                {
+                    string? mainModulePath = currentProcess.MainModule?.FileName;
+                    if (string.IsNullOrWhiteSpace(mainModulePath) == false)
+                    {
+                        return Path.GetFullPath(mainModulePath);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            string[] commandLineArgs = Environment.GetCommandLineArgs();
+            if (commandLineArgs.Length > 0 && string.IsNullOrWhiteSpace(commandLineArgs[0]) == false)
+            {
+                return Path.GetFullPath(commandLineArgs[0]);
+            }
+
+            throw new InvalidOperationException("실행 중인 파일 경로를 확인할 수 없습니다.");
         }
 
         private static void ConfigureMapper()

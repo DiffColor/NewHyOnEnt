@@ -54,7 +54,7 @@ namespace NewHyOnPlayer
             if (string.IsNullOrEmpty(encodedKey))
                 return true;
 
-            // DB 기반 AuthKey 검증
+                    // DB 기반 AuthKey 검증
             List<string> nics = NetworkTools.GetAllMACAddressesBySystemNet();
 
             foreach (string nic in nics)

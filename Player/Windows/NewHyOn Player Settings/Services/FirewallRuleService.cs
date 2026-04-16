@@ -5,7 +5,7 @@ namespace NewHyOn.Player.Settings.Services;
 
 public static class FirewallRuleService
 {
-    private const string ExecutableLocationGuide = "방화벽 설정을 위해 실행파일의 위치를 확인한 후 다시 저장해주세요.";
+    private const string ExecutableLocationGuide = "방화벽 설정을 위해 실행파일의 위치를 확인해주세요.";
     private const string FirewallRetryGuide = "방화벽 설정을 확인한 후 다시 저장해주세요.";
     private const string PlayerAllowedAppRuleName = "newhyon_player_allowed_app";
     private const string SyncRuleName = "newhyon_player_sync_port";

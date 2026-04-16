@@ -40,8 +40,8 @@ namespace AndoW.Shared
         public string DayOfWeek { get; set; } = string.Empty;
         public int StartHour { get; set; }
         public int StartMinute { get; set; }
-        public int EndHour { get; set; } = 23;
-        public int EndMinute { get; set; } = 59;
+        public int EndHour { get; set; }
+        public int EndMinute { get; set; }
         public bool IsOnAir { get; set; } = true;
     }
 }

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_PATH="$SCRIPT_DIR/NewHyOn.Settings.Wpf.csproj"
+PROJECT_PATH="$SCRIPT_DIR/NewHyOn.Settings.csproj"
 CONFIGURATION="${1:-Release}"
 OUTPUT_DIR="$SCRIPT_DIR/bin/publish"
 
