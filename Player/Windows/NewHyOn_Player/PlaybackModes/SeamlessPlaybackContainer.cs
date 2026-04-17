@@ -12,6 +12,7 @@ using AndoW.Shared;
 using NewHyOnPlayer.DataManager;
 using SharedElementInfoClass = AndoW.Shared.ElementInfoClass;
 using SharedPageInfoClass = AndoW.Shared.PageInfoClass;
+using NewHyOnPlayer.Services;
 
 namespace NewHyOnPlayer.PlaybackModes
 {
@@ -26,6 +27,7 @@ namespace NewHyOnPlayer.PlaybackModes
         private readonly SemaphoreSlim layoutPrepareGate = new SemaphoreSlim(1, 1);
 
         private int activeLayoutIndex = -1;
+        private int nextPageLayoutIndex = -1;
         private int transitionVersion;
         private int completionHandling;
         private bool initialized;
@@ -40,8 +42,12 @@ namespace NewHyOnPlayer.PlaybackModes
         private string pendingPlaylistReloadReason = string.Empty;
         private string lastPlaylistReloadStateKey = string.Empty;
         private string lastLocalFallbackPlaylist = string.Empty;
-        private string warmingScheduleStateKey = string.Empty;
-        private string warmedScheduleStateKey = string.Empty;
+        private string requestedWarmTransitionStateKey = string.Empty;
+        private string requestedWarmTransitionPlaylist = string.Empty;
+        private bool requestedWarmTransitionAutoSwitch;
+        private int reservedTransitionLayoutIndex = -1;
+        private string reservedTransitionStateKey = string.Empty;
+        private string reservedTransitionPlaylist = string.Empty;
 
         public SeamlessPlaybackContainer(MainWindow owner, Canvas hostCanvas)
         {
@@ -51,7 +57,8 @@ namespace NewHyOnPlayer.PlaybackModes
             layouts = new[]
             {
                 new SeamlessLayoutRuntime("Layout-A"),
-                new SeamlessLayoutRuntime("Layout-B")
+                new SeamlessLayoutRuntime("Layout-B"),
+                new SeamlessLayoutRuntime("Layout-C")
             };
             layoutActivationVersions = new int[layouts.Length];
 
@@ -253,22 +260,13 @@ namespace NewHyOnPlayer.PlaybackModes
 
         public List<PlaybackDebugItem> GetDebugItems()
         {
-            List<PlaybackDebugItem> activeItems;
-            List<PlaybackDebugItem> standbyItems;
-
-            int currentActiveIndex = activeLayoutIndex;
-            if (currentActiveIndex >= 0)
+            var merged = new List<PlaybackDebugItem>();
+            for (int i = 0; i < layouts.Length; i++)
             {
-                activeItems = layouts[currentActiveIndex].GetDebugItems();
-                standbyItems = layouts[1 - currentActiveIndex].GetDebugItems();
-            }
-            else
-            {
-                activeItems = layouts[0].GetDebugItems();
-                standbyItems = layouts[1].GetDebugItems();
+                merged.AddRange(layouts[i].GetDebugItems());
             }
 
-            return PlaybackDiagnostics.Merge(activeItems, standbyItems);
+            return merged;
         }
 
         public void UpdateCurrentPageListName(string pageListName)
@@ -371,6 +369,11 @@ namespace NewHyOnPlayer.PlaybackModes
             {
                 layouts[i].Deactivate();
             }
+
+            activeLayoutIndex = -1;
+            nextPageLayoutIndex = -1;
+            ClearRequestedWarmTransitionState();
+            ClearReservedTransitionState();
         }
 
         public void StopAll()
@@ -383,6 +386,10 @@ namespace NewHyOnPlayer.PlaybackModes
             }
 
             activeLayoutIndex = -1;
+            nextPageLayoutIndex = -1;
+            ClearPendingScheduleState();
+            ClearRequestedWarmTransitionState();
+            ClearReservedTransitionState();
         }
 
         private async Task ShowPageInternalAsync(int version, SharedPageInfoClass currentPage, SharedPageInfoClass nextPage, string playlistName)
@@ -399,7 +406,7 @@ namespace NewHyOnPlayer.PlaybackModes
                 return;
             }
 
-            int targetLayoutIndex = GetTargetLayoutIndex();
+            int targetLayoutIndex = GetActivationLayoutIndex(currentPlan);
             if (!layouts[targetLayoutIndex].Matches(currentPlan) || layouts[targetLayoutIndex].State != SeamlessLayoutState.Ready)
             {
                 bool prepared = await PrepareLayoutAsync(targetLayoutIndex, currentPlan, version).ConfigureAwait(false);
@@ -419,6 +426,16 @@ namespace NewHyOnPlayer.PlaybackModes
             layouts[targetLayoutIndex].Activate();
             layoutActivationVersions[targetLayoutIndex] = version;
             activeLayoutIndex = targetLayoutIndex;
+            if (nextPageLayoutIndex == targetLayoutIndex)
+            {
+                nextPageLayoutIndex = -1;
+            }
+
+            if (reservedTransitionLayoutIndex == targetLayoutIndex)
+            {
+                ClearReservedTransitionState();
+            }
+
             if (previousActiveIndex < 0)
             {
                 owner?.SetInitialLoadingVisible(false);
@@ -434,10 +451,19 @@ namespace NewHyOnPlayer.PlaybackModes
                 return;
             }
 
-            int standbyIndex = 1 - targetLayoutIndex;
+            int standbyIndex = GetStandbyLayoutIndex(targetLayoutIndex);
+            nextPageLayoutIndex = -1;
+            if (standbyIndex < 0 || standbyIndex >= layouts.Length)
+            {
+                return;
+            }
+
             if (nextPlan == null)
             {
-                layouts[standbyIndex].Clear();
+                if (standbyIndex != reservedTransitionLayoutIndex)
+                {
+                    layouts[standbyIndex].Clear();
+                }
                 return;
             }
 
@@ -448,6 +474,7 @@ namespace NewHyOnPlayer.PlaybackModes
             }
 
             layouts[standbyIndex].Deactivate();
+            nextPageLayoutIndex = standbyIndex;
         }
 
         private void Layout_PlaybackCompleted(SeamlessLayoutRuntime completedLayout)
@@ -670,47 +697,58 @@ namespace NewHyOnPlayer.PlaybackModes
                 return;
             }
 
-            lastScheduleEval = DateTime.Now;
-            var decision = owner.ScheduleEvaluatorService.Evaluate(DateTime.Now, owner.g_PlayerInfoManager?.g_PlayerInfo?.PIF_DefaultPlayList);
+            DateTime now = DateTime.Now;
+            if (!force
+                && lastScheduleEval > DateTime.MinValue
+                && (now - lastScheduleEval).TotalMilliseconds < 700)
+            {
+                return;
+            }
+
+            lastScheduleEval = now;
+            var decision = owner.ScheduleEvaluatorService.Evaluate(now, owner.g_PlayerInfoManager?.g_PlayerInfo?.PIF_DefaultPlayList);
             if (decision == null || string.IsNullOrWhiteSpace(decision.PlaylistName))
             {
-                pendingSchedulePlaylist = string.Empty;
-                pendingScheduleId = string.Empty;
+                ClearPendingScheduleState();
+                ClearRequestedWarmTransitionState();
+                ClearReservedTransitionState();
                 lastScheduleEvalStateKey = "NONE";
                 lastMissingScheduleLogged = string.Empty;
-                warmingScheduleStateKey = string.Empty;
-                warmedScheduleStateKey = string.Empty;
                 return;
             }
 
             string current = owner.g_PlayerInfoManager?.g_PlayerInfo?.PIF_CurrentPlayList ?? string.Empty;
             if (string.Equals(decision.PlaylistName, current, StringComparison.OrdinalIgnoreCase))
             {
-                pendingSchedulePlaylist = string.Empty;
-                pendingScheduleId = decision.ScheduleId ?? string.Empty;
+                ClearPendingScheduleState();
                 lastMissingScheduleLogged = string.Empty;
-                warmingScheduleStateKey = string.Empty;
-                warmedScheduleStateKey = string.Empty;
-                string stateKey = $"KEEP|{pendingScheduleId}|{decision.PlaylistName}";
+                string stateKey = $"KEEP|{decision.ScheduleId}|{decision.PlaylistName}";
                 if (!string.Equals(lastScheduleEvalStateKey, stateKey, StringComparison.Ordinal))
                 {
                     Logger.WriteLog($"스케줄 평가: 현재 플레이리스트 유지 ({decision.PlaylistName})", Logger.GetLogFileName());
                     lastScheduleEvalStateKey = stateKey;
                 }
-                return;
-            }
 
-            pendingSchedulePlaylist = decision.PlaylistName;
-            pendingScheduleId = decision.ScheduleId ?? string.Empty;
-            lastMissingScheduleLogged = string.Empty;
-            string pendingStateKey = $"PENDING|{pendingScheduleId}|{pendingSchedulePlaylist}";
-            if (!string.Equals(lastScheduleEvalStateKey, pendingStateKey, StringComparison.Ordinal))
+                TryWarmUpcomingScheduleTransition(decision, now);
+            }
+            else
             {
-                Logger.WriteLog($"스케줄 평가: 전환 예약 -> {pendingSchedulePlaylist}", Logger.GetLogFileName());
-                lastScheduleEvalStateKey = pendingStateKey;
-            }
+                pendingSchedulePlaylist = decision.PlaylistName;
+                pendingScheduleId = decision.ScheduleId ?? string.Empty;
+                string pendingStateKey = BuildPendingScheduleStateKey(pendingScheduleId, pendingSchedulePlaylist);
+                lastMissingScheduleLogged = string.Empty;
 
-            WarmupPendingScheduleTransition(pendingStateKey);
+                if (!string.Equals(lastScheduleEvalStateKey, pendingStateKey, StringComparison.Ordinal))
+                {
+                    Logger.WriteLog($"스케줄 평가: 전환 예약 -> {pendingSchedulePlaylist}", Logger.GetLogFileName());
+                    lastScheduleEvalStateKey = pendingStateKey;
+                }
+
+                WarmupPendingScheduleTransition(
+                    pendingStateKey,
+                    pendingSchedulePlaylist,
+                    autoSwitchWhenReady: true);
+            }
         }
 
         private bool TryApplyScheduledSwitch(bool isPageBoundary, bool isContentBoundary)
@@ -756,12 +794,14 @@ namespace NewHyOnPlayer.PlaybackModes
             playerInfo.PIF_CurrentPlayList = pendingSchedulePlaylist;
             owner.g_PlayerInfoManager.SaveData();
 
-            pendingSchedulePlaylist = string.Empty;
-            warmingScheduleStateKey = string.Empty;
-            warmedScheduleStateKey = string.Empty;
+            string switchedPlaylist = pendingSchedulePlaylist;
+            ClearPendingScheduleState();
 
             UpdateCurrentPageListName(playerInfo.PIF_CurrentPlayList);
-            ApplyScheduleTransition();
+            if (!string.Equals(reservedTransitionPlaylist, switchedPlaylist, StringComparison.OrdinalIgnoreCase))
+            {
+                ClearReservedTransitionState();
+            }
             return true;
         }
 
@@ -1093,30 +1133,38 @@ namespace NewHyOnPlayer.PlaybackModes
             }
         }
 
-        private void WarmupPendingScheduleTransition(string pendingStateKey)
+        private void WarmupPendingScheduleTransition(string transitionStateKey, string playlistName, bool autoSwitchWhenReady)
         {
-            if (string.IsNullOrWhiteSpace(pendingSchedulePlaylist)
-                || string.IsNullOrWhiteSpace(pendingStateKey)
-                || string.Equals(warmingScheduleStateKey, pendingStateKey, StringComparison.Ordinal)
-                || string.Equals(warmedScheduleStateKey, pendingStateKey, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(playlistName)
+                || string.IsNullOrWhiteSpace(transitionStateKey))
             {
                 return;
             }
 
-            if (!HasPlayableContent(pendingSchedulePlaylist))
+            if (!HasPlayableContent(playlistName))
             {
                 return;
             }
 
-            int currentActiveIndex = activeLayoutIndex;
-            if (!initialized || currentActiveIndex < 0 || currentActiveIndex >= layouts.Length)
+            if (!initialized || activeLayoutIndex < 0 || activeLayoutIndex >= layouts.Length)
             {
                 return;
             }
 
-            string playlistName = pendingSchedulePlaylist;
-            int version = Volatile.Read(ref transitionVersion);
-            warmingScheduleStateKey = pendingStateKey;
+            if (IsReservedTransitionReady(transitionStateKey, playlistName))
+            {
+                return;
+            }
+
+            if (string.Equals(requestedWarmTransitionStateKey, transitionStateKey, StringComparison.Ordinal)
+                && string.Equals(requestedWarmTransitionPlaylist, playlistName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            requestedWarmTransitionStateKey = transitionStateKey;
+            requestedWarmTransitionPlaylist = playlistName;
+            requestedWarmTransitionAutoSwitch = autoSwitchWhenReady;
 
             Task.Run(async () =>
             {
@@ -1128,64 +1176,88 @@ namespace NewHyOnPlayer.PlaybackModes
                         return;
                     }
 
-                    if (!IsPendingScheduleStillValid(pendingStateKey, playlistName, version))
+                    int version = Volatile.Read(ref transitionVersion);
+                    if (!IsWarmTransitionStillValid(transitionStateKey, playlistName, autoSwitchWhenReady, version))
                     {
                         return;
                     }
 
-                    int standbyIndex = GetTargetLayoutIndex();
-                    if (standbyIndex < 0 || standbyIndex >= layouts.Length)
+                    int reserveIndex = GetReservedLayoutIndex();
+                    if (reserveIndex < 0 || reserveIndex >= layouts.Length)
                     {
                         return;
                     }
 
-                    bool prepared = await PrepareLayoutAsync(standbyIndex, firstPlan, version).ConfigureAwait(false);
-                    if (!prepared || !IsPendingScheduleStillValid(pendingStateKey, playlistName, version))
+                    bool prepared = await PrepareLayoutAsync(reserveIndex, firstPlan, version).ConfigureAwait(false);
+                    if (!prepared || !IsWarmTransitionStillValid(transitionStateKey, playlistName, autoSwitchWhenReady, version))
                     {
                         return;
                     }
 
-                    layouts[standbyIndex].Deactivate();
-                    warmedScheduleStateKey = pendingStateKey;
+                    layouts[reserveIndex].Deactivate();
+                    reservedTransitionLayoutIndex = reserveIndex;
+                    reservedTransitionStateKey = transitionStateKey;
+                    reservedTransitionPlaylist = playlistName;
                     Logger.WriteLog($"스케줄 전환 선준비 완료: {playlistName}", Logger.GetLogFileName());
+
+                    if (autoSwitchWhenReady)
+                    {
+                        Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            string timing = owner?.g_LocalSettingsManager?.Settings?.SwitchTiming ?? "Immediately";
+                            if (!timing.Equals("Immediately", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return;
+                            }
+
+                            if (!string.Equals(pendingSchedulePlaylist, playlistName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return;
+                            }
+
+                            if (TryApplyScheduledSwitch(isPageBoundary: false, isContentBoundary: true))
+                            {
+                                PlayNextPage();
+                            }
+                        }));
+                    }
                 }
                 catch (Exception ex)
                 {
-                    if (string.Equals(warmedScheduleStateKey, pendingStateKey, StringComparison.Ordinal) == false)
+                    if (!IsReservedTransitionReady(transitionStateKey, playlistName))
                     {
                         Logger.WriteErrorLog($"스케줄 전환 선준비 실패({playlistName}): {ex}", Logger.GetLogFileName());
                     }
                 }
                 finally
                 {
-                    if (string.Equals(warmingScheduleStateKey, pendingStateKey, StringComparison.Ordinal))
+                    if (string.Equals(requestedWarmTransitionStateKey, transitionStateKey, StringComparison.Ordinal)
+                        && string.Equals(requestedWarmTransitionPlaylist, playlistName, StringComparison.OrdinalIgnoreCase))
                     {
-                        warmingScheduleStateKey = string.Empty;
-                    }
-
-                    if (!string.Equals(warmedScheduleStateKey, pendingStateKey, StringComparison.Ordinal)
-                        && !string.Equals(pendingSchedulePlaylist, playlistName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        warmedScheduleStateKey = string.Empty;
+                        ClearRequestedWarmTransitionState();
                     }
                 }
             });
         }
 
-        private bool IsPendingScheduleStillValid(string pendingStateKey, string playlistName, int version)
+        private bool IsWarmTransitionStillValid(string transitionStateKey, string playlistName, bool autoSwitchWhenReady, int version)
         {
             if (!IsVersionCurrent(version))
             {
                 return false;
             }
 
-            if (!string.Equals(pendingSchedulePlaylist, playlistName, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(requestedWarmTransitionStateKey, transitionStateKey, StringComparison.Ordinal))
             {
                 return false;
             }
 
-            string currentStateKey = $"PENDING|{pendingScheduleId}|{pendingSchedulePlaylist}";
-            return string.Equals(currentStateKey, pendingStateKey, StringComparison.Ordinal);
+            if (!string.Equals(requestedWarmTransitionPlaylist, playlistName, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return requestedWarmTransitionAutoSwitch == autoSwitchWhenReady;
         }
 
         private async Task<SeamlessPagePlan> BuildInitialPagePlanAsync(string playlistName)
@@ -1347,17 +1419,177 @@ namespace NewHyOnPlayer.PlaybackModes
             return Enum.TryParse(rawType, true, out displayType);
         }
 
-        private int GetTargetLayoutIndex()
+        private int GetActivationLayoutIndex(SeamlessPagePlan currentPlan)
         {
             lock (stateLock)
             {
+                if (nextPageLayoutIndex >= 0
+                    && nextPageLayoutIndex < layouts.Length
+                    && nextPageLayoutIndex != activeLayoutIndex
+                    && layouts[nextPageLayoutIndex].State == SeamlessLayoutState.Ready
+                    && layouts[nextPageLayoutIndex].Matches(currentPlan))
+                {
+                    return nextPageLayoutIndex;
+                }
+
+                if (reservedTransitionLayoutIndex >= 0
+                    && reservedTransitionLayoutIndex < layouts.Length
+                    && reservedTransitionLayoutIndex != activeLayoutIndex
+                    && layouts[reservedTransitionLayoutIndex].State == SeamlessLayoutState.Ready
+                    && layouts[reservedTransitionLayoutIndex].Matches(currentPlan))
+                {
+                    return reservedTransitionLayoutIndex;
+                }
+
                 if (activeLayoutIndex < 0)
                 {
                     return 0;
                 }
 
-                return 1 - activeLayoutIndex;
+                for (int i = 0; i < layouts.Length; i++)
+                {
+                    if (i == activeLayoutIndex || i == reservedTransitionLayoutIndex)
+                    {
+                        continue;
+                    }
+
+                    return i;
+                }
+
+                for (int i = 0; i < layouts.Length; i++)
+                {
+                    if (i == activeLayoutIndex)
+                    {
+                        continue;
+                    }
+
+                    return i;
+                }
+
+                return 0;
             }
+        }
+
+        private int GetStandbyLayoutIndex(int targetLayoutIndex)
+        {
+            lock (stateLock)
+            {
+                for (int i = 0; i < layouts.Length; i++)
+                {
+                    if (i == targetLayoutIndex || i == reservedTransitionLayoutIndex)
+                    {
+                        continue;
+                    }
+
+                    return i;
+                }
+
+                for (int i = 0; i < layouts.Length; i++)
+                {
+                    if (i == targetLayoutIndex)
+                    {
+                        continue;
+                    }
+
+                    return i;
+                }
+
+                return -1;
+            }
+        }
+
+        private int GetReservedLayoutIndex()
+        {
+            lock (stateLock)
+            {
+                if (!initialized || activeLayoutIndex < 0)
+                {
+                    return -1;
+                }
+
+                for (int i = 0; i < layouts.Length; i++)
+                {
+                    if (i == activeLayoutIndex || i == nextPageLayoutIndex)
+                    {
+                        continue;
+                    }
+
+                    return i;
+                }
+
+                return -1;
+            }
+        }
+
+        private bool IsReservedTransitionReady(string transitionStateKey, string playlistName)
+        {
+            return reservedTransitionLayoutIndex >= 0
+                && reservedTransitionLayoutIndex < layouts.Length
+                && layouts[reservedTransitionLayoutIndex].State == SeamlessLayoutState.Ready
+                && string.Equals(reservedTransitionStateKey, transitionStateKey, StringComparison.Ordinal)
+                && string.Equals(reservedTransitionPlaylist, playlistName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void TryWarmUpcomingScheduleTransition(ScheduleDecision decision, DateTime now)
+        {
+            if (decision == null
+                || string.IsNullOrWhiteSpace(decision.NextPlaylistName)
+                || decision.NextSwitchAt <= DateTime.MinValue
+                || string.Equals(decision.NextPlaylistName, decision.PlaylistName, StringComparison.OrdinalIgnoreCase))
+            {
+                ClearRequestedWarmTransitionState();
+                if (!string.Equals(reservedTransitionPlaylist, pendingSchedulePlaylist, StringComparison.OrdinalIgnoreCase))
+                {
+                    ClearReservedTransitionState();
+                }
+                return;
+            }
+
+            if (decision.NextSwitchAt > now.AddMinutes(1))
+            {
+                ClearRequestedWarmTransitionState();
+                if (!string.Equals(reservedTransitionPlaylist, pendingSchedulePlaylist, StringComparison.OrdinalIgnoreCase))
+                {
+                    ClearReservedTransitionState();
+                }
+                return;
+            }
+
+            string warmStateKey = BuildWarmTransitionStateKey(decision.NextScheduleId, decision.NextPlaylistName, decision.NextSwitchAt);
+            WarmupPendingScheduleTransition(
+                warmStateKey,
+                decision.NextPlaylistName,
+                autoSwitchWhenReady: false);
+        }
+
+        private static string BuildPendingScheduleStateKey(string scheduleId, string playlistName)
+        {
+            return $"PENDING|{scheduleId ?? string.Empty}|{playlistName ?? string.Empty}";
+        }
+
+        private static string BuildWarmTransitionStateKey(string scheduleId, string playlistName, DateTime switchAt)
+        {
+            return $"WARM|{scheduleId ?? string.Empty}|{playlistName ?? string.Empty}|{switchAt:O}";
+        }
+
+        private void ClearPendingScheduleState()
+        {
+            pendingSchedulePlaylist = string.Empty;
+            pendingScheduleId = string.Empty;
+        }
+
+        private void ClearRequestedWarmTransitionState()
+        {
+            requestedWarmTransitionStateKey = string.Empty;
+            requestedWarmTransitionPlaylist = string.Empty;
+            requestedWarmTransitionAutoSwitch = false;
+        }
+
+        private void ClearReservedTransitionState()
+        {
+            reservedTransitionLayoutIndex = -1;
+            reservedTransitionStateKey = string.Empty;
+            reservedTransitionPlaylist = string.Empty;
         }
 
         private bool IsVersionCurrent(int version)

@@ -56,49 +56,49 @@ namespace NewHyOnPlayer.Services
                 return ScheduleDecision.Fallback(fallbackPlaylist);
             }
 
-            DateTime localNow = now;
-            var candidates = new List<ScheduleCandidate>();
-            foreach (var schedule in cache.Schedules)
+            string safeFallbackPlaylist = fallbackPlaylist ?? string.Empty;
+            var active = SelectActiveSchedule(cache.Schedules, now, cache.UpdatedAt);
+            var decision = active == null || string.IsNullOrWhiteSpace(active.PlaylistName)
+                ? ScheduleDecision.Fallback(safeFallbackPlaylist)
+                : new ScheduleDecision
+                {
+                    PlaylistName = active.PlaylistName,
+                    ScheduleId = active.ScheduleId,
+                    IsFromSchedule = true
+                };
+
+            var candidateTimes = CollectCandidateTimes(cache.Schedules, now);
+            foreach (var candidate in candidateTimes)
             {
-                if (schedule == null)
+                if (candidate <= now)
                 {
                     continue;
                 }
 
-                if (!IsActive(schedule, localNow))
+                var nextDecision = ResolveDecisionAt(cache.Schedules, safeFallbackPlaylist, cache.UpdatedAt, candidate.AddSeconds(1));
+                if (nextDecision == null || string.IsNullOrWhiteSpace(nextDecision.PlaylistName))
                 {
                     continue;
                 }
 
-                candidates.Add(new ScheduleCandidate
+                if (string.Equals(decision.PlaylistName, nextDecision.PlaylistName, StringComparison.OrdinalIgnoreCase))
                 {
-                    ScheduleId = schedule.Id ?? string.Empty,
-                    PlaylistName = schedule.PageListName ?? string.Empty,
-                    UpdatedAt = ParseDate(cache.UpdatedAt)
-                });
+                    continue;
+                }
+
+                decision.NextPlaylistName = nextDecision.PlaylistName;
+                decision.NextScheduleId = nextDecision.ScheduleId;
+                decision.NextIsFromSchedule = nextDecision.IsFromSchedule;
+                decision.NextSwitchAt = candidate;
+                break;
             }
 
-            if (candidates.Count == 0)
+            if (!decision.IsFromSchedule && string.IsNullOrWhiteSpace(decision.PlaylistName))
             {
-                return ScheduleDecision.Fallback(fallbackPlaylist);
+                decision.PlaylistName = player.PIF_CurrentPlayList ?? string.Empty;
             }
 
-            var selected = candidates
-                .OrderByDescending(c => c.UpdatedAt)
-                .ThenBy(c => c.ScheduleId, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-
-            if (selected == null || string.IsNullOrWhiteSpace(selected.PlaylistName))
-            {
-                return ScheduleDecision.Fallback(player.PIF_CurrentPlayList);
-            }
-
-            return new ScheduleDecision
-            {
-                PlaylistName = selected.PlaylistName,
-                ScheduleId = selected.ScheduleId,
-                IsFromSchedule = true
-            };
+            return decision;
         }
 
         public void InvalidateWeeklyCache()
@@ -305,6 +305,172 @@ namespace NewHyOnPlayer.Services
             return current >= start || current < end;
         }
 
+        private static ScheduleCandidate SelectActiveSchedule(IEnumerable<SpecialSchedulePayload> schedules, DateTime now, string updatedAt)
+        {
+            if (schedules == null)
+            {
+                return null;
+            }
+
+            var candidates = new List<ScheduleCandidate>();
+            foreach (var schedule in schedules)
+            {
+                if (schedule == null || string.IsNullOrWhiteSpace(schedule.PageListName))
+                {
+                    continue;
+                }
+
+                if (!IsActive(schedule, now))
+                {
+                    continue;
+                }
+
+                candidates.Add(new ScheduleCandidate
+                {
+                    ScheduleId = schedule.Id ?? string.Empty,
+                    PlaylistName = schedule.PageListName ?? string.Empty,
+                    UpdatedAt = ParseDate(updatedAt)
+                });
+            }
+
+            return candidates
+                .OrderByDescending(c => c.UpdatedAt)
+                .ThenBy(c => c.ScheduleId, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+        }
+
+        private static ScheduleDecision ResolveDecisionAt(IEnumerable<SpecialSchedulePayload> schedules, string fallbackPlaylist, string updatedAt, DateTime time)
+        {
+            var active = SelectActiveSchedule(schedules, time, updatedAt);
+            if (active == null || string.IsNullOrWhiteSpace(active.PlaylistName))
+            {
+                return ScheduleDecision.Fallback(fallbackPlaylist);
+            }
+
+            return new ScheduleDecision
+            {
+                PlaylistName = active.PlaylistName,
+                ScheduleId = active.ScheduleId,
+                IsFromSchedule = true
+            };
+        }
+
+        private static List<DateTime> CollectCandidateTimes(IEnumerable<SpecialSchedulePayload> schedules, DateTime now)
+        {
+            var candidates = new List<DateTime>();
+            foreach (var schedule in schedules ?? Enumerable.Empty<SpecialSchedulePayload>())
+            {
+                DateTime nextStart = FindNextStartTime(schedule, now);
+                if (nextStart > DateTime.MinValue)
+                {
+                    candidates.Add(nextStart);
+                }
+
+                DateTime activeEnd = FindActiveEndTime(schedule, now);
+                if (activeEnd > DateTime.MinValue)
+                {
+                    candidates.Add(activeEnd);
+                }
+            }
+
+            return candidates
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+        }
+
+        private static DateTime FindNextStartTime(SpecialSchedulePayload schedule, DateTime now)
+        {
+            if (schedule == null || string.IsNullOrWhiteSpace(schedule.PageListName))
+            {
+                return DateTime.MinValue;
+            }
+
+            DateTime baseDay = now.Date;
+            for (int offset = 0; offset <= 7; offset++)
+            {
+                DateTime candidateDay = baseDay.AddDays(offset);
+                if (!IsPeriodValid(schedule, candidateDay))
+                {
+                    continue;
+                }
+
+                if (!IsDayEnabled(schedule, candidateDay.DayOfWeek))
+                {
+                    continue;
+                }
+
+                DateTime start = candidateDay.AddHours(schedule.DisplayStartH).AddMinutes(schedule.DisplayStartM);
+                if (start > now)
+                {
+                    return start;
+                }
+            }
+
+            return DateTime.MinValue;
+        }
+
+        private static DateTime FindActiveEndTime(SpecialSchedulePayload schedule, DateTime now)
+        {
+            if (!IsActive(schedule, now))
+            {
+                return DateTime.MinValue;
+            }
+
+            if (schedule.DisplayStartH == schedule.DisplayEndH
+                && schedule.DisplayStartM == schedule.DisplayEndM)
+            {
+                return DateTime.MinValue;
+            }
+
+            bool crossesMidnight = CrossesMidnight(schedule);
+            bool usePreviousDay = false;
+            if (crossesMidnight)
+            {
+                int endMinutes = (schedule.DisplayEndH * 60) + schedule.DisplayEndM;
+                int currentMinutes = (now.Hour * 60) + now.Minute;
+                if (currentMinutes < endMinutes)
+                {
+                    usePreviousDay = true;
+                }
+            }
+
+            DateTime end = usePreviousDay ? now.Date.AddDays(-1) : now.Date;
+            end = end.AddHours(schedule.DisplayEndH).AddMinutes(schedule.DisplayEndM);
+            if (crossesMidnight)
+            {
+                end = end.AddDays(1);
+            }
+
+            return end;
+        }
+
+        private static bool IsDayEnabled(SpecialSchedulePayload schedule, DayOfWeek dayOfWeek)
+        {
+            switch (dayOfWeek)
+            {
+                case DayOfWeek.Sunday: return schedule.DayOfWeek1;
+                case DayOfWeek.Monday: return schedule.DayOfWeek2;
+                case DayOfWeek.Tuesday: return schedule.DayOfWeek3;
+                case DayOfWeek.Wednesday: return schedule.DayOfWeek4;
+                case DayOfWeek.Thursday: return schedule.DayOfWeek5;
+                case DayOfWeek.Friday: return schedule.DayOfWeek6;
+                case DayOfWeek.Saturday: return schedule.DayOfWeek7;
+                default: return false;
+            }
+        }
+
+        private static bool CrossesMidnight(SpecialSchedulePayload schedule)
+        {
+            if (schedule == null)
+            {
+                return false;
+            }
+
+            return schedule.DisplayEndH < schedule.DisplayStartH
+                || (schedule.DisplayEndH == schedule.DisplayStartH && schedule.DisplayEndM < schedule.DisplayStartM);
+        }
+
         private static DateTime ParseDate(string value)
         {
             if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var dt))
@@ -327,6 +493,10 @@ namespace NewHyOnPlayer.Services
         public string PlaylistName { get; set; } = string.Empty;
         public string ScheduleId { get; set; } = string.Empty;
         public bool IsFromSchedule { get; set; }
+        public string NextPlaylistName { get; set; } = string.Empty;
+        public string NextScheduleId { get; set; } = string.Empty;
+        public bool NextIsFromSchedule { get; set; }
+        public DateTime NextSwitchAt { get; set; } = DateTime.MinValue;
 
         public static ScheduleDecision DefaultEmpty()
         {
