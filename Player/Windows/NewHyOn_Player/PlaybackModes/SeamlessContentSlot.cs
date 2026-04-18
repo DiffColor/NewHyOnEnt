@@ -50,7 +50,7 @@ namespace NewHyOnPlayer.PlaybackModes
             get { return currentPlan != null && currentPlan.HasPlayableItems; }
         }
 
-        public async Task PrepareAsync(SeamlessSlotPlan plan)
+        public async Task PrepareAsync(SeamlessSlotPlan plan, bool preserveAspectRatio)
         {
             currentPlan = plan ?? new SeamlessSlotPlan();
             currentItemIndex = 0;
@@ -59,7 +59,7 @@ namespace NewHyOnPlayer.PlaybackModes
             isActive = false;
             playlistPrepared = false;
             appliedLoopState = null;
-            ApplyLayoutPlan();
+            ApplyLayoutPlan(preserveAspectRatio);
 
             if (!currentPlan.HasPlayableItems)
             {
@@ -345,7 +345,7 @@ namespace NewHyOnPlayer.PlaybackModes
             return current != null && current.IsVideo;
         }
 
-        private void ApplyLayoutPlan()
+        private void ApplyLayoutPlan(bool preserveAspectRatio)
         {
             RunOnUiThread(() =>
             {
@@ -354,7 +354,7 @@ namespace NewHyOnPlayer.PlaybackModes
                 Canvas.SetZIndex(surface, currentPlan.ZIndex);
                 surface.Width = currentPlan.Width;
                 surface.Height = currentPlan.Height;
-                surface.Configure(currentPlan.IsMuted);
+                surface.Configure(currentPlan.IsMuted, preserveAspectRatio);
                 surface.HideSurface();
             });
         }

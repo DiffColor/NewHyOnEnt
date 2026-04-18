@@ -58,6 +58,12 @@ namespace NewHyOnPlayer.PlaybackModes
             player.Muted = muted;
         }
 
+        public void Configure(bool muted, bool preserveAspectRatio)
+        {
+            Configure(muted);
+            player.Stretch = preserveAspectRatio ? Stretch.Uniform : Stretch.Fill;
+        }
+
         public void SetLooping(bool shouldLoop)
         {
             player.Loop = shouldLoop;

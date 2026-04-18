@@ -73,7 +73,7 @@ namespace NewHyOnPlayer.PlaybackModes
             }
         }
 
-        public async Task PrepareAsync(SeamlessPagePlan plan)
+        public async Task PrepareAsync(SeamlessPagePlan plan, double viewportWidth, double viewportHeight, bool preserveAspectRatio)
         {
             StopPlaybackTimer();
             CurrentPlan = plan;
@@ -87,7 +87,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                Host.SetCanvasSize(plan.CanvasWidth, plan.CanvasHeight);
+                Host.ConfigurePresentation(plan.CanvasWidth, plan.CanvasHeight, viewportWidth, viewportHeight, preserveAspectRatio);
                 Host.Visibility = Visibility.Hidden;
                 Host.Opacity = 0.0;
             });
@@ -97,7 +97,7 @@ namespace NewHyOnPlayer.PlaybackModes
             for (int i = 0; i < slots.Count; i++)
             {
                 SeamlessSlotPlan slotPlan = i < plan.Slots.Count ? plan.Slots[i] : new SeamlessSlotPlan();
-                tasks.Add(slots[i].PrepareAsync(slotPlan));
+                tasks.Add(slots[i].PrepareAsync(slotPlan, preserveAspectRatio));
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -185,6 +185,7 @@ namespace NewHyOnPlayer.PlaybackModes
                 Host.Opacity = 0.0;
                 Host.Visibility = Visibility.Hidden;
                 Host.SetCanvasSize(0, 0);
+                Host.ResetPresentation();
             });
             Volatile.Write(ref hostPresentationVisible, 0);
 

@@ -957,6 +957,46 @@ namespace NewHyOnPlayer
                 }));
         }
 
+        internal Size GetSeamlessViewportSize()
+        {
+            double width = 0;
+            double height = 0;
+
+            Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                width = MainScrollViewer?.ActualWidth ?? 0;
+                height = MainScrollViewer?.ActualHeight ?? 0;
+
+                if (width <= 0)
+                {
+                    width = DesignerCanvas?.ActualWidth > 0 ? DesignerCanvas.ActualWidth : DesignerCanvas?.Width ?? 0;
+                }
+
+                if (height <= 0)
+                {
+                    height = DesignerCanvas?.ActualHeight > 0 ? DesignerCanvas.ActualHeight : DesignerCanvas?.Height ?? 0;
+                }
+            }));
+
+            if (width <= 0)
+            {
+                width = g_FixedBaseWidth > 0 ? g_FixedBaseWidth : 1920;
+            }
+
+            if (height <= 0)
+            {
+                height = g_FixedBaseHeight > 0 ? g_FixedBaseHeight : 1080;
+            }
+
+            return new Size(width, height);
+        }
+
+        internal bool IsPreserveAspectRatioEnabled()
+        {
+            string value = g_TTPlayerInfoManager?.g_PlayerInfo?.TTInfo_Data1 ?? string.Empty;
+            return value.Equals("YES", StringComparison.OrdinalIgnoreCase);
+        }
+
         internal void SetInitialLoadingVisible(bool visible, string message = null)
         {
             Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() =>
