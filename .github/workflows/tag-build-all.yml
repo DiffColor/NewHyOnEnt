@@ -54,14 +54,16 @@ jobs:
         shell: pwsh
         run: |
           $src = "Manager/Dependencies"
-          $destinations = @(
-            "Manager/dll",
+          $referenceDestination = "Manager/dll"
+          $packageDestinations = @(
             "Manager/NewHyOn_Manager/bin/Release",
             "Manager/NewHyOn_Manager/bin/x64/Release"
           )
-          foreach ($dst in $destinations) {
+          New-Item -ItemType Directory -Force -Path $referenceDestination | Out-Null
+          Copy-Item -Path "$src/*.dll" -Destination $referenceDestination -Force
+          foreach ($dst in $packageDestinations) {
             New-Item -ItemType Directory -Force -Path $dst | Out-Null
-            Copy-Item -Path "$src/*.dll" -Destination $dst -Force
+            Copy-Item -Path "$src/*" -Destination $dst -Force
           }
 
       - name: Build Manager (Release x64)
@@ -162,7 +164,7 @@ jobs:
           )
           foreach ($dst in $destinations) {
             New-Item -ItemType Directory -Force -Path $dst | Out-Null
-            Copy-Item -Path "$src/*.dll" -Destination $dst -Force
+            Copy-Item -Path "$src/*" -Destination $dst -Force
           }
 
       - name: Build Player Windows (Release x64)
