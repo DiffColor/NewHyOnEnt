@@ -273,8 +273,7 @@ namespace NewHyOnPlayer.Services
         private void HandleOffAirAction()
         {
             owner?.Dispatcher?.Invoke(() => {
-                owner.StopTickTimer();
-                owner.g_PageIndex = 0;
+                owner.ResetPlaybackCursor();
             });
 
             var settings = owner?.g_LocalSettingsManager?.Settings;
@@ -315,7 +314,7 @@ namespace NewHyOnPlayer.Services
                     {
                         try
                         {
-                            owner.StopAllTimer();
+                            owner.StopPlayback();
                         }
                         catch
                         {
@@ -332,7 +331,7 @@ namespace NewHyOnPlayer.Services
             {
                 try
                 {
-                    owner.HideAllContentsPlayWindow();
+                    owner.HidePlayback();
                     owner.Opacity = 0;
                 }
                 catch
@@ -354,7 +353,7 @@ namespace NewHyOnPlayer.Services
             {
                 try
                 {
-                    owner.HideAllContentsPlayWindow();
+                    owner.HidePlayback();
                     owner.Hide();
                 }
                 catch

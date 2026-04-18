@@ -1,5 +1,4 @@
-﻿using MediaInfo.DotNetWrapper;
-using MediaInfo.DotNetWrapper.Enumerations;
+﻿using MediaInfo.DotNetWrapper.Enumerations;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -16,8 +15,6 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Media.Media3D;
-using System.Windows.Threading;
 
 namespace TurtleTools
 {
@@ -423,16 +420,6 @@ namespace TurtleTools
             }
 
             return TimeSpan.Zero;
-        }
-
-        public static BitmapSource GetVideoThumb(string fpath, float time = 1)
-        {
-            var ffMpeg = new NReco.VideoConverter.FFMpegConverter();
-
-            Stream thumbStream = new MemoryStream();
-            ffMpeg.GetVideoThumbnail(fpath, thumbStream, time);
-
-            return GetBitmapSourceFromHBitmap((Bitmap)System.Drawing.Image.FromStream(thumbStream));
         }
 
         /*

@@ -14,7 +14,6 @@ namespace NewHyOnPlayer.PlaybackModes
         private bool muted = true;
 
         public event Action MediaLoaded;
-
         public SeamlessMpvSurface()
         {
             Background = Brushes.Black;
@@ -50,6 +49,11 @@ namespace NewHyOnPlayer.PlaybackModes
         public int PlaylistIndex
         {
             get { return player.PlaylistIndex; }
+        }
+
+        public TimeSpan Position
+        {
+            get { return player.Position; }
         }
 
         public void Configure(bool muted)
@@ -122,7 +126,7 @@ namespace NewHyOnPlayer.PlaybackModes
             {
                 player.ImageDuration = Math.Max(1, item.DurationSeconds).ToString(CultureInfo.InvariantCulture);
             }
-            player.Load(item.FilePath, true);
+            player.Load(item.FilePath, false);
             if (!autoPlay)
             {
                 player.Pause();
@@ -154,6 +158,11 @@ namespace NewHyOnPlayer.PlaybackModes
         public bool SeekToStart()
         {
             return player.TrySeek(TimeSpan.Zero);
+        }
+
+        public bool TrySeekToPosition(TimeSpan position)
+        {
+            return player.TrySeek(position);
         }
 
         public void Stop()

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
@@ -192,42 +192,14 @@ namespace NewHyOnPlayer.PlaybackModes
             State = SeamlessLayoutState.Idle;
         }
 
-        public bool TryApplySyncIndex(int index)
-        {
-            bool applied = false;
-            long resolvedOffsetMilliseconds = -1;
 
-            for (int i = 0; i < slots.Count; i++)
-            {
-                if (slots[i].TryApplySyncIndex(index))
-                {
-                    applied = true;
-                    if (resolvedOffsetMilliseconds < 0)
-                    {
-                        long slotOffset;
-                        if (slots[i].TryResolveStartOffsetMilliseconds(index, out slotOffset))
-                        {
-                            resolvedOffsetMilliseconds = slotOffset;
-                        }
-                    }
-                }
-            }
-
-            if (applied && resolvedOffsetMilliseconds >= 0)
-            {
-                StartPlaybackFromOffset(resolvedOffsetMilliseconds);
-            }
-
-            return applied;
-        }
-
-        public SeamlessSyncStatus GetPrimarySyncStatus()
+        public SeamlessPlaybackStatus GetPrimaryPlaybackStatus()
         {
             for (int i = 0; i < slots.Count; i++)
             {
                 if (slots[i].HasPlayableItems && slots[i].IsCurrentContentVideo())
                 {
-                    return slots[i].GetSyncStatus();
+                    return slots[i].GetPlaybackStatus();
                 }
             }
 
@@ -235,7 +207,7 @@ namespace NewHyOnPlayer.PlaybackModes
             {
                 if (slots[i].HasPlayableItems)
                 {
-                    return slots[i].GetSyncStatus();
+                    return slots[i].GetPlaybackStatus();
                 }
             }
 
@@ -293,7 +265,7 @@ namespace NewHyOnPlayer.PlaybackModes
                     slots[i].ApplyPlaybackPosition(displayElapsedMilliseconds);
                 }
 
-                SeamlessPlaybackPulse pulse = BuildPlaybackPulse();
+                SeamlessPlaybackPulse pulse = BuildPlaybackPulse(displayElapsedMilliseconds);
                 if (pulse != null)
                 {
                     PlaybackPulse?.Invoke(this, pulse);
@@ -348,10 +320,10 @@ namespace NewHyOnPlayer.PlaybackModes
             lastPulsePrimaryIndex = -1;
         }
 
-        private SeamlessPlaybackPulse BuildPlaybackPulse()
+        private SeamlessPlaybackPulse BuildPlaybackPulse(long layoutElapsedMilliseconds)
         {
-            SeamlessSyncStatus status = GetPrimarySyncStatus();
-            int elapsedSeconds = (int)(CurrentElapsedMilliseconds / 1000);
+            SeamlessPlaybackStatus status = GetPrimaryPlaybackStatus();
+            int elapsedSeconds = (int)(Math.Max(0, layoutElapsedMilliseconds) / 1000);
 
             bool isSecondTick = lastPulseSecond >= 0 && elapsedSeconds != lastPulseSecond;
             bool isContentBoundary = false;
@@ -375,7 +347,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
             return new SeamlessPlaybackPulse
             {
-                Status = status,
+                PrimaryContent = status,
                 IsSecondTick = isSecondTick,
                 IsContentBoundary = isContentBoundary
             };

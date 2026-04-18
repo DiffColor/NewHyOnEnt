@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Threading;
 using System.Windows;
 using System.Windows.Input;
@@ -25,18 +24,7 @@ namespace NewHyOnPlayer
     /// </summary>
     public partial class MainWindow : Window
     {
-
-        public int DisplayLimit = 10;
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // 컨텐츠 재생 서브윈도우
-        public List<ContentsPlayWindow> g_ContentsPlayWindowList = new List<ContentsPlayWindow>();  // 컨텐츠를 재생하는 윈도우
-        //
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
         public string g_CurrentPageName = string.Empty;
-
-        MultimediaTimer.Timer g_TickTimer = new MultimediaTimer.Timer();
 
         //public Dictionary<string, PeriodData> sPeriodDics = new Dictionary<string, PeriodData>();
 
@@ -57,9 +45,6 @@ namespace NewHyOnPlayer
         public long g_TimeInterval = 1;
 
         public string g_PlayerName = string.Empty;
-        string g_CurrentPageListName = string.Empty;
-
-
         public static MainWindow Instance { get; set; } = null;
 
         //const int WMGraphNotify = 0x0400 + 13;
@@ -90,24 +75,9 @@ namespace NewHyOnPlayer
         private KeyboardHook keyboardHook;
         private ScheduleEvaluator scheduleEvaluator;
         private OnAirService onAirService;
-        private SeamlessPlaybackContainer playbackContainer;
-        private DateTime lastScheduleEval = DateTime.MinValue;
-        private string pendingSchedulePlaylist = string.Empty;
-        private string pendingScheduleId = string.Empty;
-        private string lastScheduleEvalStateKey = string.Empty;
-        private string lastMissingScheduleLogged = string.Empty;
-        private string pendingPlaylistReload = string.Empty;
-        private string pendingPlaylistReloadReason = string.Empty;
-        private string lastPlaylistReloadStateKey = string.Empty;
-        private string lastLocalFallbackPlaylist = string.Empty;
-        private bool isScheduleSwitching;
+        private IPlaybackContainer playbackContainer;
+        private SeamlessSyncCoordinator playbackSyncCoordinator;
         private PortInfoManager portInfoManager;
-        private UdpSyncService syncService;
-        private readonly object syncStateLock = new object();
-        private int? pendingSyncIndex;
-        private int lastPreparedFromIndex = -1;
-        private int lastCommitFromIndex = -1;
-        private bool hasReceivedSyncMessage;
         private int commStarted;
         private bool isShortcutCursorVisible;
         private bool isShortcutTaskbarVisible;
@@ -476,7 +446,11 @@ namespace NewHyOnPlayer
                 onAirService = null;
             }
 
-            StopSyncService();
+            playbackSyncCoordinator?.Dispose();
+            playbackSyncCoordinator = null;
+
+            playbackContainer?.Dispose();
+            playbackContainer = null;
 
             PreExiting();
             WindowTools.AllowSleep();   // 잠들어도 된다.
@@ -570,8 +544,6 @@ namespace NewHyOnPlayer
             onAirService.Start();
             portInfoManager = new PortInfoManager();
 
-            StartSyncService();
-
             ChangePlayerStyle();
             InitializeShortcutState();
 
@@ -580,10 +552,11 @@ namespace NewHyOnPlayer
             pixelDensity = WindowTools.GetPixelDensity(this);
 
             longSide = screenW > screenH ? screenW : screenH;
-                                   
+
             g_PlayerName = g_PlayerInfoManager.g_PlayerInfo.PIF_PlayerName;
 
-            CreateContentsPlayWindowForReady();
+            EnsurePlaybackContainer();
+            playbackSyncCoordinator?.Start();
             LoadContentPeriodCache();
             SetInitialLoadingVisible(true);
             playbackContainer?.StartInitialPlayback(g_PlayerInfoManager.g_PlayerInfo.PIF_DefaultPlayList);
@@ -700,224 +673,33 @@ namespace NewHyOnPlayer
             }
         }
 
-        private void StartSyncService()
-        {
-            if (!IsSyncPlaybackActive || syncService != null)
-            {
-                return;
-            }
-
-            hasReceivedSyncMessage = false;
-            pendingSyncIndex = null;
-            lastPreparedFromIndex = -1;
-            lastCommitFromIndex = -1;
-
-            int port = NetworkTools.SYNC_PORT;
-            if (portInfoManager != null && portInfoManager.g_DataClassList.Count > 0)
-            {
-                port = portInfoManager.g_DataClassList[0].AIF_SYNC;
-            }
-            if (port <= 0)
-            {
-                port = NetworkTools.SYNC_PORT;
-            }
-
-            syncService = new UdpSyncService();
-            syncService.MessageReceived += OnSyncMessageReceived;
-            syncService.Start(port);
-        }
-
-        private void StopSyncService()
-        {
-            if (syncService == null)
-            {
-                return;
-            }
-
-            syncService.MessageReceived -= OnSyncMessageReceived;
-            syncService.Stop();
-            syncService.Dispose();
-            syncService = null;
-        }
-
-        private void OnSyncMessageReceived(UdpSyncMessage message)
-        {
-            if (!IsSyncPlaybackActive || message == null)
-            {
-                return;
-            }
-
-            hasReceivedSyncMessage = true;
-
-            if (message.Type == UdpSyncMessageType.Prepare)
-            {
-                lock (syncStateLock)
-                {
-                    pendingSyncIndex = message.Index;
-                }
-                return;
-            }
-
-            if (message.Type == UdpSyncMessageType.Commit)
-            {
-                bool shouldApply = false;
-                lock (syncStateLock)
-                {
-                    if (pendingSyncIndex.HasValue && pendingSyncIndex.Value == message.Index)
-                    {
-                        pendingSyncIndex = null;
-                        shouldApply = true;
-                    }
-                }
-
-                if (shouldApply)
-                {
-                    Dispatcher.BeginInvoke(DispatcherPriority.Normal,
-                        new Action(() => ApplySyncIndex(message.Index)));
-                }
-            }
-        }
-
-        private void ApplySyncIndex(int index)
+        private void EnsurePlaybackContainer()
         {
             if (playbackContainer != null)
             {
-                playbackContainer.TryApplySyncIndex(index);
                 return;
             }
 
-            foreach (ContentsPlayWindow item in g_ContentsPlayWindowList)
+            bool isSyncPlaybackEnabled = g_LocalSettingsManager?.Settings?.IsSyncEnabled ?? false;
+            if (isSyncPlaybackEnabled)
             {
-                if (item.IsVisible)
-                {
-                    item.TryApplySyncIndex(index);
-                }
-            }
-        }
+                var syncContainer = new SeamlessSyncPlaybackContainer(this, DesignerCanvas);
+                syncContainer.Initialize();
+                playbackContainer = syncContainer;
 
-        private void HandleSyncLeaderTick(SeamlessSyncStatus status)
-        {
-            if (!IsSyncLeader || syncService == null || status == null)
-            {
+                playbackSyncCoordinator?.Dispose();
+                playbackSyncCoordinator = new SeamlessSyncCoordinator(this, portInfoManager);
+                playbackSyncCoordinator.AttachPlaybackContainer(syncContainer);
                 return;
             }
 
-            int currentIndex = status.CurrentIndex;
-            int nextIndex = status.NextIndex;
-            if (currentIndex < 0 || nextIndex < 0)
-            {
-                return;
-            }
+            playbackSyncCoordinator?.Dispose();
+            playbackSyncCoordinator = null;
 
-            long remaining = status.DurationSeconds - status.ElapsedSeconds;
-            if (remaining <= 1)
-            {
-                if (lastPreparedFromIndex != currentIndex)
-                {
-                    syncService.SendPrepare(BuildSyncTargets(), nextIndex);
-                    lastPreparedFromIndex = currentIndex;
-                }
-            }
-
-            if (status.ElapsedSeconds >= status.DurationSeconds)
-            {
-                if (lastCommitFromIndex != currentIndex)
-                {
-                    syncService.SendCommit(BuildSyncTargets(), nextIndex);
-                    lastCommitFromIndex = currentIndex;
-                }
-            }
+            playbackContainer = new SeamlessPlaybackContainer(this, DesignerCanvas);
+            playbackContainer.Initialize();
         }
 
-        private List<IPEndPoint> BuildSyncTargets()
-        {
-            List<IPEndPoint> targets = new List<IPEndPoint>();
-            if (!IsSyncPlaybackActive)
-            {
-                return targets;
-            }
-
-            int port = NetworkTools.SYNC_PORT;
-            if (portInfoManager != null && portInfoManager.g_DataClassList.Count > 0)
-            {
-                port = portInfoManager.g_DataClassList[0].AIF_SYNC;
-            }
-            if (port <= 0)
-            {
-                port = NetworkTools.SYNC_PORT;
-            }
-
-            HashSet<string> ipSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var configuredIps = g_LocalSettingsManager?.Settings?.SyncClientIps;
-            if (configuredIps != null)
-            {
-                foreach (string ip in configuredIps)
-                {
-                    if (!string.IsNullOrWhiteSpace(ip))
-                    {
-                        ipSet.Add(ip.Trim());
-                    }
-                }
-            }
-
-            string selfIp = g_PlayerInfoManager?.g_PlayerInfo?.PIF_IPAddress;
-            if (!string.IsNullOrWhiteSpace(selfIp))
-            {
-                ipSet.Add(selfIp.Trim());
-            }
-
-            try
-            {
-                IPAddress autoIp = NetworkTools.GetAutoIP();
-                if (autoIp != null)
-                {
-                    ipSet.Add(autoIp.ToString());
-                }
-            }
-            catch (Exception)
-            {
-            }
-
-            ipSet.Add(IPAddress.Loopback.ToString());
-
-            foreach (string ip in ipSet)
-            {
-                if (IPAddress.TryParse(ip, out IPAddress parsed))
-                {
-                    targets.Add(new IPEndPoint(parsed, port));
-                }
-            }
-
-            return targets;
-        }
-
-        public void CreateContentsPlayWindowForReady()
-        {
-            if (playbackContainer == null)
-            {
-                playbackContainer = new SeamlessPlaybackContainer(this, DesignerCanvas);
-                playbackContainer.Initialize();
-            }
-
-            if (g_ContentsPlayWindowList.Count > 0)
-            {
-                foreach (ContentsPlayWindow item in g_ContentsPlayWindowList)
-                {
-                    try
-                    {
-                        item.Close();
-                    }
-                    catch
-                    {
-                    }
-                }
-            }
-
-            g_ContentsPlayWindowList.Clear();
-        }
-
-        double testMarginLeft = 0;
-        double testMarginTop = 0;
         public void ChangePlayerStyle()
         {
             this.WindowStyle = WindowStyle.None;
@@ -1014,114 +796,41 @@ namespace NewHyOnPlayer
             }));
         }
 
-        public void PlayPrevContents()
-        {
-            this.Dispatcher.Invoke(DispatcherPriority.Normal,
-                new Action(() =>
-                {
-                    if (playbackContainer != null)
-                    {
-                        playbackContainer.PlayPreviousPage();
-                        return;
-                    }
-
-                    Logger.WriteLog("PlayPrevContents Called.", Logger.GetLogFileName());
-
-                    if (g_PageIndex > 1)
-                    {
-                        g_PageIndex = g_PageIndex - 2;
-                    }
-                    else if (g_PageIndex == 1)
-                    {
-                        g_PageIndex = g_PageInfoManager.g_PageInfoClassList.Count - 1;
-                    }
-                    else
-                    {
-                        g_PageIndex = g_PageInfoManager.g_PageInfoClassList.Count - 2;
-                    }
-                    PopPage();
-                })
-            );
-        }
-
-        public void PlayNextContents()
-        {
-            this.Dispatcher.Invoke(DispatcherPriority.Normal,
-                new Action(() =>
-                {
-                    if (playbackContainer != null)
-                    {
-                        playbackContainer.PlayNextPage();
-                        return;
-                    }
-
-                    StopTickTimer();
-                    Logger.WriteLog("PlayNextContents Called.", Logger.GetLogFileName());
-                    PopPage();
-                })
-            );
-        }
-
-
-        public void PlayFirstPage()
-        {
-            this.Dispatcher.Invoke(DispatcherPriority.Normal,
-               new Action(() =>
-               {
-                   if (playbackContainer != null)
-                   {
-                       playbackContainer.PlayFirstPage();
-                       return;
-                   }
-
-                   g_PageIndex = 0;
-                   StopTickTimer();
-                   Logger.WriteLog("PlayNextContents Called.", Logger.GetLogFileName());
-                   PopPage();
-               })
-           );
-        }
-
         public void DoApplicationShutdown()
         {
             Application.Current.Shutdown();
         }
 
-        public void StopAllTimer()
+        public void StopPlayback()
         {
             try
             {
                 playbackContainer?.StopAll();
-
-                foreach (ContentsPlayWindow item in g_ContentsPlayWindowList)
-                {
-                    item.StopContentsDisplay();
-                    item.StopVisibleContents();
-                    item.Hide();
-                }
             }
-            catch (Exception ex)
+            catch
             {
-
-            }
-
-            if (g_TickTimer != null)
-            {
-                g_TickTimer.Dispose();
             }
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
+        public void HidePlayback()
+        {
+            playbackContainer?.HideAll();
+        }
+
         bool g_IsUpdating = false;
         internal bool IsUpdating => g_IsUpdating;
-        internal int CurrentPageElapsedSeconds => playbackContainer != null ? playbackContainer.CurrentPageElapsedSeconds : g_TickCount;
-        internal int CurrentPageDurationSeconds => playbackContainer != null ? playbackContainer.CurrentPageDurationSeconds : (int)g_TimeInterval;
-        internal bool IsOnlySeamlessPage => playbackContainer != null ? playbackContainer.IsOnlySinglePage : g_PageInfoManager?.g_PageInfoClassList != null && g_PageInfoManager.g_PageInfoClassList.Count <= 1;
-        internal string CurrentPageListName => playbackContainer != null ? playbackContainer.CurrentPageListName : g_CurrentPageListName;
-        internal string CurrentPageName => playbackContainer != null ? playbackContainer.CurrentPageName : g_CurrentPageName;
-        internal string NextPageName => playbackContainer != null ? playbackContainer.NextPageName : GetNextPageName();
+        internal int CurrentPageElapsedSeconds => playbackContainer?.CurrentPageElapsedSeconds ?? 0;
+        internal int CurrentPageDurationSeconds => playbackContainer?.CurrentPageDurationSeconds ?? 1;
+        internal bool IsOnlySeamlessPage => playbackContainer?.IsOnlySinglePage ?? true;
+        internal string CurrentPageListName => playbackContainer?.CurrentPageListName ?? string.Empty;
+        internal string CurrentPageName => playbackContainer?.CurrentPageName ?? g_CurrentPageName;
+        internal string NextPageName => playbackContainer?.NextPageName ?? string.Empty;
+        internal bool IsPlaying => playbackContainer?.IsPresentationActive() ?? false;
+        internal bool IsSyncPlaybackActive => playbackSyncCoordinator?.IsSyncPlaybackActive ?? (g_LocalSettingsManager?.Settings?.IsSyncEnabled ?? false);
+        internal bool IsSyncLeader => playbackSyncCoordinator?.IsSyncLeader ?? (IsSyncPlaybackActive && (g_LocalSettingsManager?.Settings?.IsLeading ?? false));
         internal RemoteCommandService CommandService => commandService;
         internal ScheduleEvaluator ScheduleEvaluatorService => scheduleEvaluator;
         internal OnAirService OnAirServiceInstance => onAirService;
@@ -1143,53 +852,7 @@ namespace NewHyOnPlayer
 
         public void UpdateCurrentPageListName(string pageListName)
         {
-            if (playbackContainer != null)
-            {
-                playbackContainer.UpdateCurrentPageListName(pageListName);
-                return;
-            }
-
-            g_CurrentPageListName = pageListName;
-
-            CheckOnlyOnePage();
-
-            g_PageIndex = 0;
-        }
-
-        public void CheckOnlyOnePage()
-        {
-            if (playbackContainer != null)
-            {
-                return;
-            }
-
-            this.g_PageInfoManager.LoadData(g_CurrentPageListName);
-
-
-            if (this.g_PageInfoManager.g_PageInfoClassList.Count == 1)
-            {
-                this.g_LocalSettingsManager.Settings.IsOnlyOnePage = true;
-            }
-            else
-            {
-                this.g_LocalSettingsManager.Settings.IsOnlyOnePage = false;
-            }
-        }
-
-        private string GetNextPageName()
-        {
-            if (g_PageInfoManager == null || g_PageInfoManager.g_PageInfoClassList == null || g_PageInfoManager.g_PageInfoClassList.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            int nextIndex = g_PageIndex;
-            if (nextIndex >= g_PageInfoManager.g_PageInfoClassList.Count)
-            {
-                nextIndex = 0;
-            }
-
-            return g_PageInfoManager.g_PageInfoClassList[nextIndex].PIC_PageName;
+            playbackContainer?.UpdateCurrentPageListName(pageListName);
         }
 
         public void PopPage()
@@ -1197,42 +860,9 @@ namespace NewHyOnPlayer
             playbackContainer?.PlayNextPage();
         }
 
-        internal void HandleSeamlessSyncLeaderTick(SeamlessSyncStatus status)
+        public void PlayFirstPage()
         {
-            HandleSyncLeaderTick(status);
-        }
-
-        public void ReOrderingContentsPlayWindowZOrder()
-        {
-            if (playbackContainer != null)
-            {
-                return;
-            }
-
-            List<WindowZIdxForTTClass> orderedList = (from item in g_WindowZIdxForTTClassList
-                                                         orderby item.AI_Zorder
-                                                         select item as WindowZIdxForTTClass).ToList();
-
-            this.Dispatcher.Invoke(DispatcherPriority.Normal, (Action)(() =>
-            {
-                foreach (WindowZIdxForTTClass item in orderedList)
-                {
-                    if (item.AI_WindowType != WindowType.contentsPlayWindow)
-                    {
-                        continue;
-                    }
-
-                    if (item.AI_WindowIndex < 0 || item.AI_WindowIndex >= g_ContentsPlayWindowList.Count)
-                    {
-                        continue;
-                    }
-
-                    if (g_ContentsPlayWindowList[item.AI_WindowIndex].IsVisible)
-                    {
-                        g_ContentsPlayWindowList[item.AI_WindowIndex].Activate();
-                    }
-                }
-            }));
+            playbackContainer?.PlayFirstPage();
         }
 
         public void AdjustCanvasSize()
@@ -1247,51 +877,6 @@ namespace NewHyOnPlayer
             DesignerCanvas.RenderTransform = scale;
         }
 
-        void InitTickTimer()
-        {
-            g_TickTimer.Mode = MultimediaTimer.TimerMode.Periodic;
-            g_TickTimer.Period = 1000;  // 1 second
-            g_TickTimer.Resolution = 1;
-            g_TickTimer.SynchronizingObject = new DispatcherWinFormsCompatAdapter(this.Dispatcher);
-            g_TickTimer.Tick += new System.EventHandler(TickTask);
-        }
-        
-        public void RunTickTimer()
-        {
-            if (playbackContainer != null)
-            {
-                g_IsTickTimerStopped = true;
-                return;
-            }
-
-            g_TickTimer.Start();
-            g_IsTickTimerStopped = false;
-        }
-
-        public void StopTickTimer()
-        {
-            g_TickTimer.Stop();
-            g_TickCount = 0;
-            g_IsTickTimerStopped = true;
-        }
-
-        int g_TickCount = 0;
-        bool g_IsTickTimerStopped = true;
-        internal bool IsPlaying => playbackContainer != null ? playbackContainer.IsPresentationActive() : g_IsTickTimerStopped == false;
-        internal bool IsSyncPlaybackActive => g_LocalSettingsManager?.Settings?.IsSyncEnabled ?? false;
-        internal bool IsSyncLeader => IsSyncPlaybackActive && (g_LocalSettingsManager?.Settings?.IsLeading ?? false);
-        internal bool ShouldHoldForSyncContent => IsSyncPlaybackActive && (IsSyncLeader || hasReceivedSyncMessage);
-        internal bool HasPendingSyncPrepare
-        {
-            get
-            {
-                lock (syncStateLock)
-                {
-                    return pendingSyncIndex.HasValue;
-                }
-            }
-        }
-
         internal void RequestScheduleEvaluation(bool force = false)
         {
             playbackContainer?.RequestScheduleEvaluation(force);
@@ -1300,6 +885,11 @@ namespace NewHyOnPlayer
         internal void HandleWeeklyScheduleUpdated()
         {
             playbackContainer?.HandleWeeklyScheduleUpdated();
+        }
+
+        internal void RequestPlaylistReload(string playlistName, string reason)
+        {
+            playbackContainer?.RequestPlaylistReload(playlistName, reason);
         }
 
         internal void RequestWeeklyScheduleSyncNow()
@@ -1317,629 +907,20 @@ namespace NewHyOnPlayer
             playbackContainer?.StartPlaybackFromOffAir();
         }
 
-        private void EvaluateSchedule(bool force)
+        internal void ResetPlaybackCursor()
         {
-            if (scheduleEvaluator == null)
-            {
-                return;
-            }
-
-            DateTime now = DateTime.Now;
-            lastScheduleEval = now;
-            var decision = scheduleEvaluator.Evaluate(DateTime.Now, g_PlayerInfoManager?.g_PlayerInfo?.PIF_DefaultPlayList);
-            if (decision == null || string.IsNullOrWhiteSpace(decision.PlaylistName))
-            {
-                pendingSchedulePlaylist = string.Empty;
-                pendingScheduleId = string.Empty;
-                lastScheduleEvalStateKey = "NONE";
-                lastMissingScheduleLogged = string.Empty;
-                return;
-            }
-
-            string current = g_PlayerInfoManager?.g_PlayerInfo?.PIF_CurrentPlayList ?? string.Empty;
-            if (string.Equals(decision.PlaylistName, current, StringComparison.OrdinalIgnoreCase))
-            {
-                pendingSchedulePlaylist = string.Empty;
-                pendingScheduleId = decision.ScheduleId ?? string.Empty;
-                lastMissingScheduleLogged = string.Empty;
-                string stateKey = $"KEEP|{pendingScheduleId}|{decision.PlaylistName}";
-                if (!string.Equals(lastScheduleEvalStateKey, stateKey, StringComparison.Ordinal))
-                {
-                    Logger.WriteLog($"스케줄 평가: 현재 플레이리스트 유지 ({decision.PlaylistName})", Logger.GetLogFileName());
-                    lastScheduleEvalStateKey = stateKey;
-                }
-                return;
-            }
-
-            pendingSchedulePlaylist = decision.PlaylistName;
-            pendingScheduleId = decision.ScheduleId ?? string.Empty;
-            lastMissingScheduleLogged = string.Empty;
-            string pendingStateKey = $"PENDING|{pendingScheduleId}|{pendingSchedulePlaylist}";
-            if (!string.Equals(lastScheduleEvalStateKey, pendingStateKey, StringComparison.Ordinal))
-            {
-                Logger.WriteLog($"스케줄 평가: 전환 예약 -> {pendingSchedulePlaylist}", Logger.GetLogFileName());
-                lastScheduleEvalStateKey = pendingStateKey;
-            }
-        }
-
-        private bool TryApplyScheduledSwitch(bool isPageBoundary, bool isContentBoundary)
-        {
-            return TryApplyScheduledSwitchCore(isPageBoundary, isContentBoundary, seamlessMode: false);
-        }
-
-        private bool TryApplyScheduledSwitchCore(bool isPageBoundary, bool isContentBoundary, bool seamlessMode)
-        {
-            if (string.IsNullOrWhiteSpace(pendingSchedulePlaylist))
-            {
-                return false;
-            }
-
-            string timing = g_LocalSettingsManager?.Settings?.SwitchTiming ?? "Immediately";
-            bool allow = false;
-            if (timing.Equals("Immediately", StringComparison.OrdinalIgnoreCase))
-            {
-                allow = true;
-            }
-            else if (timing.Equals("ContentEnd", StringComparison.OrdinalIgnoreCase) && isContentBoundary)
-            {
-                allow = true;
-            }
-            else if (timing.Equals("PageEnd", StringComparison.OrdinalIgnoreCase) && isPageBoundary)
-            {
-                allow = true;
-            }
-
-            if (!allow)
-            {
-                return false;
-            }
-
-            var playerInfo = g_PlayerInfoManager?.g_PlayerInfo;
-            if (playerInfo == null)
-            {
-                return false;
-            }
-
-            if (!HasPlayableContent(pendingSchedulePlaylist))
-            {
-                HandleMissingScheduleContent(pendingSchedulePlaylist);
-                return false;
-            }
-
-            lastMissingScheduleLogged = string.Empty;
-            isScheduleSwitching = true;
-            playerInfo.PIF_CurrentPlayList = pendingSchedulePlaylist;
-            g_PlayerInfoManager.SaveData();
-
-            pendingSchedulePlaylist = string.Empty;
-
-            g_PageInfoManager.LoadData(playerInfo.PIF_CurrentPlayList);
             g_PageIndex = 0;
-            if (!seamlessMode)
-            {
-                StopTickTimer();
-                this.Dispatcher.Invoke(DispatcherPriority.Normal,
-                        new Action(() =>
-                        {
-                            PopPage();
-                        }));
-            }
-            ApplyScheduleTransition();
-            isScheduleSwitching = false;
-            return true;
         }
 
-        internal void RequestPlaylistReload(string playlistName, string reason)
+        private void Window_LocationChanged(object sender, EventArgs e)
         {
-            playbackContainer?.RequestPlaylistReload(playlistName, reason);
         }
 
-        private bool TryApplyPendingPlaylistReload(bool isPageBoundary, bool isContentBoundary)
-        {
-            return TryApplyPendingPlaylistReloadCore(isPageBoundary, isContentBoundary, seamlessMode: false);
-        }
-
-        private bool TryApplyPendingPlaylistReloadCore(bool isPageBoundary, bool isContentBoundary, bool seamlessMode)
-        {
-            if (string.IsNullOrWhiteSpace(pendingPlaylistReload))
-            {
-                return false;
-            }
-
-            string timing = g_LocalSettingsManager?.Settings?.SwitchTiming ?? "Immediately";
-            bool allow = false;
-            if (timing.Equals("Immediately", StringComparison.OrdinalIgnoreCase))
-            {
-                allow = true;
-            }
-            else if (timing.Equals("ContentEnd", StringComparison.OrdinalIgnoreCase) && isContentBoundary)
-            {
-                allow = true;
-            }
-            else if (timing.Equals("PageEnd", StringComparison.OrdinalIgnoreCase) && isPageBoundary)
-            {
-                allow = true;
-            }
-
-            if (!allow)
-            {
-                return false;
-            }
-
-            var playerInfo = g_PlayerInfoManager?.g_PlayerInfo;
-            if (playerInfo == null)
-            {
-                return false;
-            }
-
-            string current = playerInfo.PIF_CurrentPlayList ?? string.Empty;
-            if (!string.Equals(current, pendingPlaylistReload, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            pendingPlaylistReload = string.Empty;
-            pendingPlaylistReloadReason = string.Empty;
-
-            g_PageInfoManager.LoadData(current);
-            g_PageIndex = 0;
-            if (!seamlessMode)
-            {
-                StopTickTimer();
-                this.Dispatcher.Invoke(DispatcherPriority.Normal,
-                        new Action(() =>
-                        {
-                            PopPage();
-                        }));
-            }
-            ApplyScheduleTransition();
-            return true;
-        }
-
-        private bool HasPlayableContent(string playlistName)
-        {
-            if (string.IsNullOrWhiteSpace(playlistName))
-            {
-                return false;
-            }
-
-            try
-            {
-                using (var plRepo = new PageListRepository())
-                using (var pageRepo = new PageRepository())
-                {
-                    var pageList = plRepo.FindOne(x => string.Equals(x.PLI_PageListName, playlistName, StringComparison.OrdinalIgnoreCase));
-                    if (pageList == null || pageList.PLI_Pages == null || pageList.PLI_Pages.Count == 0)
-                    {
-                        return false;
-                    }
-
-                    var pages = pageRepo.LoadAll()
-                        .Where(p => pageList.PLI_Pages.Any(id => string.Equals(id, p.PIC_GUID, StringComparison.OrdinalIgnoreCase)))
-                        .ToList();
-                    foreach (var page in pages)
-                    {
-                        if (PageHasPlayableContent(page))
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-            }
-
-            return false;
-        }
-
-        private bool PageHasPlayableContent(PageInfoClass page)
-        {
-            if (page?.PIC_Elements == null)
-            {
-                return false;
-            }
-
-            foreach (var element in page.PIC_Elements)
-            {
-                if (!TryParseDisplayType(element?.EIF_Type, out DisplayType displayType)
-                    || displayType != DisplayType.Media)
-                {
-                    continue;
-                }
-
-                if (element?.EIF_ContentsInfoClassList == null)
-                {
-                    continue;
-                }
-
-                foreach (var content in element.EIF_ContentsInfoClassList)
-                {
-                    if (content == null || string.IsNullOrWhiteSpace(content.CIF_FileName))
-                    {
-                        continue;
-                    }
-
-                    string path = FNDTools.GetContentsFilePath(content.CIF_FileName);
-                    if (!File.Exists(path))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        if (new FileInfo(path).Length > 0)
-                        {
-                            return true;
-                        }
-                    }
-                    catch
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        private bool TryFindPlayablePlaylist(out string playlistName)
-        {
-            playlistName = string.Empty;
-
-            try
-            {
-                using (var plRepo = new PageListRepository())
-                using (var pageRepo = new PageRepository())
-                {
-                    var pageLists = plRepo.LoadAll() ?? new List<PageListInfoClass>();
-                    if (pageLists.Count == 0)
-                    {
-                        return false;
-                    }
-
-                    var pages = pageRepo.LoadAll() ?? new List<PageInfoClass>();
-                    var pageMap = pages
-                        .Where(p => p != null && !string.IsNullOrWhiteSpace(p.PIC_GUID))
-                        .ToDictionary(p => p.PIC_GUID, p => p, StringComparer.OrdinalIgnoreCase);
-
-                    foreach (var pageList in pageLists)
-                    {
-                        if (pageList?.PLI_Pages == null || pageList.PLI_Pages.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        foreach (var pageId in pageList.PLI_Pages)
-                        {
-                            if (string.IsNullOrWhiteSpace(pageId))
-                            {
-                                continue;
-                            }
-
-                            if (!pageMap.TryGetValue(pageId, out var page))
-                            {
-                                continue;
-                            }
-
-                            if (PageHasPlayableContent(page))
-                            {
-                                playlistName = pageList.PLI_PageListName ?? string.Empty;
-                                return !string.IsNullOrWhiteSpace(playlistName);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-            }
-
-            return false;
-        }
-
-        private void ApplyLocalPlaylist(string playlistName, bool updateDefaultIfEmpty, string reason)
-        {
-            if (string.IsNullOrWhiteSpace(playlistName))
-            {
-                return;
-            }
-
-            var info = g_PlayerInfoManager?.g_PlayerInfo;
-            if (info == null)
-            {
-                return;
-            }
-
-            bool changed = !string.Equals(info.PIF_CurrentPlayList, playlistName, StringComparison.OrdinalIgnoreCase);
-            bool updated = false;
-            if (changed)
-            {
-                info.PIF_CurrentPlayList = playlistName;
-                updated = true;
-            }
-
-            if (updateDefaultIfEmpty && string.IsNullOrWhiteSpace(info.PIF_DefaultPlayList))
-            {
-                info.PIF_DefaultPlayList = playlistName;
-                updated = true;
-            }
-
-            if (updated)
-            {
-                g_PlayerInfoManager.SaveData();
-            }
-
-            bool needsReload = !string.Equals(g_CurrentPageListName, playlistName, StringComparison.OrdinalIgnoreCase)
-                               || g_PageInfoManager?.g_PageInfoClassList == null
-                               || g_PageInfoManager.g_PageInfoClassList.Count == 0;
-            if (needsReload)
-            {
-                UpdateCurrentPageListName(playlistName);
-                g_PageInfoManager.LoadData(playlistName);
-                g_PageIndex = 0;
-            }
-
-            if (!string.IsNullOrWhiteSpace(reason)
-                && !string.Equals(lastLocalFallbackPlaylist, playlistName, StringComparison.OrdinalIgnoreCase))
-            {
-                Logger.WriteLog($"로컬 재생 플레이리스트 적용({reason}): {playlistName}", Logger.GetLogFileName());
-                lastLocalFallbackPlaylist = playlistName;
-            }
-        }
-
-        private bool EnsureLocalPlaybackReady()
-        {
-            try
-            {
-                var playerInfo = g_PlayerInfoManager?.g_PlayerInfo;
-                if (playerInfo == null)
-                {
-                    return false;
-                }
-
-                string current = playerInfo.PIF_CurrentPlayList;
-                string fallback = playerInfo.PIF_DefaultPlayList;
-
-                if (!string.IsNullOrWhiteSpace(current) && HasPlayableContent(current))
-                {
-                    ApplyLocalPlaylist(current, updateDefaultIfEmpty: false, reason: null);
-                    return true;
-                }
-
-                if (!string.IsNullOrWhiteSpace(fallback) && HasPlayableContent(fallback))
-                {
-                    ApplyLocalPlaylist(fallback, updateDefaultIfEmpty: false, reason: "default");
-                    return true;
-                }
-
-                if (TryFindPlayablePlaylist(out var playlist))
-                {
-                    bool updateDefault = string.IsNullOrWhiteSpace(fallback) || !HasPlayableContent(fallback);
-                    ApplyLocalPlaylist(playlist, updateDefaultIfEmpty: updateDefault, reason: "fallback");
-                    return true;
-                }
-
-                if (!string.Equals(lastLocalFallbackPlaylist, "__NONE__", StringComparison.Ordinal))
-                {
-                    Logger.WriteLog("로컬 데이터에서 재생 가능한 플레이리스트를 찾지 못했습니다.", Logger.GetLogFileName());
-                    lastLocalFallbackPlaylist = "__NONE__";
-                }
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-                return false;
-            }
-        }
-
-        private void HandleMissingScheduleContent(string playlistName)
-        {
-            if (string.IsNullOrWhiteSpace(playlistName))
-            {
-                return;
-            }
-
-            if (!string.Equals(lastMissingScheduleLogged, playlistName, StringComparison.OrdinalIgnoreCase))
-            {
-                Logger.WriteLog($"플레이리스트({playlistName})에 필요한 파일이 없어 전환을 대기합니다. 다운로드를 재시도합니다.", Logger.GetLogFileName());
-                lastMissingScheduleLogged = playlistName;
-                commandService?.EnsurePlaylistDownloadFromCache(playlistName);
-            }
-        }
-
-        private void ApplyScheduleTransition()
-        {
-            try
-            {
-                Opacity = 0.0;
-
-                var animation = new DoubleAnimation
-                {
-                    From = 0.0,
-                    To = 1.0,
-                    Duration = TimeSpan.FromMilliseconds(350),
-                    AccelerationRatio = 0.1,
-                    DecelerationRatio = 0.9
-                };
-
-                BeginAnimation(Window.OpacityProperty, animation);
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-            }
-        }
-
-        private void DetectMissingContentsForPlaylist(string playlistName)
-        {
-            if (string.IsNullOrWhiteSpace(playlistName))
-            {
-                return;
-            }
-
-            try
-            {
-                using (var plRepo = new PageListRepository())
-                using (var pageRepo = new PageRepository())
-                {
-                    var pageList = plRepo.FindOne(x => string.Equals(x.PLI_PageListName, playlistName, StringComparison.OrdinalIgnoreCase));
-                    if (pageList == null || pageList.PLI_Pages == null || pageList.PLI_Pages.Count == 0)
-                    {
-                        return;
-                    }
-
-                    var pages = pageRepo.LoadAll()
-                        .Where(p => pageList.PLI_Pages.Any(id => string.Equals(id, p.PIC_GUID, StringComparison.OrdinalIgnoreCase)))
-                        .ToList();
-
-                    List<string> missing = new List<string>();
-                    foreach (var page in pages)
-                    {
-                        if (page?.PIC_Elements == null) continue;
-                        foreach (var element in page.PIC_Elements)
-                        {
-                            if (element?.EIF_ContentsInfoClassList == null) continue;
-                            foreach (var content in element.EIF_ContentsInfoClassList)
-                            {
-                                if (content == null || string.IsNullOrWhiteSpace(content.CIF_FileName)) continue;
-                                string path = FNDTools.GetContentsFilePath(content.CIF_FileName);
-                                if (!File.Exists(path))
-                                {
-                                    missing.Add(content.CIF_FileName);
-                                }
-                            }
-                        }
-                    }
-
-                    if (missing.Count > 0)
-                    {
-                        Logger.WriteLog($"누락된 컨텐츠 발견({playlistName}): {string.Join(",", missing.Distinct())}", Logger.GetLogFileName());
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-            }
-        }
-
-        private void TickTask(object sender, EventArgs e)
-        {
-            try
-            {
-                this.Dispatcher.Invoke(DispatcherPriority.Normal,
-                    new Action(() =>
-                    {
-                        if (IsFocused == false)
-                            Focus();
-
-                        if (playbackContainer != null)
-                        {
-                            return;
-                        }
-
-                        EvaluateSchedule(force: false);
-
-                        string switchTiming = g_LocalSettingsManager?.Settings?.SwitchTiming ?? "Immediately";
-                        if (switchTiming.Equals("Immediately", StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (TryApplyScheduledSwitch(isPageBoundary: true, isContentBoundary: true))
-                            {
-                                return;
-                            }
-                            if (TryApplyPendingPlaylistReload(isPageBoundary: true, isContentBoundary: true))
-                            {
-                                return;
-                            }
-                        }
-                        else if (switchTiming.Equals("ContentEnd", StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (TryApplyScheduledSwitch(isPageBoundary: false, isContentBoundary: true))
-                            {
-                                return;
-                            }
-                            if (TryApplyPendingPlaylistReload(isPageBoundary: false, isContentBoundary: true))
-                            {
-                                return;
-                            }
-                        }
-
-                        bool blockPageTimer = IsSyncPlaybackActive && !IsSyncLeader;
-                        if (blockPageTimer && g_TickCount >= g_TimeInterval)
-                        {
-                            g_TickCount = 0;
-                        }
-
-                        if (g_TickCount >= g_TimeInterval)
-                        {
-                            // 페이지 종료 시점에 맞춰 최신 스케줄을 강제로 평가한다.
-                            EvaluateSchedule(force: true);
-                            StopTickTimer();
-                            if (switchTiming.Equals("PageEnd", StringComparison.OrdinalIgnoreCase)
-                                && TryApplyScheduledSwitch(isPageBoundary: true, isContentBoundary: false))
-                            {
-                                return;
-                            }
-                            if (switchTiming.Equals("PageEnd", StringComparison.OrdinalIgnoreCase)
-                                && TryApplyPendingPlaylistReload(isPageBoundary: true, isContentBoundary: false))
-                            {
-                                return;
-                            }
-
-                            PopPage();
-
-                            return;
-                        }
-
-                        bool _ready = !blockPageTimer && g_TimeInterval - g_TickCount == 1;
-                        ContentsPlayWindow syncLeaderWindow = null;
-
-                        foreach (ContentsPlayWindow item in g_ContentsPlayWindowList)
-                        {
-                            if (item.IsVisible)
-                            {
-                                item.Tick();
-                                if (_ready && !g_LocalSettingsManager.Settings.IsOnlyOnePage)
-                                    item.SetLoopState(false);
-                                if (syncLeaderWindow == null)
-                                {
-                                    syncLeaderWindow = item;
-                                }
-                            }
-                        }
-
-                        if (syncLeaderWindow != null)
-                        {
-                            HandleSyncLeaderTick(new SeamlessSyncStatus
-                            {
-                                CurrentIndex = syncLeaderWindow.CurrentContentIndex,
-                                NextIndex = syncLeaderWindow.GetNextContentIndex(),
-                                ElapsedSeconds = syncLeaderWindow.CurrentContentElapsedSeconds,
-                                DurationSeconds = syncLeaderWindow.CurrentContentDurationSeconds
-                            });
-                        }
-
-                        g_TickCount++;
-
-                    })
-                );
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteLog(ex.ToString(), Logger.GetLogFileName());
-            }
-        }
-
-       
         void PreExiting()
         {
             try
             {
-                StopAllTimer();
+                StopPlayback();
                 if (!g_IsUpdating)
                 {
                     Taskbar.Show();
@@ -1952,103 +933,6 @@ namespace NewHyOnPlayer
             {
             }
         }
-        public List<WindowZIdxForTTClass> g_WindowZIdxForTTClassList = new List<WindowZIdxForTTClass>();  // 전체 서브윈도우를 위한
-
-        private static bool TryParseDisplayType(string rawType, out DisplayType displayType)
-        {
-            displayType = DisplayType.None;
-            if (string.IsNullOrWhiteSpace(rawType))
-            {
-                return false;
-            }
-
-            return Enum.TryParse(rawType, true, out displayType);
-        }
-
-
-        public void HideAllContentsPlayWindow()
-        {
-            playbackContainer?.HideAll();
-
-            if (g_ContentsPlayWindowList.Count > 0)
-            {
-                foreach (ContentsPlayWindow item in g_ContentsPlayWindowList)
-                {
-                    if (item.IsVisible)
-                    {
-                        item.StopContentsDisplay();
-                        item.StopVisibleContents();
-                        item.Hide();
-                    }
-                }
-            }
-        }
-
-
-        public void UpdateContentsPlayingWindow(ElementInfoClass tmpInfoCls, int idx)
-        {
-            g_ContentsPlayWindowList[idx].Name = tmpInfoCls.EIF_Name;
-            g_ContentsPlayWindowList[idx].Visibility = System.Windows.Visibility.Visible;
-            
-            g_ContentsPlayWindowList[idx].Width = tmpInfoCls.EIF_Width * g_FitscaleValueX;
-            g_ContentsPlayWindowList[idx].Height = tmpInfoCls.EIF_Height * g_FitscaleValueY;
-            g_ContentsPlayWindowList[idx].g_TransformX = g_FitscaleValueX;
-            g_ContentsPlayWindowList[idx].g_TransformY = g_FitscaleValueY;
-
-            g_ContentsPlayWindowList[idx].UpdateElementInfoClass(tmpInfoCls);
-
-            MovedWindowForOne(idx);
-        }
-
-        private void Window_LocationChanged(object sender, EventArgs e)
-        {
-            if (playbackContainer != null)
-            {
-                return;
-            }
-
-            if (IsLoaded)
-            {
-                MovedWindowForAll();
-            }
-        }
-
-        void MovedWindowForAll()
-        {
-            if (playbackContainer != null)
-            {
-                return;
-            }
-
-            foreach (ContentsPlayWindow cpw in g_ContentsPlayWindowList)
-            {
-                cpw.Left = cpw.Owner.Left
-                            + testMarginLeft
-                            + (cpw.g_ElementInfoClass.EIF_PosLeft*g_FitscaleValueX);
-
-                cpw.Top = cpw.Owner.Top
-                            + testMarginTop
-                            + (cpw.g_ElementInfoClass.EIF_PosTop*g_FitscaleValueY);
-            }
-        }
-
-        void MovedWindowForOne(int paramIdx)
-        {
-            if (playbackContainer != null)
-            {
-                return;
-            }
-
-            g_ContentsPlayWindowList[paramIdx].Left = g_ContentsPlayWindowList[paramIdx].Owner.Left
-                           + testMarginLeft
-                           + (g_ContentsPlayWindowList[paramIdx].g_ElementInfoClass.EIF_PosLeft * g_FitscaleValueX);
-
-            g_ContentsPlayWindowList[paramIdx].Top = g_ContentsPlayWindowList[paramIdx].Owner.Top
-                        + testMarginTop
-                        + (g_ContentsPlayWindowList[paramIdx].g_ElementInfoClass.EIF_PosTop * g_FitscaleValueY);
-        }
-
-
         internal List<PlaybackDebugItem> GetPlaybackDebugItems()
         {
             if (playbackContainer != null)

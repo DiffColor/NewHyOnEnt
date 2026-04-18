@@ -455,7 +455,7 @@ namespace NewHyOnPlayer
                 Status = status,
                 Process = NormalizeHeartbeatProcess(process),
                 Version = GetHeartbeatVersion(),
-                CurrentPage = owner?.g_CurrentPageName ?? string.Empty,
+                CurrentPage = owner?.CurrentPageName ?? string.Empty,
                 HdmiState = hdmiState
             };
         }

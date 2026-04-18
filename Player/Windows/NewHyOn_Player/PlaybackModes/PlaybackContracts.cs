@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SharedContentsInfoClass = AndoW.Shared.ContentsInfoClass;
 using SharedPageInfoClass = AndoW.Shared.PageInfoClass;
 
@@ -81,13 +81,15 @@ namespace NewHyOnPlayer.PlaybackModes
         }
     }
 
-    internal sealed class SeamlessSyncStatus
+    internal sealed class SeamlessPlaybackStatus
     {
         public string ElementName { get; set; }
         public string CurrentContentName { get; set; }
         public string NextContentName { get; set; }
         public int CurrentIndex { get; set; }
         public int NextIndex { get; set; }
+        public long ElapsedMilliseconds { get; set; }
+        public long DurationMilliseconds { get; set; }
         public long ElapsedSeconds { get; set; }
         public long DurationSeconds { get; set; }
         public bool IsVisible { get; set; }
@@ -95,7 +97,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
     internal sealed class SeamlessPlaybackPulse
     {
-        public SeamlessSyncStatus Status { get; set; }
+        public SeamlessPlaybackStatus PrimaryContent { get; set; }
         public bool IsSecondTick { get; set; }
         public bool IsContentBoundary { get; set; }
     }

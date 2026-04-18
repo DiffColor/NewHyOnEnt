@@ -254,7 +254,7 @@ public class MediaView extends RelativeLayout {
         };
 
         imgOpt = new DisplayImageOptions.Builder()
-                .bitmapConfig(Config.RGB_565)
+                .bitmapConfig(Config.ARGB_8888)
                 .cacheInMemory(false)
                 .cacheOnDisk(true)
                 .resetViewBeforeLoading(false)

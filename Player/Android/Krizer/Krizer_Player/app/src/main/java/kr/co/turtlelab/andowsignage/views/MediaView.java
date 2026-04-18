@@ -111,6 +111,8 @@ public class MediaView extends RelativeLayout {
     private long currentContentDeadlineAtElapsedRealtimeMs = 0L;
     private long lastContentBoundaryAtElapsedRealtimeMs = 0L;
     private boolean currentContentBlocksLayoutSwitch = false;
+    private int contentRenderWidth;
+    private int contentRenderHeight;
 
     DisplayImageOptions imgOpt;
     private static final ExecutorService loopExecutor = Executors.newCachedThreadPool();
@@ -124,6 +126,8 @@ public class MediaView extends RelativeLayout {
         this.cdmList = cdmList != null ? cdmList : new ArrayList<MediaDataModel>();
         ctx = context;
         this.act = act;
+        contentRenderWidth = Math.max(1, width);
+        contentRenderHeight = Math.max(1, height);
 
         setMinimumWidth(width);
         setMinimumHeight(height);
@@ -136,6 +140,8 @@ public class MediaView extends RelativeLayout {
     }
 
     public void configureMediaContents(int width, int height, List<MediaDataModel> contents) {
+        contentRenderWidth = Math.max(1, width);
+        contentRenderHeight = Math.max(1, height);
         setMinimumWidth(width);
         setMinimumHeight(height);
         List<MediaDataModel> nextContents = copyMediaContents(contents);
@@ -248,7 +254,7 @@ public class MediaView extends RelativeLayout {
         };
 
         imgOpt = new DisplayImageOptions.Builder()
-                .bitmapConfig(Config.RGB_565)
+                .bitmapConfig(Config.ARGB_8888)
                 .cacheInMemory(false)
                 .cacheOnDisk(true)
                 .resetViewBeforeLoading(false)
@@ -774,7 +780,7 @@ public class MediaView extends RelativeLayout {
 
         if (shouldImmediate) {
             nextView.setTag(filePath);
-            ImageLoader.getInstance().displayImage(uri, new SafeImageViewAware(nextView), imgOpt, new SimpleImageLoadingListener() {
+            displayImageAtRenderSize(nextView, filePath, new SimpleImageLoadingListener() {
                 @Override
             public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
                 nextView.setAlpha(1f);
@@ -816,7 +822,7 @@ public class MediaView extends RelativeLayout {
         }
 
         nextView.setTag(filePath);
-        ImageLoader.getInstance().displayImage(uri, new SafeImageViewAware(nextView), imgOpt, new SimpleImageLoadingListener() {
+        displayImageAtRenderSize(nextView, filePath, new SimpleImageLoadingListener() {
             @Override
             public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
                 nextView.post(new Runnable() {
@@ -914,7 +920,7 @@ public class MediaView extends RelativeLayout {
         targetView.setAlpha(1f);
         targetView.setVisibility(View.GONE);
         targetView.setTag(nextPath);
-        ImageLoader.getInstance().displayImage(LocalPathUtils.getUriStringFromAbsPath(nextPath), new SafeImageViewAware(targetView), imgOpt);
+        displayImageAtRenderSize(targetView, nextPath, null);
     }
 
     private void hideAllImageOverlays() {
@@ -1117,10 +1123,9 @@ public class MediaView extends RelativeLayout {
         target.setAlpha(0f);
         target.setVisibility(View.VISIBLE);
         target.setTag(filePath);
-        ImageLoader.getInstance().displayImage(
-                LocalPathUtils.getUriStringFromAbsPath(filePath),
-                new SafeImageViewAware(target),
-                imgOpt,
+        displayImageAtRenderSize(
+                target,
+                filePath,
                 new SimpleImageLoadingListener() {
                     @Override
                     public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
@@ -1145,6 +1150,47 @@ public class MediaView extends RelativeLayout {
                         notifyPrepared();
                     }
                 });
+    }
+
+    private void displayImageAtRenderSize(ImageView targetView, String filePath, SimpleImageLoadingListener listener) {
+        if (targetView == null || TextUtils.isEmpty(filePath)) {
+            return;
+        }
+        ImageLoader.getInstance().displayImage(
+                LocalPathUtils.getUriStringFromAbsPath(filePath),
+                new SafeImageViewAware(targetView, getTargetDecodeWidth(), getTargetDecodeHeight()),
+                imgOpt,
+                listener);
+    }
+
+    private int getTargetDecodeWidth() {
+        if (contentRenderWidth > 0) {
+            return contentRenderWidth;
+        }
+        int width = getWidth();
+        if (width > 0) {
+            return width;
+        }
+        width = getMeasuredWidth();
+        if (width > 0) {
+            return width;
+        }
+        return AndoWSignageApp.getDeviceWidth();
+    }
+
+    private int getTargetDecodeHeight() {
+        if (contentRenderHeight > 0) {
+            return contentRenderHeight;
+        }
+        int height = getHeight();
+        if (height > 0) {
+            return height;
+        }
+        height = getMeasuredHeight();
+        if (height > 0) {
+            return height;
+        }
+        return AndoWSignageApp.getDeviceHeight();
     }
 
     private void prepareInitialVideo(final String videoPath,
@@ -1204,6 +1250,12 @@ public class MediaView extends RelativeLayout {
         videoView.setMediaInfoListener(null);
         videoView.setVisibility(View.VISIBLE);
         videoView.setAlpha(1f);
+        try {
+            videoView.pause();
+            videoView.seekTo(1);
+        } catch (Exception ignored) {
+        }
+
     }
 
     private void startPreparedVideoPlayback() {

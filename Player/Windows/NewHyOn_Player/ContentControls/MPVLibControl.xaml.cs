@@ -18,23 +18,18 @@ namespace NewHyOnPlayer
         public delegate void FileEnded();
         public event FileEnded FileEndedEvent;
 
-        MpvPlayer sPlayer;
-
+        private MpvPlayer sPlayer;
         private readonly object mpvLock = new object();
+        private bool isDisposed;
 
         public bool IsMediaLoaded()
         {
-            if (sPlayer != null)
-                return sPlayer.IsMediaLoaded;
-
-            return false;
+            return TryWithPlayer(player => player.IsMediaLoaded, false);
         }
+
         public bool IsPlaying()
         {
-            if (sPlayer != null)
-                return sPlayer.IsPlaying;
-
-            return false;
+            return TryWithPlayer(player => player.IsPlaying, false);
         }
 
         bool sAutoPlay = false;
@@ -42,42 +37,19 @@ namespace NewHyOnPlayer
         {
             set
             {
-                //SetValue(AutoPlayProperty, value);
-                if (sPlayer != null)
+                TryWithPlayer(player =>
                 {
-                    sPlayer.AutoPlay = value;
-                }
+                    player.AutoPlay = value;
+                    return true;
+                }, false);
                 sAutoPlay = value;
             }
 
             get
             {
-                //return (bool)GetValue(AutoPlayProperty);
                 return sAutoPlay;
             }
         }
-
-        //public static readonly DependencyProperty AutoPlayProperty = DependencyProperty.Register
-        //   (
-        //       "AutoPlay",
-        //       typeof(bool),
-        //       typeof(MPVLibControl),
-        //       new PropertyMetadata(true, OnAutoPlayChanged)
-        //   );
-
-        //private static void OnAutoPlayChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        //{
-        //    MPVLibControl mpv = d as MPVLibControl;
-        //    mpv.AutoPlayChanged((bool)e.NewValue);
-        //}
-
-        //private void AutoPlayChanged(bool value)
-        //{
-        //    if (sPlayer != null)
-        //    {
-        //        sPlayer.AutoPlay = value;
-        //    }
-        //}
 
         public Stretch Stretch
         {
@@ -103,33 +75,32 @@ namespace NewHyOnPlayer
         private static void OnStretchChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             MPVLibControl mpv = d as MPVLibControl;
-            mpv.StretchChanged((Stretch)e.NewValue);
+            mpv?.StretchChanged((Stretch)e.NewValue);
         }
 
         private void StretchChanged(Stretch value)
         {
-            if (sPlayer != null)
+            TryWithPlayer(player =>
             {
-                lock (mpvLock)
+                switch (value)
                 {
-                    switch (value)
-                    {
-                        case Stretch.Fill:
-                            sPlayer.API.SetPropertyString("keepaspect", "no");
-                            break;
+                    case Stretch.Fill:
+                        player.API.SetPropertyString("keepaspect", "no");
+                        break;
 
-                        case Stretch.UniformToFill:
-                            sPlayer.API.SetPropertyString("panscan", "1.0");
-                            break;
+                    case Stretch.UniformToFill:
+                        player.API.SetPropertyString("panscan", "1.0");
+                        break;
 
-                        case Stretch.None:
-                        case Stretch.Uniform:
-                        default:
-                            sPlayer.API.SetPropertyString("keepaspect", "yes");
-                            return;
-                    }
+                    case Stretch.None:
+                    case Stretch.Uniform:
+                    default:
+                        player.API.SetPropertyString("keepaspect", "yes");
+                        break;
                 }
-            }
+
+                return true;
+            }, false);
         }
 
         public double SpeedRate
@@ -155,17 +126,17 @@ namespace NewHyOnPlayer
         private static void OnSpeedRateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             MPVLibControl mpv = d as MPVLibControl;
-            mpv.SpeedRateChanged((double)e.NewValue);
+            mpv?.SpeedRateChanged((double)e.NewValue);
         }
 
         private void SpeedRateChanged(double value)
         {
-            if (sPlayer != null)
+            TryWithPlayer(player =>
             {
-                sPlayer.Speed = value;
-            }
+                player.Speed = value;
+                return true;
+            }, false);
         }
-
 
         public bool Loop
         {
@@ -190,15 +161,16 @@ namespace NewHyOnPlayer
         private static void OnLoopChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             MPVLibControl mpv = d as MPVLibControl;
-            mpv.LoopChanged((bool)e.NewValue);
+            mpv?.LoopChanged((bool)e.NewValue);
         }
 
         private void LoopChanged(bool value)
         {
-            if (sPlayer != null)
+            TryWithPlayer(player =>
             {
-                sPlayer.Loop = value;
-            }
+                player.Loop = value;
+                return true;
+            }, false);
         }
 
         public int Volume
@@ -225,15 +197,16 @@ namespace NewHyOnPlayer
         private static void OnVolumeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             MPVLibControl mpv = d as MPVLibControl;
-            mpv.VolumeChanged((int)e.NewValue);
+            mpv?.VolumeChanged((int)e.NewValue);
         }
 
         private void VolumeChanged(int value)
         {
-            if (sPlayer != null)
+            TryWithPlayer(player =>
             {
-                sPlayer.Volume = value;
-            }
+                player.Volume = value;
+                return true;
+            }, false);
         }
 
         public bool Muted
@@ -260,60 +233,48 @@ namespace NewHyOnPlayer
         private static void OnMutedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             MPVLibControl mpv = d as MPVLibControl;
-            mpv.MutedChanged((bool)e.NewValue);
+            mpv?.MutedChanged((bool)e.NewValue);
         }
 
         private void MutedChanged(bool value)
         {
-            if (sPlayer != null)
+            TryWithPlayer(player =>
             {
-                lock (mpvLock)
-                {
-                    sPlayer.API.SetPropertyString("mute", value ? "yes" : "no");
-                }
-            }
+                player.API.SetPropertyString("mute", value ? "yes" : "no");
+                return true;
+            }, false);
         }
 
         public TimeSpan Position
         {
             get
             {
-                if (IsMediaLoaded())
-                    return sPlayer.Position;
-                else
-                    return TimeSpan.Zero;
+                return TryWithPlayer(player => player.IsMediaLoaded ? player.Position : TimeSpan.Zero, TimeSpan.Zero);
             }
             set
             {
-                sPlayer.Position = value;
+                TryWithPlayer(player => player.TrySeek(value), false);
             }
         }
 
         public bool TrySeek(TimeSpan position, bool relative = false)
         {
-            if (sPlayer == null)
-            {
-                return false;
-            }
-
-            return sPlayer.TrySeek(position, relative);
+            return TryWithPlayer(player => player.TrySeek(position, relative), false);
         }
 
         public string ImageDuration
         {
             get
             {
-                lock (mpvLock)
-                {
-                    return sPlayer.API.GetPropertyString("image-display-duration");
-                }
+                return TryWithPlayer(player => player.API.GetPropertyString("image-display-duration"), string.Empty);
             }
             set
             {
-                lock (mpvLock)
+                TryWithPlayer(player =>
                 {
-                    sPlayer.API.SetPropertyString("image-display-duration", value);
-                }
+                    player.API.SetPropertyString("image-display-duration", value);
+                    return true;
+                }, false);
             }
         }
 
@@ -327,46 +288,50 @@ namespace NewHyOnPlayer
             MutedChanged(Muted);
         }
 
-        private void Player_MediaLoaded(object sender, System.EventArgs e)
+        private void Player_MediaLoaded(object sender, EventArgs e)
         {
-            if (FileLoadedEvent != null)
-                FileLoadedEvent();
+            FileLoadedEvent?.Invoke();
         }
 
-        private void Player_MediaFinished(object sender, System.EventArgs e)
+        private void Player_MediaFinished(object sender, EventArgs e)
         {
-            if (FileEndedEvent != null)
-                FileEndedEvent();
+            FileEndedEvent?.Invoke();
         }
 
         public void Load(string fpath, bool append = false)
         {
-            Visibility = Visibility.Visible;
-            sPlayer.Load(fpath, !append);
+            if (string.IsNullOrWhiteSpace(fpath))
+            {
+                return;
+            }
+
+            TryWithPlayer(player =>
+            {
+                Visibility = Visibility.Visible;
+                player.Load(fpath, !append);
+                return true;
+            }, false);
         }
 
         public void AppendFiles(string[] pathes, bool append = false)
         {
-            sPlayer.LoadPlaylist(pathes, !append);
+            if (pathes == null || pathes.Length == 0)
+            {
+                return;
+            }
+
+            TryWithPlayer(player =>
+            {
+                player.LoadPlaylist(pathes, !append);
+                return true;
+            }, false);
         }
 
         public int PlaylistEntryCount
         {
             get
             {
-                if (sPlayer == null)
-                {
-                    return 0;
-                }
-
-                try
-                {
-                    return sPlayer.PlaylistEntryCount;
-                }
-                catch
-                {
-                    return 0;
-                }
+                return TryWithPlayer(player => player.PlaylistEntryCount, 0);
             }
         }
 
@@ -374,19 +339,7 @@ namespace NewHyOnPlayer
         {
             get
             {
-                if (sPlayer == null)
-                {
-                    return -1;
-                }
-
-                try
-                {
-                    return sPlayer.PlaylistIndex;
-                }
-                catch
-                {
-                    return -1;
-                }
+                return TryWithPlayer(player => player.PlaylistIndex, -1);
             }
         }
 
@@ -394,148 +347,235 @@ namespace NewHyOnPlayer
         {
             get
             {
-                if (sPlayer == null)
-                {
-                    return false;
-                }
-
-                return sPlayer.LoopPlaylist;
+                return TryWithPlayer(player => player.LoopPlaylist, false);
             }
             set
             {
-                if (sPlayer != null)
+                TryWithPlayer(player =>
                 {
-                    sPlayer.LoopPlaylist = value;
-                }
+                    player.LoopPlaylist = value;
+                    return true;
+                }, false);
             }
         }
 
         public void LoadPlaylist(string[] pathes, bool autoPlay)
         {
-            if (sPlayer == null || pathes == null || pathes.Length == 0)
+            if (pathes == null || pathes.Length == 0)
             {
                 return;
             }
 
-            Visibility = Visibility.Visible;
-            AutoPlay = autoPlay;
-            sPlayer.LoadPlaylist(pathes, true);
+            TryWithPlayer(player =>
+            {
+                Visibility = Visibility.Visible;
+                player.AutoPlay = autoPlay;
+                sAutoPlay = autoPlay;
+                player.LoadPlaylist(pathes, true);
+                return true;
+            }, false);
         }
 
         void Dispose()
         {
-            if (sPlayer != null)
+            MpvPlayer playerToDispose = null;
+
+            lock (mpvLock)
             {
-                sPlayer.Dispose();
+                if (isDisposed)
+                {
+                    return;
+                }
+
+                isDisposed = true;
+                playerToDispose = sPlayer;
+                sPlayer = null;
+            }
+
+            if (playerToDispose == null)
+            {
+                return;
+            }
+
+            try
+            {
+                playerToDispose.MediaLoaded -= Player_MediaLoaded;
+                playerToDispose.MediaFinished -= Player_MediaFinished;
+                playerToDispose.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
             }
         }
 
         public void Play()
         {
-            Visibility = Visibility.Visible;
-            sPlayer.Resume();
+            TryWithPlayer(player =>
+            {
+                Visibility = Visibility.Visible;
+                player.Resume();
+                return true;
+            }, false);
         }
 
         public void Pause(bool hide = false)
         {
-            sPlayer.Pause();
+            bool paused = TryWithPlayer(player =>
+            {
+                player.Pause();
+                return true;
+            }, false);
 
-            if (hide)
+            if (!paused)
             {
-                this.Visibility = Visibility.Collapsed;
+                return;
             }
-            else
-            {
-                this.Visibility = Visibility.Visible;
-            }
+
+            Visibility = hide ? Visibility.Collapsed : Visibility.Visible;
         }
 
         public void Stop()
         {
-            if (sPlayer == null)
-                return;
-            sPlayer.KeepOpen = KeepOpen.No;
-            sPlayer.Stop();
-            sPlayer.KeepOpen = KeepOpen.Always;
-            this.Visibility = Visibility.Collapsed;
+            bool stopped = TryWithPlayer(player =>
+            {
+                player.KeepOpen = KeepOpen.No;
+                player.Stop();
+                player.KeepOpen = KeepOpen.Always;
+                return true;
+            }, false);
+
+            if (stopped)
+            {
+                Visibility = Visibility.Collapsed;
+            }
         }
 
         public void Close()
         {
-            sPlayer.Stop();
+            TryWithPlayer(player =>
+            {
+                player.Stop();
+                return true;
+            }, false);
         }
 
         public void LoadVideoByIndex(int index, bool preload = false)
         {
-            sPlayer.API.SetPropertyLong("playlist-pos", index);
-            if (AutoPlay)
-                sPlayer.Resume();
-            else
-                Pause(preload);
+            if (index < 0)
+            {
+                return;
+            }
+
+            bool autoPlay = AutoPlay;
+            bool loaded = TryWithPlayer(player =>
+            {
+                player.API.SetPropertyLong("playlist-pos", index);
+                if (autoPlay)
+                {
+                    player.Resume();
+                }
+                else
+                {
+                    player.Pause();
+                }
+
+                return true;
+            }, false);
+
+            if (!loaded || autoPlay)
+            {
+                return;
+            }
+
+            Visibility = preload ? Visibility.Collapsed : Visibility.Visible;
         }
 
         public bool SetPlaylistIndex(int index, bool autoPlay)
         {
-            if (sPlayer == null)
-            {
-                return false;
-            }
-
             if (index < 0)
             {
                 return false;
             }
 
-            try
+            return TryWithPlayer(player =>
             {
                 Visibility = Visibility.Visible;
-                AutoPlay = autoPlay;
-                sPlayer.API.SetPropertyLong("playlist-pos", index);
+                player.AutoPlay = autoPlay;
+                sAutoPlay = autoPlay;
+                player.API.SetPropertyLong("playlist-pos", index);
                 if (autoPlay)
                 {
-                    sPlayer.Resume();
+                    player.Resume();
                 }
                 else
                 {
-                    sPlayer.Pause();
+                    player.Pause();
                 }
 
                 return true;
-            }
-            catch
-            {
-                return false;
-            }
+            }, false);
         }
 
         public bool PlaylistNext()
         {
-            return sPlayer.PlaylistNext();
+            return TryWithPlayer(player => player.PlaylistNext(), false);
         }
 
         public bool PlaylistPrevious()
         {
-            return sPlayer.PlaylistPrevious();
+            return TryWithPlayer(player => player.PlaylistPrevious(), false);
         }
 
         public bool PlaylistRemove()
         {
-            return sPlayer.PlaylistRemove();
+            return TryWithPlayer(player => player.PlaylistRemove(), false);
         }
 
         public bool PlaylistRemove(int index)
         {
-            return sPlayer.PlaylistRemove(index);
+            return TryWithPlayer(player => player.PlaylistRemove(index), false);
         }
 
         public bool PlaylistMove(int oldIndex, int newIndex)
         {
-            return sPlayer.PlaylistMove(oldIndex, newIndex);
+            return TryWithPlayer(player => player.PlaylistMove(oldIndex, newIndex), false);
         }
 
         public void PlaylistClear()
         {
-            sPlayer.PlaylistClear();
+            TryWithPlayer(player =>
+            {
+                player.PlaylistClear();
+                return true;
+            }, false);
+        }
+
+        private TResult TryWithPlayer<TResult>(Func<MpvPlayer, TResult> action, TResult fallback)
+        {
+            if (action == null)
+            {
+                return fallback;
+            }
+
+            lock (mpvLock)
+            {
+                MpvPlayer player = sPlayer;
+                if (isDisposed || player == null)
+                {
+                    return fallback;
+                }
+
+                try
+                {
+                    return action(player);
+                }
+                catch (ObjectDisposedException)
+                {
+                    isDisposed = true;
+                    sPlayer = null;
+                    return fallback;
+                }
+            }
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)

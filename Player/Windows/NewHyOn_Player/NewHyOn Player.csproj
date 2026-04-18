@@ -113,11 +113,6 @@
     <Reference Include="FluentFTP, Version=53.0.2.0, Culture=neutral, PublicKeyToken=f4af092b1d8df44f, processorArchitecture=MSIL">
       <HintPath>..\packages\FluentFTP.53.0.2\lib\net472\FluentFTP.dll</HintPath>
     </Reference>
-    <Reference Include="Interop.Shell32, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <EmbedInteropTypes>True</EmbedInteropTypes>
-      <HintPath>..\..\..\..\..\..\..\libraries\dotnet_dlls\Interop.Shell32.dll</HintPath>
-    </Reference>
     <Reference Include="K4os.Hash.xxHash, Version=1.0.8.0, Culture=neutral, PublicKeyToken=32cd54395057cec3, processorArchitecture=MSIL">
       <HintPath>..\packages\K4os.Hash.xxHash.1.0.8\lib\net462\K4os.Hash.xxHash.dll</HintPath>
     </Reference>
@@ -203,9 +198,6 @@
     </Reference>
     <Reference Include="LiteDB">
       <HintPath>..\packages\LiteDB.5.0.17\lib\net45\LiteDB.dll</HintPath>
-    </Reference>
-    <Reference Include="NReco.VideoConverter, Version=1.2.1.0, Culture=neutral, PublicKeyToken=395ccb334978a0cd, processorArchitecture=MSIL">
-      <HintPath>..\packages\NReco.VideoConverter.1.2.1\lib\net45\NReco.VideoConverter.dll</HintPath>
     </Reference>
     <Reference Include="Remotion.Linq, Version=2.1.0.0, Culture=neutral, PublicKeyToken=fee00910d6e5f53b, processorArchitecture=MSIL">
       <HintPath>..\packages\Remotion.Linq.2.1.1\lib\net45\Remotion.Linq.dll</HintPath>
@@ -312,9 +304,6 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Xaml" />
     <Reference Include="System.Xml" />
-    <Reference Include="TransitionEffects">
-      <HintPath>..\Dependencies\TransitionEffects.dll</HintPath>
-    </Reference>
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
@@ -325,23 +314,8 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="ContentControls\ExeControl.xaml.cs">
-      <DependentUpon>ExeControl.xaml</DependentUpon>
-    </Compile>
     <Compile Include="ContentControls\MPVLibControl.xaml.cs">
       <DependentUpon>MPVLibControl.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="ContentControls\TransImageControl.xaml.cs">
-      <DependentUpon>TransImageControl.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="ContentsPlayWnd\ContentsPlayWindow.xaml.cs">
-      <DependentUpon>ContentsPlayWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="ContentsPlayWnd\ScrollTextPlayWindow.xaml.cs">
-      <DependentUpon>ScrollTextPlayWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="ContentsPlayWnd\WelcomeBoardWindow.xaml.cs">
-      <DependentUpon>WelcomeBoardWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="DataClass\SharedModelAliases.cs" />
     <Compile Include="DataManager\PlayerInfoManager.cs" />
@@ -350,12 +324,15 @@
     <Compile Include="DataManager\TTPlayerInfoManager.cs" />
     <Compile Include="PlaybackModes\PlaybackContracts.cs" />
     <Compile Include="PlaybackModes\PlaybackCoordinator.cs" />
-    <Compile Include="PlaybackModes\PlaybackDiagnostics.cs" />
+    <Compile Include="PlaybackModes\IPlaybackContainer.cs" />
     <Compile Include="PlaybackModes\SeamlessContentSlot.cs" />
     <Compile Include="PlaybackModes\SeamlessLayoutHost.cs" />
     <Compile Include="PlaybackModes\SeamlessLayoutRuntime.cs" />
     <Compile Include="PlaybackModes\SeamlessMpvSurface.cs" />
     <Compile Include="PlaybackModes\SeamlessPlaybackContainer.cs" />
+    <Compile Include="PlaybackModes\SeamlessSyncCoordinator.cs" />
+    <Compile Include="PlaybackModes\SeamlessSyncPlaybackContainer.cs" />
+    <Compile Include="PlaybackModes\SeamlessSyncUdpService.cs" />
     <Compile Include="Localization\StringResource.Designer.cs">
       <DependentUpon>StringResource.resx</DependentUpon>
       <AutoGen>True</AutoGen>
@@ -367,7 +344,6 @@
       <DesignTime>True</DesignTime>
     </Compile>
     <Compile Include="Services\OnAirService.cs" />
-    <Compile Include="Services\UdpSyncService.cs" />
     <Compile Include="TurtleTools\AuthTools.cs" />
     <Compile Include="TurtleTools\ColorTools.cs" />
     <Compile Include="TurtleTools\ConvertTools.cs" />
@@ -428,27 +404,7 @@
     <Compile Include="TurtleTools\Taskbar.cs" />
     <Compile Include="TurtleTools\UDPer.cs" />
     <Compile Include="TurtleTools\XXHash64.cs" />
-    <Page Include="ContentControls\ExeControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
     <Page Include="ContentControls\MPVLibControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="ContentControls\TransImageControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="ContentsPlayWnd\ContentsPlayWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="ContentsPlayWnd\ScrollTextPlayWindow.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="ContentsPlayWnd\WelcomeBoardWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -541,9 +497,6 @@
     <None Include="Resources\one_black_pixel.png" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Interop.Shell32.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
     <Content Include="lib\mpv-2.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,7 +15,7 @@ using NewHyOnPlayer.Services;
 
 namespace NewHyOnPlayer.PlaybackModes
 {
-    internal sealed class SeamlessPlaybackContainer
+    internal sealed class SeamlessPlaybackContainer : IPlaybackContainer
     {
         private readonly MainWindow owner;
         private readonly Canvas hostCanvas;
@@ -90,29 +90,6 @@ namespace NewHyOnPlayer.PlaybackModes
             hostZOrderSeed = layouts.Length;
         }
 
-        public void ShowPage(SharedPageInfoClass currentPage, SharedPageInfoClass nextPage, string playlistName)
-        {
-            if (currentPage == null)
-            {
-                return;
-            }
-
-            Initialize();
-            Interlocked.Exchange(ref completionHandling, 0);
-            int version = Interlocked.Increment(ref playbackVersion);
-            Task.Run(async () =>
-            {
-                try
-                {
-                    await ShowPageInternalAsync(version, currentPage, nextPage, playlistName).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Logger.WriteErrorLog($"페이지 전환 실패: {ex}", Logger.GetLogFileName());
-                }
-            });
-        }
-
         public void PlayNextPage()
         {
             Initialize();
@@ -139,31 +116,6 @@ namespace NewHyOnPlayer.PlaybackModes
                     Logger.WriteErrorLog($"다음 seamless 페이지 전환 실패: {ex}", Logger.GetLogFileName());
                 }
             });
-        }
-
-        public void PlayPreviousPage()
-        {
-            if (owner?.g_PageInfoManager?.g_PageInfoClassList == null || owner.g_PageInfoManager.g_PageInfoClassList.Count == 0)
-            {
-                return;
-            }
-
-            Logger.WriteLog("PlayPrevContents Called.", Logger.GetLogFileName());
-
-            if (owner.g_PageIndex > 1)
-            {
-                owner.g_PageIndex -= 2;
-            }
-            else if (owner.g_PageIndex == 1)
-            {
-                owner.g_PageIndex = owner.g_PageInfoManager.g_PageInfoClassList.Count - 1;
-            }
-            else
-            {
-                owner.g_PageIndex = owner.g_PageInfoManager.g_PageInfoClassList.Count - 2;
-            }
-
-            PlayNextPage();
         }
 
         public void PlayFirstPage()
@@ -247,16 +199,11 @@ namespace NewHyOnPlayer.PlaybackModes
             }
         }
 
-        public bool TryApplySyncIndex(int index)
-        {
-            SeamlessLayoutRuntime active = GetActiveLayout();
-            return active != null && active.TryApplySyncIndex(index);
-        }
 
-        public SeamlessSyncStatus GetPrimarySyncStatus()
+        public SeamlessPlaybackStatus GetPrimaryPlaybackStatus()
         {
             SeamlessLayoutRuntime active = GetActiveLayout();
-            return active != null ? active.GetPrimarySyncStatus() : null;
+            return active != null ? active.GetPrimaryPlaybackStatus() : null;
         }
 
         public List<PlaybackDebugItem> GetDebugItems()
@@ -620,10 +567,6 @@ namespace NewHyOnPlayer.PlaybackModes
                     return;
                 }
 
-                if (pulse.Status != null)
-                {
-                    owner?.HandleSeamlessSyncLeaderTick(pulse.Status);
-                }
             }));
         }
 
@@ -1700,6 +1643,10 @@ namespace NewHyOnPlayer.PlaybackModes
 
             SeamlessLayoutRuntime active = GetActiveLayout();
             return ReferenceEquals(active, layout);
+        }
+        public void Dispose()
+        {
+            StopAll();
         }
     }
 }

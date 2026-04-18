@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
@@ -234,78 +234,14 @@ namespace NewHyOnPlayer.PlaybackModes
             });
         }
 
-        public bool TryResolveStartOffsetMilliseconds(int index, out long offsetMilliseconds)
-        {
-            offsetMilliseconds = 0;
-            if (!HasPlayableItems)
-            {
-                return false;
-            }
 
-            List<SeamlessContentItem> items = currentPlan.Items;
-            if (index < 0 || index >= items.Count)
-            {
-                return false;
-            }
-
-            long offset = 0;
-            for (int i = 0; i < index; i++)
-            {
-                offset += GetItemDurationMilliseconds(i);
-            }
-
-            offsetMilliseconds = offset;
-            return true;
-        }
-
-        public bool TryApplySyncIndex(int index)
-        {
-            if (!HasPlayableItems)
-            {
-                return false;
-            }
-
-            List<SeamlessContentItem> items = currentPlan.Items;
-            if (index < 0 || items == null || index >= items.Count)
-            {
-                return false;
-            }
-
-            currentItemIndex = index;
-            currentItemElapsedMilliseconds = 0;
-            currentItemDurationMilliseconds = GetItemDurationMilliseconds(index);
-            appliedLoopState = null;
-
-            bool applied = true;
-            RunOnUiThread(() =>
-            {
-                if (!SwitchToCurrentItem(isActive))
-                {
-                    applied = false;
-                    return;
-                }
-
-                if (isActive)
-                {
-                    surface.ShowSurface();
-                }
-            });
-
-            if (applied)
-            {
-                State = isActive ? SeamlessSlotState.Active : SeamlessSlotState.Ready;
-            }
-
-            return applied;
-        }
-
-        public SeamlessSyncStatus GetSyncStatus()
+        public SeamlessPlaybackStatus GetPlaybackStatus()
         {
             SeamlessContentItem current = GetCurrentItem();
             SeamlessContentItem next = GetNextItem();
             bool isVisible = IsSurfaceVisible();
 
-            return new SeamlessSyncStatus
+            return new SeamlessPlaybackStatus
             {
                 ElementName = ElementName,
                 CurrentContentName = current != null && current.Source != null ? current.Source.CIF_FileName : string.Empty,
