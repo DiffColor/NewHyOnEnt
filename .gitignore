@@ -219,6 +219,7 @@ Test/
 
 # Misc
 **/ClientBin/
+tmp/
 ~$*
 *~
 *.dbmdl

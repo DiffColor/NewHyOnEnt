@@ -146,6 +146,11 @@ jobs:
           Remove-Item -Recurse -Force "Manager/NewHyOn_Settings/bin/publish" -ErrorAction SilentlyContinue
           & "Manager/NewHyOn_Settings/publish-single-file.ps1" -Configuration Release
 
+      - name: Publish StartApps Manager single file
+        shell: pwsh
+        run: |
+          & "StartApps/publish-single-file.ps1" -StartAppsProfile manager -Configuration Release
+
       - name: Package Manager binaries for release
         shell: pwsh
         run: |
@@ -156,6 +161,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
           Copy-Item -Path "Manager/NewHyOn_Manager/bin/Release/*" -Destination $packageRoot -Recurse -Force
           Copy-Item -Path "Manager/NewHyOn_Settings/bin/publish/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "StartApps/bin/publish/manager/*" -Destination $packageRoot -Recurse -Force
           Copy-Item -Path "Manager/ContentViewer/bin/Release/*" -Destination $packageRoot -Recurse -Force
           Copy-Item -Path "Manager/PageViewer/bin/Release/*" -Destination $packageRoot -Recurse -Force
           Compress-Archive -Path "$packageRoot/*" -DestinationPath $zip -Force
@@ -238,6 +244,11 @@ jobs:
           Remove-Item -Recurse -Force "Player/Windows/NewHyOn_Player_Settings/bin/publish" -ErrorAction SilentlyContinue
           & "Player/Windows/NewHyOn_Player_Settings/publish-single-file.ps1" -Configuration Release
 
+      - name: Publish StartApps Player single file
+        shell: pwsh
+        run: |
+          & "StartApps/publish-single-file.ps1" -StartAppsProfile player -Configuration Release
+
       - name: Package Player Windows binaries for release
         shell: pwsh
         run: |
@@ -248,6 +259,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
           Copy-Item -Path "Player/Windows/NewHyOn_Player/bin/x64/Release/*" -Destination $packageRoot -Recurse -Force
           Copy-Item -Path "Player/Windows/NewHyOn_Player_Settings/bin/publish/*" -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path "StartApps/bin/publish/player/*" -Destination $packageRoot -Recurse -Force
           Compress-Archive -Path "$packageRoot/*" -DestinationPath $zip -Force
 
       - name: Upload Player Windows artifact
