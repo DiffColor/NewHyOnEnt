@@ -184,6 +184,12 @@ public class DataSyncManager {
     }
 
     public long enqueuePayloadUpdate(UpdatePayloadModels.UpdatePayload payload, boolean isScheduleQueue) {
+        return enqueuePayloadUpdate(payload, isScheduleQueue, true);
+    }
+
+    private long enqueuePayloadUpdate(UpdatePayloadModels.UpdatePayload payload,
+                                      boolean isScheduleQueue,
+                                      boolean scheduleProcessor) {
         if (payload == null || payload.PageList == null || payload.Pages == null || payload.Pages.isEmpty()) {
             return -1;
         }
@@ -219,8 +225,211 @@ public class DataSyncManager {
                     null,
                     createdTicks);
         }
-        queueProcessor.schedule();
+        if (scheduleProcessor) {
+            queueProcessor.schedule();
+        }
         return enqueued != null ? enqueued.getId() : -1;
+    }
+
+    public String enqueueScheduleUpdate(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (schedule == null) {
+            return "";
+        }
+        String cacheId = resolveScheduleCacheId(schedule);
+        if (TextUtils.isEmpty(cacheId)) {
+            return "";
+        }
+
+        if (schedule.Playlists != null) {
+            for (UpdatePayloadModels.SchedulePlaylistPayload playlist : schedule.Playlists) {
+                if (playlist == null || playlist.PageList == null || playlist.Pages == null || playlist.Pages.isEmpty()) {
+                    continue;
+                }
+                UpdatePayloadModels.UpdatePayload payload = new UpdatePayloadModels.UpdatePayload();
+                payload.PageList = playlist.PageList;
+                payload.Pages = playlist.Pages;
+                payload.Contract = playlist.Contract;
+                long queueId = enqueuePayloadUpdate(payload, true, false);
+                if (queueId <= 0 && !hasActivePayloadQueue(payload, true)) {
+                    return "";
+                }
+            }
+        }
+
+        long scheduleQueueId = enqueueScheduleApplyQueue(schedule, false);
+        if (scheduleQueueId <= 0) {
+            return "";
+        }
+
+        queueProcessor.schedule();
+        return getQueueExternalId(scheduleQueueId);
+    }
+
+    private String resolveScheduleCacheId(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (schedule == null) {
+            return "";
+        }
+        if (!TextUtils.isEmpty(schedule.PlayerId)) {
+            return schedule.PlayerId;
+        }
+        if (!TextUtils.isEmpty(schedule.PlayerName)) {
+            return schedule.PlayerName;
+        }
+        if (schedule.WeeklySchedule != null) {
+            if (!TextUtils.isEmpty(schedule.WeeklySchedule.PlayerID)) {
+                return schedule.WeeklySchedule.PlayerID;
+            }
+            if (!TextUtils.isEmpty(schedule.WeeklySchedule.PlayerName)) {
+                return schedule.WeeklySchedule.PlayerName;
+            }
+        }
+        String stored = rethinkClient.getStoredPlayerGuid();
+        if (TextUtils.isEmpty(stored)) {
+            stored = rethinkClient.ensurePlayerGuid();
+        }
+        return TextUtils.isEmpty(stored) ? "" : stored;
+    }
+
+    private String resolveSchedulePlayerId(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (schedule == null) {
+            return "";
+        }
+        if (!TextUtils.isEmpty(schedule.PlayerId)) {
+            return schedule.PlayerId;
+        }
+        if (schedule.WeeklySchedule != null && !TextUtils.isEmpty(schedule.WeeklySchedule.PlayerID)) {
+            return schedule.WeeklySchedule.PlayerID;
+        }
+        String stored = rethinkClient.getStoredPlayerGuid();
+        if (TextUtils.isEmpty(stored)) {
+            stored = rethinkClient.ensurePlayerGuid();
+        }
+        return TextUtils.isEmpty(stored) ? "" : stored;
+    }
+
+    private String resolveSchedulePlayerName(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (schedule == null) {
+            return "";
+        }
+        if (!TextUtils.isEmpty(schedule.PlayerName)) {
+            return schedule.PlayerName;
+        }
+        if (schedule.WeeklySchedule != null && !TextUtils.isEmpty(schedule.WeeklySchedule.PlayerName)) {
+            return schedule.WeeklySchedule.PlayerName;
+        }
+        String storedPlayerName = rethinkClient.getStoredPlayerName();
+        return TextUtils.isEmpty(storedPlayerName)
+                ? (TextUtils.isEmpty(AndoWSignageApp.PLAYER_ID) ? "" : AndoWSignageApp.PLAYER_ID)
+                : storedPlayerName;
+    }
+
+    private String buildSchedulePayloadJson(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (schedule == null) {
+            return "";
+        }
+        UpdatePayloadModels.UpdatePayload payload = new UpdatePayloadModels.UpdatePayload();
+        payload.Schedule = schedule;
+        return UpdatePayloadModels.UpdatePayloadCodec.encode(payload);
+    }
+
+    private long enqueueScheduleApplyQueue(UpdatePayloadModels.ScheduleUpdatePayload schedule,
+                                           boolean allowDuplicate) {
+        String payloadJson = buildSchedulePayloadJson(schedule);
+        if (TextUtils.isEmpty(payloadJson)) {
+            return -1;
+        }
+        if (!allowDuplicate && hasActiveScheduleApplyQueue(payloadJson)) {
+            return findActiveScheduleApplyQueueId(payloadJson);
+        }
+        String downloadJson = gson.toJson(new ArrayList<UpdateQueueContract.DownloadEntry>());
+        RealmUpdateQueue enqueued = UpdateQueueHelper.enqueue(UpdateQueueContract.Type.SCHEDULE,
+                payloadJson,
+                downloadJson,
+                0,
+                true);
+        if (enqueued != null) {
+            Long createdTicks = UpdateQueueHelper.toDotNetLocalTicks(enqueued.getCreatedAt());
+            String externalId = TextUtils.isEmpty(enqueued.getExternalId())
+                    ? String.valueOf(enqueued.getId())
+                    : enqueued.getExternalId();
+            rethinkClient.upsertCommandHistoryForQueue(resolveSchedulePlayerId(schedule),
+                    resolveSchedulePlayerName(schedule),
+                    "updateschedule",
+                    externalId,
+                    "queued",
+                    null,
+                    null,
+                    null,
+                    createdTicks);
+        }
+        return enqueued != null ? enqueued.getId() : -1;
+    }
+
+    private boolean hasActivePayloadQueue(UpdatePayloadModels.UpdatePayload payload, boolean isScheduleQueue) {
+        UpdateQueueContract.PlaylistPayload contract = buildContractPayload(payload);
+        if (contract == null || TextUtils.isEmpty(contract.playlistName)) {
+            return false;
+        }
+        String payloadJson = UpdatePayloadModels.UpdatePayloadCodec.encode(payload);
+        if (TextUtils.isEmpty(payloadJson)) {
+            return false;
+        }
+        return isDuplicateQueue(contract, payloadJson, isScheduleQueue);
+    }
+
+    private boolean hasActiveScheduleApplyQueue(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        String payloadJson = buildSchedulePayloadJson(schedule);
+        return !TextUtils.isEmpty(payloadJson) && hasActiveScheduleApplyQueue(payloadJson);
+    }
+
+    private boolean hasActiveScheduleApplyQueue(String payloadJson) {
+        return findActiveScheduleApplyQueueId(payloadJson) > 0;
+    }
+
+    private long findActiveScheduleApplyQueueId(String payloadJson) {
+        if (TextUtils.isEmpty(payloadJson)) {
+            return -1;
+        }
+        Realm realm = Realm.getDefaultInstance();
+        try {
+            List<RealmUpdateQueue> list = realm.where(RealmUpdateQueue.class)
+                    .equalTo("type", UpdateQueueContract.Type.SCHEDULE)
+                    .findAll();
+            if (list == null || list.isEmpty()) {
+                return -1;
+            }
+            for (RealmUpdateQueue queue : list) {
+                if (queue == null || !isActiveStatus(queue.getStatus())) {
+                    continue;
+                }
+                if (TextUtils.equals(payloadJson, queue.getPayloadJson())) {
+                    return queue.getId();
+                }
+            }
+            return -1;
+        } finally {
+            realm.close();
+        }
+    }
+
+    private String getQueueExternalId(long queueId) {
+        if (queueId <= 0) {
+            return "";
+        }
+        Realm realm = Realm.getDefaultInstance();
+        try {
+            RealmUpdateQueue queue = realm.where(RealmUpdateQueue.class)
+                    .equalTo("id", queueId)
+                    .findFirst();
+            if (queue == null) {
+                return "";
+            }
+            return TextUtils.isEmpty(queue.getExternalId())
+                    ? String.valueOf(queue.getId())
+                    : queue.getExternalId();
+        } finally {
+            realm.close();
+        }
     }
 
     public boolean processQueueImmediate(long queueId, boolean ignoreLease) {
@@ -1051,6 +1260,29 @@ public class DataSyncManager {
                     restoreApplyBackup(backup);
                 }
             }
+        } else if (TextUtils.equals(queue.getType(), UpdateQueueContract.Type.SCHEDULE)) {
+            UpdatePayloadModels.UpdatePayload updatePayload =
+                    UpdatePayloadModels.UpdatePayloadCodec.decode(queue.getPayloadJson());
+            UpdatePayloadModels.ScheduleUpdatePayload schedulePayload =
+                    updatePayload == null ? null : updatePayload.Schedule;
+            if (schedulePayload == null) {
+                lastError = "Invalid schedule payload";
+                errorCode = "INVALID_SCHEDULE_PAYLOAD";
+                applied = false;
+            } else {
+                playerGUID = resolveSchedulePlayerId(schedulePayload);
+                try {
+                    applied = applyQueuedSchedulePayload(schedulePayload);
+                    if (!applied) {
+                        lastError = "Failed to apply schedule payload";
+                        errorCode = "SCHEDULE_APPLY_FAIL";
+                    }
+                } catch (Exception applyEx) {
+                    applied = false;
+                    lastError = applyEx.getMessage();
+                    errorCode = "SCHEDULE_APPLY_FAIL";
+                }
+            }
         }
         if (applied) {
             UpdateQueueHelper.updateStatus(queue.getId(), UpdateQueueContract.Status.DONE);
@@ -1095,6 +1327,46 @@ public class DataSyncManager {
             cleanupTempDownloads(downloads, moveResult);
         }
         return applied;
+    }
+
+    private boolean applyQueuedSchedulePayload(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (schedule == null) {
+            return false;
+        }
+        String cacheId = resolveScheduleCacheId(schedule);
+        if (TextUtils.isEmpty(cacheId)) {
+            return false;
+        }
+        if (!saveScheduleCache(cacheId, schedule)) {
+            return false;
+        }
+        if (schedule.WeeklySchedule != null) {
+            String weeklyKey = resolveWeeklyScheduleKey(schedule);
+            if (TextUtils.isEmpty(weeklyKey)
+                    || !applyWeeklySchedulePayload(weeklyKey, schedule.WeeklySchedule)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String resolveWeeklyScheduleKey(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (schedule == null) {
+            return "";
+        }
+        if (!TextUtils.isEmpty(schedule.PlayerId)) {
+            return schedule.PlayerId;
+        }
+        if (schedule.WeeklySchedule != null && !TextUtils.isEmpty(schedule.WeeklySchedule.PlayerID)) {
+            return schedule.WeeklySchedule.PlayerID;
+        }
+        if (!TextUtils.isEmpty(schedule.PlayerName)) {
+            return schedule.PlayerName;
+        }
+        if (schedule.WeeklySchedule != null && !TextUtils.isEmpty(schedule.WeeklySchedule.PlayerName)) {
+            return schedule.WeeklySchedule.PlayerName;
+        }
+        return resolveScheduleCacheId(schedule);
     }
 
     public boolean applyNextReadyQueue() {

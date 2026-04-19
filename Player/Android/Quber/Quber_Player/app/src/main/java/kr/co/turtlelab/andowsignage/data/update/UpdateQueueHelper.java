@@ -50,6 +50,15 @@ public final class UpdateQueueHelper {
                     && !TextUtils.isEmpty(updatePayload.Contract.PlayerId)) {
                 return updatePayload.Contract.PlayerId;
             }
+            if (updatePayload != null && updatePayload.Schedule != null
+                    && !TextUtils.isEmpty(updatePayload.Schedule.PlayerId)) {
+                return updatePayload.Schedule.PlayerId;
+            }
+            if (updatePayload != null && updatePayload.Schedule != null
+                    && updatePayload.Schedule.WeeklySchedule != null
+                    && !TextUtils.isEmpty(updatePayload.Schedule.WeeklySchedule.PlayerID)) {
+                return updatePayload.Schedule.WeeklySchedule.PlayerID;
+            }
         } catch (Exception ignore) {
         }
         String owner = RethinkDbClient.getInstance().getStoredPlayerGuid();
@@ -619,6 +628,25 @@ public final class UpdateQueueHelper {
                             playerId = updatePayload.Contract.PlayerId;
                         }
                     }
+                    if (updatePayload.Schedule != null) {
+                        if (TextUtils.isEmpty(playerName)) {
+                            playerName = updatePayload.Schedule.PlayerName == null ? "" : updatePayload.Schedule.PlayerName;
+                        }
+                        if (TextUtils.isEmpty(playerId) && !TextUtils.isEmpty(updatePayload.Schedule.PlayerId)) {
+                            playerId = updatePayload.Schedule.PlayerId;
+                        }
+                        if (updatePayload.Schedule.WeeklySchedule != null) {
+                            if (TextUtils.isEmpty(playerName)) {
+                                playerName = updatePayload.Schedule.WeeklySchedule.PlayerName == null
+                                        ? ""
+                                        : updatePayload.Schedule.WeeklySchedule.PlayerName;
+                            }
+                            if (TextUtils.isEmpty(playerId)
+                                    && !TextUtils.isEmpty(updatePayload.Schedule.WeeklySchedule.PlayerID)) {
+                                playerId = updatePayload.Schedule.WeeklySchedule.PlayerID;
+                            }
+                        }
+                    }
                     if (updatePayload.PageList != null) {
                         String listName = updatePayload.PageList.PLI_PageListName == null ? "" : updatePayload.PageList.PLI_PageListName;
                         if (!TextUtils.isEmpty(listName)) {
@@ -688,6 +716,15 @@ public final class UpdateQueueHelper {
             if (updatePayload != null && updatePayload.Contract != null
                     && !TextUtils.isEmpty(updatePayload.Contract.PlayerId)) {
                 return updatePayload.Contract.PlayerId;
+            }
+            if (updatePayload != null && updatePayload.Schedule != null
+                    && !TextUtils.isEmpty(updatePayload.Schedule.PlayerId)) {
+                return updatePayload.Schedule.PlayerId;
+            }
+            if (updatePayload != null && updatePayload.Schedule != null
+                    && updatePayload.Schedule.WeeklySchedule != null
+                    && !TextUtils.isEmpty(updatePayload.Schedule.WeeklySchedule.PlayerID)) {
+                return updatePayload.Schedule.WeeklySchedule.PlayerID;
             }
         } catch (Exception ignore) {
         }

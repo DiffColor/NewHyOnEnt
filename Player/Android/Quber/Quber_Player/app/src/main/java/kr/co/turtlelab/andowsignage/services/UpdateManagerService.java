@@ -301,39 +301,11 @@ public class UpdateManagerService extends Service implements SignalRClientServic
         });
     }
 
-    private boolean applySchedulePayload(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+    private String applySchedulePayload(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
         if (schedule == null) {
-            return false;
+            return "";
         }
-        String cacheId = !TextUtils.isEmpty(schedule.PlayerId)
-                ? schedule.PlayerId
-                : schedule.PlayerName;
-        if (TextUtils.isEmpty(cacheId)) {
-            return false;
-        }
-        syncManager.saveScheduleCache(cacheId, schedule);
-        if (schedule.Playlists != null) {
-            for (UpdatePayloadModels.SchedulePlaylistPayload playlist : schedule.Playlists) {
-                if (playlist == null || playlist.PageList == null || playlist.Pages == null || playlist.Pages.isEmpty()) {
-                    continue;
-                }
-                UpdatePayloadModels.UpdatePayload payload = new UpdatePayloadModels.UpdatePayload();
-                payload.PageList = playlist.PageList;
-                payload.Pages = playlist.Pages;
-                payload.Contract = playlist.Contract;
-                syncManager.enqueuePayloadUpdate(payload, true);
-            }
-        }
-        if (schedule.WeeklySchedule != null) {
-            String weeklyKey = !TextUtils.isEmpty(schedule.PlayerId)
-                    ? schedule.PlayerId
-                    : schedule.PlayerName;
-            if (TextUtils.isEmpty(weeklyKey)) {
-                weeklyKey = resolvePlayerGuid();
-            }
-            syncManager.applyWeeklySchedulePayload(weeklyKey, schedule.WeeklySchedule);
-        }
-        return true;
+        return syncManager.enqueueScheduleUpdate(schedule);
     }
 
     private void executeCommandAsync(Runnable task) {
@@ -442,9 +414,9 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                     handled = false;
                     break;
                 }
-                boolean scheduleApplied = applySchedulePayload(payload.Schedule);
-                if (scheduleApplied) {
-                    client.updateCommandHistory(historyId, "done", null, null, null);
+                String scheduleRefQueueId = applySchedulePayload(payload.Schedule);
+                if (!TextUtils.isEmpty(scheduleRefQueueId)) {
+                    client.updateCommandHistory(historyId, "queued", null, null, scheduleRefQueueId);
                 } else {
                     client.updateCommandHistory(historyId, "failed", "SCHEDULE_PAYLOAD", "payload missing", null);
                     handled = false;

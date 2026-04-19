@@ -40,6 +40,7 @@ import kr.co.turtlelab.andowsignage.tools.SystemUtils;
 
 public class MediaView extends RelativeLayout {
     private static final String TAG = "MediaView";
+    private static final String VIDEO_PREPARING_TAG_PREFIX = "preparing:";
 
     public interface PreparationCallback {
         void onPrepared(MediaView view);
@@ -58,6 +59,7 @@ public class MediaView extends RelativeLayout {
     ImageView imgView1;
     ImageView imgView2;
     TurtleVideoView videoView;
+    TurtleVideoView videoView2;
     // 현재 seamless 재생 구조에서는 WebView 기반 콘텐츠를 사용하지 않는다.
 
     Activity act;
@@ -78,6 +80,7 @@ public class MediaView extends RelativeLayout {
     private String preparedInitialPath = "";
     private CONTENT_TYPE preparedNextType = CONTENT_TYPE.Image;
     private String preparedNextPath = "";
+    private boolean preparedNextMuted = true;
     private PreparationCallback pendingPreparationCallback;
     private PlaybackReadyCallback pendingPlaybackReadyCallback;
     private boolean playbackReadyNotified = false;
@@ -97,6 +100,9 @@ public class MediaView extends RelativeLayout {
             markVideoPresentationStarted();
         }
     };
+    private Runnable videoSwitchFallbackRunnable;
+    private TurtleVideoView completionSuppressedVideoView;
+    private TurtleVideoView pendingVideoSwitchTargetView;
     private final Runnable contentAdvanceRunnable = new Runnable() {
         @Override
         public void run() {
@@ -164,6 +170,10 @@ public class MediaView extends RelativeLayout {
             videoView.setVisibility(View.GONE);
             resetViewPosition(videoView);
         }
+        if (videoView2 != null) {
+            videoView2.setVisibility(View.GONE);
+            resetViewPosition(videoView2);
+        }
         setVisibility(View.GONE);
     }
 
@@ -197,36 +207,66 @@ public class MediaView extends RelativeLayout {
         videoView = new TurtleVideoView(ctx);
         videoView.setVisibility(View.GONE);
 
+        videoView2 = new TurtleVideoView(ctx);
+        videoView2.setVisibility(View.GONE);
+
         if (AndoWSignageApp.KEEP_ASPECT_RATIO) {
             imgView1.setScaleType(ScaleType.FIT_CENTER);
             imgView2.setScaleType(ScaleType.FIT_CENTER);
             videoView.setKeepAspectRatio(true);
+            videoView2.setKeepAspectRatio(true);
         } else {
             imgView1.setScaleType(ScaleType.FIT_XY);
             imgView2.setScaleType(ScaleType.FIT_XY);
             videoView.setKeepAspectRatio(false);
+            videoView2.setKeepAspectRatio(false);
         }
 
         addView(videoView, params);
+        addView(videoView2, params);
         addView(imgView1, params);
         addView(imgView2, params);
         restoreVisibleOutputs();
     }
 
     private void setViewEvents() {
+        setVideoViewEvents(videoView);
+        setVideoViewEvents(videoView2);
+    }
 
-        videoView.setOnCompletionListener(new OnCompletionListener() {
+    private void setVideoViewEvents(TurtleVideoView targetVideoView) {
+        if (targetVideoView == null) {
+            return;
+        }
+        targetVideoView.setOnCompletionListener(new OnCompletionListener() {
 
             @Override
             public void onCompletion(MediaPlayer mp) {
+                if (targetVideoView == completionSuppressedVideoView) {
+                    return;
+                }
+                if (targetVideoView != videoView || !isVideoViewOnScreen(targetVideoView)) {
+                    return;
+                }
                 handleVideoCompletion();
             }
         });
 
-        videoView.setOnErrorListener(new OnErrorListener() {
+        targetVideoView.setOnErrorListener(new OnErrorListener() {
 
             @Override
             public boolean onError(MediaPlayer arg0, int arg1, int arg2) {
+                if (targetVideoView == pendingVideoSwitchTargetView) {
+                    pendingVideoSwitchTargetView = null;
+                    completionSuppressedVideoView = null;
+                    stopVideoPlayback(targetVideoView);
+                    popContent();
+                    return true;
+                }
+                if (targetVideoView != videoView || !isVideoViewOnScreen(targetVideoView)) {
+                    stopVideoPlayback(targetVideoView);
+                    return true;
+                }
                 popContent();
                 return true;
             }
@@ -305,6 +345,7 @@ public class MediaView extends RelativeLayout {
         preparedInitialPath = current == null ? "" : current.getFilePath();
         preparedNextType = safeContentType(next);
         preparedNextPath = next == null ? "" : next.getFilePath();
+        preparedNextMuted = next != null && next.isMuted();
         playTime = current == null ? 1 : current.getPlayTimeSec();
 
         switch (preparedInitialType) {
@@ -439,6 +480,11 @@ public class MediaView extends RelativeLayout {
             videoView.setVisibility(View.GONE);
             resetViewPosition(videoView);
         }
+        if (videoView2 != null) {
+            videoView2.setMediaInfoListener(null);
+            videoView2.setVisibility(View.GONE);
+            resetViewPosition(videoView2);
+        }
         setVisibility(View.GONE);
     }
 
@@ -530,7 +576,8 @@ public class MediaView extends RelativeLayout {
                             cdmList.get(contentIdx).getFilePath(),
                             String.valueOf(cdmList.get(contentIdx).isMuted()),
                             cdmList.get(j).getType(),
-                            cdmList.get(j).getFilePath()
+                            cdmList.get(j).getFilePath(),
+                            String.valueOf(cdmList.get(j).isMuted())
                     });
 
                     if (!waitForAdvanceSignal()) {
@@ -581,6 +628,7 @@ public class MediaView extends RelativeLayout {
                         CONTENT_TYPE type1 = CONTENT_TYPE.valueOf(contentData[0]);
                         boolean muted1 = Boolean.parseBoolean(contentData[2]);
                         CONTENT_TYPE type2 = CONTENT_TYPE.valueOf(contentData[3]);
+                        boolean muted2 = contentData.length > 5 && Boolean.parseBoolean(contentData[5]);
 
                         switch (type1) {
                             case Image:
@@ -592,6 +640,7 @@ public class MediaView extends RelativeLayout {
                                         s_isFirst,
                                         type2,
                                         contentData[4],
+                                        muted2,
                                         deferVideoStop,
                                         deferVideoStop ? new Runnable() {
                                             @Override
@@ -607,7 +656,7 @@ public class MediaView extends RelativeLayout {
                                 boolean keepPreviousVideoOpen = usedType == CONTENT_TYPE.Video;
                                 releaseUsedResources(usedType, type1, deferImageHide, keepPreviousVideoOpen);
                                 prepareForNewContentWindow(true);
-                                showVideoWithImageFade(contentData[1], muted1, type2, contentData[4]);
+                                showVideoWithImageFade(contentData[1], muted1, type2, contentData[4], muted2);
                                 break;
 
                             case Flash:
@@ -698,13 +747,11 @@ public class MediaView extends RelativeLayout {
         return null;
     }
 
-    private void showImageWithCrossfade(final String filePath, boolean immediate, final CONTENT_TYPE nextType, final String nextPath, boolean fadeOverVideo, final Runnable endAction) {
+    private void showImageWithCrossfade(final String filePath, boolean immediate, final CONTENT_TYPE nextType, final String nextPath, final boolean nextMuted, boolean fadeOverVideo, final Runnable endAction) {
         restoreVisibleOutputs();
         final ImageView currentView = getVisibleImageView();
         final ImageView preloadedView = findPreloadedImageView(filePath, currentView);
         final ImageView nextView = preloadedView != null ? preloadedView : getHiddenImageView(currentView);
-        final String uri = LocalPathUtils.getUriStringFromAbsPath(filePath);
-
         if (nextView == null) {
             return;
         }
@@ -726,10 +773,10 @@ public class MediaView extends RelativeLayout {
                 notifyContentActuallyPresented(nextView, new Runnable() {
                     @Override
                     public void run() {
-                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
                         if (endAction != null) {
                             endAction.run();
                         }
+                        preloadNextMediaIfNeeded(nextType, nextPath, nextMuted, currentView);
                     }
                 });
                 return;
@@ -744,10 +791,10 @@ public class MediaView extends RelativeLayout {
                         notifyContentActuallyPresented(nextView, new Runnable() {
                             @Override
                             public void run() {
-                                preloadNextImageIfNeeded(nextType, nextPath, currentView);
                                 if (endAction != null) {
                                     endAction.run();
                                 }
+                                preloadNextMediaIfNeeded(nextType, nextPath, nextMuted, currentView);
                             }
                         });
                     }
@@ -766,10 +813,10 @@ public class MediaView extends RelativeLayout {
                             notifyContentActuallyPresented(nextView, new Runnable() {
                                 @Override
                                 public void run() {
-                                    preloadNextImageIfNeeded(nextType, nextPath, currentView);
                                     if (endAction != null) {
                                         endAction.run();
                                     }
+                                    preloadNextMediaIfNeeded(nextType, nextPath, nextMuted, currentView);
                                 }
                             });
                         }
@@ -792,10 +839,10 @@ public class MediaView extends RelativeLayout {
                 notifyContentActuallyPresented(nextView, new Runnable() {
                     @Override
                     public void run() {
-                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
                         if (endAction != null) {
                             endAction.run();
                         }
+                        preloadNextMediaIfNeeded(nextType, nextPath, nextMuted, currentView);
                     }
                 });
             }
@@ -811,10 +858,10 @@ public class MediaView extends RelativeLayout {
                 notifyContentActuallyPresented(nextView, new Runnable() {
                     @Override
                     public void run() {
-                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
                         if (endAction != null) {
                             endAction.run();
                         }
+                        preloadNextMediaIfNeeded(nextType, nextPath, nextMuted, currentView);
                     }
                 });
             }
@@ -837,10 +884,10 @@ public class MediaView extends RelativeLayout {
                                 notifyContentActuallyPresented(nextView, new Runnable() {
                                     @Override
                                     public void run() {
-                                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
                                         if (endAction != null) {
                                             endAction.run();
                                         }
+                                        preloadNextMediaIfNeeded(nextType, nextPath, nextMuted, currentView);
                                     }
                                 });
                             }
@@ -860,10 +907,10 @@ public class MediaView extends RelativeLayout {
                 notifyContentActuallyPresented(nextView, new Runnable() {
                     @Override
                     public void run() {
-                        preloadNextImageIfNeeded(nextType, nextPath, currentView);
                         if (endAction != null) {
                             endAction.run();
                         }
+                        preloadNextMediaIfNeeded(nextType, nextPath, nextMuted, currentView);
                     }
                 });
             }
@@ -924,6 +971,179 @@ public class MediaView extends RelativeLayout {
         displayImageAtRenderSize(targetView, nextPath, null);
     }
 
+    private void preloadNextMediaIfNeeded(CONTENT_TYPE nextType, String nextPath, boolean nextMuted, ImageView imageTargetView) {
+        if (nextType == CONTENT_TYPE.Image) {
+            preloadNextImageIfNeeded(nextType, nextPath, imageTargetView);
+            return;
+        }
+        if (nextType == CONTENT_TYPE.Video) {
+            preloadNextVideoIfNeeded(nextType, nextPath, nextMuted, mediaConfigurationVersion);
+        }
+    }
+
+    private void preloadNextVideoIfNeeded(CONTENT_TYPE nextType, String nextPath, boolean nextMuted, final int configVersion) {
+        if (nextType != CONTENT_TYPE.Video) {
+            return;
+        }
+        final String normalizedPath = normalizeLocalVideoPath(nextPath);
+        if (!isPlayableLocalVideo(normalizedPath)) {
+            return;
+        }
+        final TurtleVideoView targetVideoView = getStandbyVideoView();
+        if (targetVideoView == null) {
+            return;
+        }
+        if (isPreparedVideoView(targetVideoView, normalizedPath) || isPreparingVideoView(targetVideoView, normalizedPath)) {
+            return;
+        }
+        prepareStandbyVideoView(targetVideoView, normalizedPath, nextMuted, configVersion);
+    }
+
+    private void prepareStandbyVideoView(final TurtleVideoView targetVideoView, final String normalizedPath, boolean muted, final int configVersion) {
+        if (targetVideoView == null || TextUtils.isEmpty(normalizedPath)) {
+            return;
+        }
+        final String preparingTag = getPreparingVideoTag(normalizedPath);
+        try {
+            targetVideoView.setTag(preparingTag);
+            targetVideoView.setMediaInfoListener(null);
+            targetVideoView.setMuted(true);
+            targetVideoView.setLoop(true);
+            showStandbyVideoView(targetVideoView);
+            targetVideoView.setMediaInfoListener(new MediaPlayer.OnInfoListener() {
+                @Override
+                public boolean onInfo(MediaPlayer mp, int what, int extra) {
+                    if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                        markStandbyVideoPrepared(targetVideoView, normalizedPath, preparingTag, configVersion, muted);
+                    }
+                    return false;
+                }
+            });
+            targetVideoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                @Override
+                public void onPrepared(MediaPlayer mp) {
+                    if (!isCurrentMediaConfiguration(configVersion)) {
+                        return;
+                    }
+                    try {
+                        targetVideoView.start();
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
+            targetVideoView.setVideoPath(normalizedPath);
+        } catch (Exception ignored) {
+            targetVideoView.setTag(null);
+        }
+    }
+
+    private void markStandbyVideoPrepared(TurtleVideoView targetVideoView, String normalizedPath, String preparingTag, int configVersion, boolean muted) {
+        if (targetVideoView == null || !isCurrentMediaConfiguration(configVersion)) {
+            return;
+        }
+        Object tag = targetVideoView.getTag();
+        if (!preparingTag.equals(tag)) {
+            return;
+        }
+        targetVideoView.setMediaInfoListener(null);
+        targetVideoView.setMuted(true);
+        targetVideoView.setLoop(true);
+        showStandbyVideoView(targetVideoView);
+        try {
+            if (!targetVideoView.isPlaying()) {
+                targetVideoView.start();
+            }
+        } catch (Exception ignored) {
+        }
+        targetVideoView.setTag(normalizedPath);
+    }
+
+    private String getPreparingVideoTag(String normalizedPath) {
+        return VIDEO_PREPARING_TAG_PREFIX + normalizedPath;
+    }
+
+    private boolean isPreparingVideoView(TurtleVideoView targetVideoView, String normalizedPath) {
+        return targetVideoView != null
+                && !TextUtils.isEmpty(normalizedPath)
+                && getPreparingVideoTag(normalizedPath).equals(targetVideoView.getTag());
+    }
+
+    private boolean isPreparedVideoView(TurtleVideoView targetVideoView, String normalizedPath) {
+        return targetVideoView != null
+                && !TextUtils.isEmpty(normalizedPath)
+                && normalizedPath.equals(targetVideoView.getTag());
+    }
+
+    private TurtleVideoView findPreparedVideoView(String normalizedPath, TurtleVideoView excludeView) {
+        if (isPreparedVideoView(videoView2, normalizedPath) && videoView2 != excludeView) {
+            return videoView2;
+        }
+        if (isPreparedVideoView(videoView, normalizedPath) && videoView != excludeView) {
+            return videoView;
+        }
+        return null;
+    }
+
+    private TurtleVideoView getStandbyVideoView() {
+        if (videoView2 != null && videoView2 != videoView) {
+            return videoView2;
+        }
+        return null;
+    }
+
+    private boolean isVideoViewOnScreen(TurtleVideoView targetVideoView) {
+        return targetVideoView != null
+                && targetVideoView.getVisibility() == View.VISIBLE
+                && Math.abs(targetVideoView.getTranslationX()) < 1f;
+    }
+
+    private void showVideoOnScreen(TurtleVideoView targetVideoView) {
+        if (targetVideoView == null) {
+            return;
+        }
+        targetVideoView.setVisibility(View.VISIBLE);
+        targetVideoView.setAlpha(1f);
+        targetVideoView.setTranslationX(0f);
+        targetVideoView.setTranslationY(0f);
+        targetVideoView.bringToFront();
+    }
+
+    private void showStandbyVideoView(TurtleVideoView targetVideoView) {
+        if (targetVideoView == null) {
+            return;
+        }
+        targetVideoView.setVisibility(View.VISIBLE);
+        targetVideoView.setAlpha(1f);
+        targetVideoView.setTranslationX(getStandbyTranslationX());
+        targetVideoView.setTranslationY(0f);
+    }
+
+    private float getStandbyTranslationX() {
+        int width = contentRenderWidth;
+        if (width <= 0) {
+            width = getWidth();
+        }
+        if (width <= 0) {
+            width = getMeasuredWidth();
+        }
+        if (width <= 0) {
+            width = AndoWSignageApp.getDeviceWidth();
+        }
+        if (width <= 0) {
+            width = 1920;
+        }
+        return width + 32f;
+    }
+
+    private void promoteVideoView(TurtleVideoView targetVideoView) {
+        if (targetVideoView == null || targetVideoView == videoView) {
+            return;
+        }
+        TurtleVideoView previousActiveVideoView = videoView;
+        videoView = targetVideoView;
+        videoView2 = previousActiveVideoView;
+    }
+
     private void hideAllImageOverlays() {
         hideImageOverlay(imgView1);
         hideImageOverlay(imgView2);
@@ -940,26 +1160,50 @@ public class MediaView extends RelativeLayout {
     }
 
     private void stopVideoPlayback() {
+        cancelVideoPresentationFallback();
+        stopVideoPlayback(videoView);
+        if (videoView2 != null && videoView2 != videoView) {
+            stopVideoPlayback(videoView2);
+        }
+    }
+
+    private void stopVideoPlayback(TurtleVideoView targetVideoView) {
+        if (targetVideoView == null) {
+            return;
+        }
         try {
-            cancelVideoPresentationFallback();
-            videoView.setMediaInfoListener(null);
-            videoView.stopPlayback();
+            if (targetVideoView == completionSuppressedVideoView) {
+                completionSuppressedVideoView = null;
+            }
+            if (targetVideoView == pendingVideoSwitchTargetView) {
+                pendingVideoSwitchTargetView = null;
+            }
+            targetVideoView.setTag(null);
+            targetVideoView.setMediaInfoListener(null);
+            targetVideoView.stopPlayback();
         } catch (Exception e) {
         } finally {
-            videoView.setVisibility(View.GONE);
-            resetViewPosition(videoView);
+            targetVideoView.setVisibility(View.GONE);
+            resetViewPosition(targetVideoView);
         }
     }
 
     private void pauseVideoPlayback() {
-        if (videoView == null) {
+        cancelVideoPresentationFallback();
+        pauseVideoPlayback(videoView);
+        if (videoView2 != null && videoView2 != videoView) {
+            pauseVideoPlayback(videoView2);
+        }
+    }
+
+    private void pauseVideoPlayback(TurtleVideoView targetVideoView) {
+        if (targetVideoView == null) {
             return;
         }
         try {
-            cancelVideoPresentationFallback();
-            videoView.setMediaInfoListener(null);
-            if (videoView.isPlaying()) {
-                videoView.pause();
+            targetVideoView.setMediaInfoListener(null);
+            if (targetVideoView.isPlaying()) {
+                targetVideoView.pause();
             }
         } catch (Exception ignored) {
         }
@@ -978,9 +1222,9 @@ public class MediaView extends RelativeLayout {
         }
     }
 
-    private void showVideoWithImageFade(final String videoPath, final boolean muted, final CONTENT_TYPE nextType, final String nextPath) {
+    private void showVideoWithImageFade(final String videoPath, final boolean muted, final CONTENT_TYPE nextType, final String nextPath, final boolean nextMuted) {
         restoreVisibleOutputs();
-        String normalizedPath = normalizeLocalVideoPath(videoPath);
+        final String normalizedPath = normalizeLocalVideoPath(videoPath);
         if (!isPlayableLocalVideo(normalizedPath)) {
             Log.w(TAG, "showVideoWithImageFade: invalid video file. path=" + normalizedPath);
             hideAllImageOverlays();
@@ -989,8 +1233,9 @@ public class MediaView extends RelativeLayout {
             return;
         }
 
+        final TurtleVideoView previousVideoView = isVideoViewOnScreen(videoView) ? videoView : null;
         final ImageView overlay = getVisibleImageView();
-        final boolean useFakeOverlay = overlay == null;
+        final boolean useFakeOverlay = overlay == null && previousVideoView == null;
         final ImageView fakeOverlay;
         final ImageView preloadTarget;
 
@@ -1012,7 +1257,6 @@ public class MediaView extends RelativeLayout {
         }
 
         final ImageView overlayToFade = overlay != null ? overlay : fakeOverlay;
-
         if (overlayToFade != null) {
             overlayToFade.animate().cancel();
             overlayToFade.setAlpha(1f);
@@ -1020,50 +1264,157 @@ public class MediaView extends RelativeLayout {
             overlayToFade.bringToFront();
         }
 
+        TurtleVideoView targetVideoView = findPreparedVideoView(normalizedPath, previousVideoView);
+        if (targetVideoView == null) {
+            targetVideoView = previousVideoView != null ? getStandbyVideoView() : videoView;
+        }
+        if (targetVideoView == null) {
+            targetVideoView = videoView;
+        }
+        final TurtleVideoView transitionTargetVideoView = targetVideoView;
+
         cancelVideoPresentationFallback();
-        videoView.setVisibility(View.VISIBLE);
-        videoView.setMuted(muted);
-        videoView.setMediaInfoListener(new MediaPlayer.OnInfoListener() {
+        if (previousVideoView != null && transitionTargetVideoView != previousVideoView) {
+            completionSuppressedVideoView = previousVideoView;
+            showStandbyVideoView(transitionTargetVideoView);
+        } else {
+            completionSuppressedVideoView = null;
+            showVideoOnScreen(transitionTargetVideoView);
+        }
+        transitionTargetVideoView.setMuted(muted);
+        transitionTargetVideoView.setLoop(true);
+        pendingVideoSwitchTargetView = transitionTargetVideoView;
+
+        if (isPreparedVideoView(transitionTargetVideoView, normalizedPath)) {
+            startPreparedTransitionVideo(transitionTargetVideoView, previousVideoView, overlayToFade, nextType, nextPath, nextMuted, preloadTarget, true);
+            return;
+        }
+
+        transitionTargetVideoView.setTag(null);
+        transitionTargetVideoView.setMediaInfoListener(null);
+        transitionTargetVideoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+            @Override
+            public void onPrepared(MediaPlayer mp) {
+                transitionTargetVideoView.setTag(normalizedPath);
+                startPreparedTransitionVideo(transitionTargetVideoView, previousVideoView, overlayToFade, nextType, nextPath, nextMuted, preloadTarget, false);
+            }
+        });
+        transitionTargetVideoView.setVideoPath(normalizedPath);
+    }
+
+    private void startPreparedTransitionVideo(final TurtleVideoView targetVideoView,
+                                              final TurtleVideoView previousVideoView,
+                                              final ImageView overlayToFade,
+                                              final CONTENT_TYPE nextType,
+                                              final String nextPath,
+                                              final boolean nextMuted,
+                                              final ImageView preloadTarget,
+                                              final boolean readyForImmediateSwap) {
+        if (targetVideoView == null) {
+            return;
+        }
+        cancelVideoPresentationFallback();
+        final boolean[] completed = new boolean[]{false};
+        final Runnable completeTransition = new Runnable() {
+            @Override
+            public void run() {
+                if (completed[0]) {
+                    return;
+                }
+                completed[0] = true;
+                cancelVideoPresentationFallback();
+                if (previousVideoView != null && previousVideoView == completionSuppressedVideoView) {
+                    completionSuppressedVideoView = null;
+                }
+                if (targetVideoView == pendingVideoSwitchTargetView) {
+                    pendingVideoSwitchTargetView = null;
+                }
+                promoteVideoView(targetVideoView);
+                showVideoOnScreen(targetVideoView);
+                recyclePreviousVideoViewAfterSwap(previousVideoView, targetVideoView, nextType, nextPath);
+                finishVideoOverlayAndPreloadNext(overlayToFade, nextType, nextPath, nextMuted, preloadTarget);
+                markVideoPresentationStarted();
+            }
+        };
+
+        targetVideoView.setMediaInfoListener(new MediaPlayer.OnInfoListener() {
             @Override
             public boolean onInfo(MediaPlayer mp, int what, int extra) {
                 if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
-                    markVideoPresentationStarted();
+                    completeTransition.run();
                 }
                 return false;
             }
         });
-        videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-            @Override
-            public void onPrepared(MediaPlayer mp) {
-                if (overlayToFade != null && overlayToFade.getVisibility() == View.VISIBLE) {
-                    overlayToFade.bringToFront();
-                    overlayToFade.animate()
-                            .alpha(0f)
-                            .setDuration(IMAGE_CROSSFADE_DURATION_MS)
-                            .withEndAction(new Runnable() {
-                                @Override
-                                public void run() {
-                                    hideAllImageOverlays();
-                                }
-                            })
-                            .start();
-                } else {
-                    hideAllImageOverlays();
-                }
-                videoView.setLoop(true);
-            }
-        });
+        targetVideoView.start();
+        if (readyForImmediateSwap) {
+            targetVideoView.postOnAnimation(completeTransition);
+            return;
+        }
+        if (previousVideoView == null) {
+            videoSwitchFallbackRunnable = completeTransition;
+            playbackTimingHandler.postAtTime(
+                    videoSwitchFallbackRunnable,
+                    SystemClock.uptimeMillis() + VIDEO_PRESENTATION_FALLBACK_MS);
+        }
+    }
 
-        videoView.setVideoPath(normalizedPath);
-        videoView.start();
-        scheduleVideoPresentationFallback();
+    private void recyclePreviousVideoViewAfterSwap(TurtleVideoView previousVideoView,
+                                                   TurtleVideoView activeVideoView,
+                                                   CONTENT_TYPE nextType,
+                                                   String nextPath) {
+        if (previousVideoView == null || previousVideoView == activeVideoView) {
+            return;
+        }
+        String normalizedNextPath = nextType == CONTENT_TYPE.Video ? normalizeLocalVideoPath(nextPath) : null;
+        if (nextType == CONTENT_TYPE.Video && isPreparedVideoView(previousVideoView, normalizedNextPath)) {
+            previousVideoView.setMediaInfoListener(null);
+            previousVideoView.setLoop(true);
+            previousVideoView.setMuted(true);
+            showStandbyVideoView(previousVideoView);
+            try {
+                if (!previousVideoView.isPlaying()) {
+                    previousVideoView.start();
+                }
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+        showStandbyVideoView(previousVideoView);
+        stopVideoPlayback(previousVideoView);
+    }
+
+    private void finishVideoOverlayAndPreloadNext(final ImageView overlayToFade,
+                                                  final CONTENT_TYPE nextType,
+                                                  final String nextPath,
+                                                  final boolean nextMuted,
+                                                  ImageView preloadTarget) {
+        if (overlayToFade != null && overlayToFade.getVisibility() == View.VISIBLE) {
+            overlayToFade.bringToFront();
+            overlayToFade.animate()
+                    .alpha(0f)
+                    .setDuration(IMAGE_CROSSFADE_DURATION_MS)
+                    .withEndAction(new Runnable() {
+                        @Override
+                        public void run() {
+                            hideAllImageOverlays();
+                        }
+                    })
+                    .start();
+        } else {
+            hideAllImageOverlays();
+        }
 
         if (nextType == CONTENT_TYPE.Image) {
-            ImageView target = overlay != null ? getHiddenImageView(overlay) : preloadTarget;
+            ImageView target = preloadTarget != null ? preloadTarget : getHiddenImageView(getVisibleImageView());
             if (target == null) {
                 target = getHiddenImageView(null);
             }
             preloadNextImageIfNeeded(nextType, nextPath, target);
+            return;
+        }
+        if (nextType == CONTENT_TYPE.Video) {
+            preloadNextVideoIfNeeded(nextType, nextPath, nextMuted, mediaConfigurationVersion);
         }
     }
 
@@ -1137,6 +1488,8 @@ public class MediaView extends RelativeLayout {
                             preloadTarget.setAlpha(0f);
                             preloadTarget.setVisibility(View.VISIBLE);
                             preloadNextImageIfNeeded(nextType, nextPath, preloadTarget);
+                        } else if (nextType == CONTENT_TYPE.Video) {
+                            preloadNextVideoIfNeeded(nextType, nextPath, preparedNextMuted, configVersion);
                         }
                         initialPrepared = true;
                         notifyPrepared();
@@ -1200,7 +1553,7 @@ public class MediaView extends RelativeLayout {
                                      final String nextPath,
                                      final int configVersion) {
         restoreVisibleOutputs();
-        String normalizedPath = normalizeLocalVideoPath(videoPath);
+        final String normalizedPath = normalizeLocalVideoPath(videoPath);
         if (!isPlayableLocalVideo(normalizedPath)) {
             initialPrepared = true;
             notifyPrepared();
@@ -1223,8 +1576,11 @@ public class MediaView extends RelativeLayout {
                     videoView.seekTo(1);
                 } catch (Exception ignored) {
                 }
+                videoView.setTag(normalizedPath);
                 if (nextType == CONTENT_TYPE.Image) {
                     preloadNextImageIfNeeded(nextType, nextPath, imgView1 == null ? null : imgView1 == getVisibleImageView() ? imgView2 : imgView1);
+                } else if (nextType == CONTENT_TYPE.Video) {
+                    preloadNextVideoIfNeeded(nextType, nextPath, preparedNextMuted, configVersion);
                 }
                 initialPrepared = true;
                 notifyPrepared();
@@ -1237,7 +1593,7 @@ public class MediaView extends RelativeLayout {
         restoreVisibleOutputs();
         hideAllImageOverlays();
         videoView.setMediaInfoListener(null);
-        stopVideoPlayback();
+        stopVideoPlayback(videoView);
         if (imgView1 != null) {
             imgView1.setAlpha(1f);
             imgView1.setVisibility(View.VISIBLE);
@@ -1276,6 +1632,9 @@ public class MediaView extends RelativeLayout {
         videoView.start();
         schedulePlaybackReadyFallback();
         scheduleVideoPresentationFallback();
+        if (preparedNextType == CONTENT_TYPE.Video) {
+            preloadNextVideoIfNeeded(preparedNextType, preparedNextPath, preparedNextMuted, mediaConfigurationVersion);
+        }
     }
 
     private void notifyPrepared() {
@@ -1310,6 +1669,9 @@ public class MediaView extends RelativeLayout {
         setVisibility(View.VISIBLE);
         resetViewPosition(this);
         resetViewPosition(videoView);
+        if (videoView2 != null && videoView2 != videoView && videoView2.getVisibility() == View.VISIBLE) {
+            showStandbyVideoView(videoView2);
+        }
         resetViewPosition(imgView1);
         resetViewPosition(imgView2);
     }
@@ -1377,6 +1739,14 @@ public class MediaView extends RelativeLayout {
         if (videoView != null && videoView.getVisibility() == View.VISIBLE) {
             try {
                 if (videoView.isPlaying()) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (videoView2 != null && videoView2.getVisibility() == View.VISIBLE) {
+            try {
+                if (videoView2.isPlaying()) {
                     return true;
                 }
             } catch (Exception ignored) {
@@ -1491,6 +1861,10 @@ public class MediaView extends RelativeLayout {
 
     private void cancelVideoPresentationFallback() {
         playbackTimingHandler.removeCallbacks(videoPresentationFallbackRunnable);
+        if (videoSwitchFallbackRunnable != null) {
+            playbackTimingHandler.removeCallbacks(videoSwitchFallbackRunnable);
+            videoSwitchFallbackRunnable = null;
+        }
     }
 
     private void cancelPlaybackReadyFallback() {
@@ -1502,6 +1876,8 @@ public class MediaView extends RelativeLayout {
         cancelVideoPresentationFallback();
         cancelPlaybackReadyFallback();
         advancePending = false;
+        completionSuppressedVideoView = null;
+        pendingVideoSwitchTargetView = null;
         advanceSignalCount = 0;
         consumedAdvanceSignalCount = 0;
         videoPresentationStarted = false;
