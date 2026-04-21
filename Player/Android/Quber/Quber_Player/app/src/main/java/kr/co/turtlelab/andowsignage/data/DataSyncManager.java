@@ -689,15 +689,12 @@ public class DataSyncManager {
             realmPlayer.setPlaylistName(player.getPlaylist());
             realmPlayer.setLandscape(player.isLandscape());
 
-            List<String> orderedIds = pageList.getPages();
             for (int i = 0; i < pages.size(); i++) {
                 RethinkModels.PageInfoRecord page = pages.get(i);
-                int orderIndex = orderedIds.indexOf(page.getGuid());
-                if (orderIndex < 0) {
-                    orderIndex = i;
-                }
+                int orderIndex = i;
+                String localPageId = buildLocalPageId(pageList.getName(), page.getGuid(), orderIndex);
 
-                RealmPage realmPage = r.createObject(RealmPage.class, page.getGuid());
+                RealmPage realmPage = r.createObject(RealmPage.class, localPageId);
                 realmPage.setPageName(page.getPageName());
                 realmPage.setPlaylistName(pageList.getName());
                 realmPage.setOrderIndex(orderIndex);
@@ -712,9 +709,9 @@ public class DataSyncManager {
                 RealmList<RealmElement> realmElements = new RealmList<>();
                         if (page.getElements() != null) {
                             for (RethinkModels.ElementInfoRecord element : page.getElements()) {
-                                String elementId = page.getGuid() + "_" + element.getName();
+                                String elementId = buildLocalElementId(localPageId, page.getGuid() + "_" + element.getName(), element.getName());
                                 RealmElement realmElement = r.createObject(RealmElement.class, elementId);
-                                realmElement.setPageId(page.getGuid());
+                                realmElement.setPageId(localPageId);
                                 realmElement.setName(element.getName());
                         realmElement.setType(element.getType());
                         realmElement.setWidth(element.getWidth());
@@ -729,7 +726,7 @@ public class DataSyncManager {
                                 if (contentRecords != null) {
                                     for (int index = 0; index < contentRecords.size(); index++) {
                                         RethinkModels.ContentInfoRecord contentRecord = contentRecords.get(index);
-                                        String uid = elementId + "_" + index;
+                                        String uid = buildLocalContentId(elementId, contentRecord.getGuid(), index);
                                         RealmContent realmContent = r.createObject(RealmContent.class, uid);
                                         realmContent.setElementId(elementId);
                                         realmContent.setFileName(contentRecord.getFileName());
@@ -750,7 +747,7 @@ public class DataSyncManager {
 
                             if ("TemplateBoard".equalsIgnoreCase(element.getType())
                                     || "WelcomeBoard".equalsIgnoreCase(element.getType())) {
-                            storeWelcome(r, page, element, usedContentPaths);
+                            storeWelcome(r, page, element, localPageId, elementId, usedContentPaths);
                             }
                         }
                     }
@@ -1539,6 +1536,8 @@ public class DataSyncManager {
     private void storeWelcome(Realm realm,
                               RethinkModels.PageInfoRecord page,
                               RethinkModels.ElementInfoRecord element,
+                              String localPageId,
+                              String localElementId,
                               Set<String> usedContentPaths) {
         if (element == null) {
             return;
@@ -1547,9 +1546,8 @@ public class DataSyncManager {
         if (textInfo == null) {
             return;
         }
-        String elementId = page.getGuid() + "_" + element.getName();
-        RealmWelcome welcome = realm.createObject(RealmWelcome.class, elementId);
-        welcome.setPageId(page.getGuid());
+        RealmWelcome welcome = realm.createObject(RealmWelcome.class, localElementId);
+        welcome.setPageId(localPageId);
         welcome.setElementName(element.getName());
         welcome.setImageFileName(textInfo.getImageFileName());
         String localImagePath = LocalPathUtils.getContentPath(textInfo.getImageFileName());
@@ -1667,7 +1665,8 @@ public class DataSyncManager {
             });
 
             for (UpdateQueueContract.PagePayload page : pagePayloads) {
-                RealmPage realmPage = r.createObject(RealmPage.class, page.pageId);
+                String localPageId = buildLocalPageId(payload.playlistName, page.pageId, page.orderIndex);
+                RealmPage realmPage = r.createObject(RealmPage.class, localPageId);
                 realmPage.setPageName(page.pageName);
                 realmPage.setPlaylistName(payload.playlistName);
                 realmPage.setOrderIndex(page.orderIndex);
@@ -1682,8 +1681,9 @@ public class DataSyncManager {
                 RealmList<RealmElement> realmElements = new RealmList<>();
                 if (page.elements != null) {
                     for (UpdateQueueContract.ElementPayload element : page.elements) {
-                        RealmElement realmElement = r.createObject(RealmElement.class, element.elementId);
-                        realmElement.setPageId(page.pageId);
+                        String localElementId = buildLocalElementId(localPageId, element.elementId, element.name);
+                        RealmElement realmElement = r.createObject(RealmElement.class, localElementId);
+                        realmElement.setPageId(localPageId);
                         realmElement.setName(element.name);
                         realmElement.setType(element.type);
                         realmElement.setWidth(element.width);
@@ -1695,9 +1695,11 @@ public class DataSyncManager {
 
                         RealmList<RealmContent> contents = new RealmList<>();
                             if (element.contents != null) {
-                                for (UpdateQueueContract.ContentPayload content : element.contents) {
-                        RealmContent realmContent = r.createObject(RealmContent.class, content.uid);
-                        realmContent.setElementId(element.elementId);
+                                for (int contentIndex = 0; contentIndex < element.contents.size(); contentIndex++) {
+                        UpdateQueueContract.ContentPayload content = element.contents.get(contentIndex);
+                        String localContentId = buildLocalContentId(localElementId, content.uid, contentIndex);
+                        RealmContent realmContent = r.createObject(RealmContent.class, localContentId);
+                        realmContent.setElementId(localElementId);
                         realmContent.setFileName(content.fileName);
                         String relativePath = resolveRelativePathFromPayload(content);
                         String absolutePath = toLocalAbsolutePath(relativePath);
@@ -1721,6 +1723,26 @@ public class DataSyncManager {
         });
         realm.close();
         cleanupUnusedContents(usedContentPaths);
+    }
+
+    private String buildLocalPageId(String playlistName, String pageId, int orderIndex) {
+        return normalizeKeyPart(playlistName) + "_page_" + Math.max(0, orderIndex) + "_" + normalizeKeyPart(pageId);
+    }
+
+    private String buildLocalElementId(String localPageId, String elementId, String elementName) {
+        String rawElementId = !TextUtils.isEmpty(elementId) ? elementId : elementName;
+        return normalizeKeyPart(localPageId) + "_element_" + normalizeKeyPart(rawElementId);
+    }
+
+    private String buildLocalContentId(String localElementId, String contentUid, int contentIndex) {
+        return normalizeKeyPart(localElementId) + "_content_" + Math.max(0, contentIndex) + "_" + normalizeKeyPart(contentUid);
+    }
+
+    private String normalizeKeyPart(String value) {
+        if (TextUtils.isEmpty(value)) {
+            return "empty";
+        }
+        return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
     private void cleanupUnusedContents(Set<String> usedPaths) {
