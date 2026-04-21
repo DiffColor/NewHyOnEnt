@@ -192,6 +192,10 @@ public class TurtleVideoView extends VideoView {
         }
     }
 
+    public boolean isLoop() {
+        return mLoop;
+    }
+
     public void setMuted(boolean muted) {
         mMuted = muted;
         applyMutedState(mPreparedPlayer);

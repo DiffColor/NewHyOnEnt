@@ -1455,7 +1455,7 @@ public class DataSyncManager {
                 if (requestUiRestart) {
                     SystemUtils.runOnUiThread(() -> {
                         if (AndoWSignage.act != null) {
-                            AndoWSignage.act.updateAndRestart(true);
+                            AndoWSignage.act.requestPlaylistPlaybackRestart();
                         }
                     });
                 }
