@@ -49,9 +49,10 @@ namespace AndoW_Manager
             tempTable.Columns.Add("PIF_CurrentPlayList", typeof(string));
             tempTable.Columns.Add("PIF_IsLandScape", typeof(bool));
 
+            string normalizedPlayerName = NormalizePlayerName(playername);
             foreach (PlayerInfoClass tempClass in g_PlayerInfoClassList)
             {
-                if (tempClass.PIF_PlayerName.Equals(playername, StringComparison.CurrentCultureIgnoreCase)) 
+                if (IsSamePlayerName(tempClass.PIF_PlayerName, normalizedPlayerName))
                 {
                     DataRow dr = tempTable.NewRow();
 
@@ -70,10 +71,11 @@ namespace AndoW_Manager
 
         public bool CheckExistSamename(string paramPlayerName)
         {
+            string normalizedPlayerName = NormalizePlayerName(paramPlayerName);
             bool IsSameExist = false;
             foreach (PlayerInfoClass item in g_PlayerInfoClassList)
             {
-                if (item.PIF_PlayerName.Equals(paramPlayerName, StringComparison.CurrentCultureIgnoreCase))
+                if (IsSamePlayerName(item.PIF_PlayerName, normalizedPlayerName))
                 {
                     IsSameExist = true;
                     break;
@@ -103,10 +105,12 @@ namespace AndoW_Manager
         public PlayerInfoClass GetPlayerInfoByName(string paramPlayerName)
         {
             PlayerInfoClass resultCls = new PlayerInfoClass();
+            resultCls.CleanDataField();
+            string normalizedPlayerName = NormalizePlayerName(paramPlayerName);
 
             foreach (PlayerInfoClass item in g_PlayerInfoClassList)
             {
-                if (item.PIF_PlayerName == paramPlayerName)
+                if (IsSamePlayerName(item.PIF_PlayerName, normalizedPlayerName))
                 {
                     resultCls.CopyData(item);
                     break;
@@ -122,10 +126,27 @@ namespace AndoW_Manager
 
             PlayerInfoClass tmpCls = new PlayerInfoClass();
             tmpCls.CopyData(paramCls);
+            tmpCls.PIF_PlayerName = NormalizePlayerName(tmpCls.PIF_PlayerName);
+            if (string.IsNullOrWhiteSpace(tmpCls.PIF_PlayerName))
+            {
+                return;
+            }
 
             if (tmpCls.PIF_Order <= 0)
             {
                 tmpCls.PIF_Order = g_PlayerInfoClassList.Count + 1;
+            }
+
+            PlayerInfoClass existing = g_PlayerInfoClassList
+                .FirstOrDefault(x => IsSamePlayerName(x.PIF_PlayerName, tmpCls.PIF_PlayerName));
+            if (existing != null)
+            {
+                tmpCls.PIF_GUID = existing.PIF_GUID;
+                tmpCls.PIF_Order = existing.PIF_Order <= 0 ? tmpCls.PIF_Order : existing.PIF_Order;
+                existing.CopyData(tmpCls);
+                SavePlayer(existing);
+                g_PlayerInfoClassList = SortPlayers(g_PlayerInfoClassList);
+                return;
             }
 
             g_PlayerInfoClassList.Add(tmpCls);
@@ -163,6 +184,7 @@ namespace AndoW_Manager
             int order = 1;
             foreach (PlayerInfoClass item in paramList.Where(x => x != null))
             {
+                item.PIF_PlayerName = NormalizePlayerName(item.PIF_PlayerName);
                 if (item.PIF_Order <= 0)
                 {
                     item.PIF_Order = order;
@@ -170,8 +192,17 @@ namespace AndoW_Manager
                 order++;
             }
 
+            bool hasDuplicateName = paramList
+                .Where(x => x != null && string.IsNullOrWhiteSpace(x.PIF_PlayerName) == false)
+                .GroupBy(x => NormalizePlayerName(x.PIF_PlayerName), StringComparer.CurrentCultureIgnoreCase)
+                .Any(group => group.Count() > 1);
+            if (hasDuplicateName)
+            {
+                throw new InvalidOperationException("동일한 플레이어 이름이 존재합니다.");
+            }
+
             var incomingIds = new HashSet<string>(paramList
-                .Where(x => string.IsNullOrWhiteSpace(x.PIF_GUID) == false)
+                .Where(x => x != null && string.IsNullOrWhiteSpace(x.PIF_GUID) == false)
                 .Select(x => x.PIF_GUID), StringComparer.CurrentCultureIgnoreCase);
 
             foreach (PlayerInfoClass existing in g_PlayerInfoClassList.ToList())
@@ -190,7 +221,7 @@ namespace AndoW_Manager
                 RemovePlayerFromDatabase(existing);
             }
 
-            foreach (PlayerInfoClass item in paramList)
+            foreach (PlayerInfoClass item in paramList.Where(x => x != null))
             {
                 PlayerInfoClass tmpCls = new PlayerInfoClass();
                 tmpCls.CopyData(item);
@@ -220,7 +251,7 @@ namespace AndoW_Manager
         {
             foreach (PlayerInfoClass item in g_PlayerInfoClassList)
             {
-                if (item.PIF_PlayerName == paramCls.PIF_PlayerName)
+                if (IsSamePlayerName(item.PIF_PlayerName, paramCls.PIF_PlayerName))
                 {
                     item.PIF_CurrentPlayList = paramCls.PIF_CurrentPlayList;
                     SavePlayer(item);
@@ -233,7 +264,7 @@ namespace AndoW_Manager
         {
             foreach (PlayerInfoClass item in g_PlayerInfoClassList)
             {
-                if (item.PIF_PlayerName .Equals(pname))
+                if (IsSamePlayerName(item.PIF_PlayerName, pname))
                 {
                     item.PIF_CurrentPlayList = listname;
                     SavePlayer(item);
@@ -281,28 +312,32 @@ namespace AndoW_Manager
 
         public void DeleteDataClassInfo(PlayerInfoClass oldCls)
         {
-
-            int idx = 0;
-
-            foreach (PlayerInfoClass item in g_PlayerInfoClassList)
+            if (oldCls == null)
             {
-                if (item.PIF_GUID == oldCls.PIF_GUID)
-                {
-                    break;
-                }
-                idx++;
-
+                return;
             }
 
-            g_PlayerInfoClassList.RemoveAt(idx);
+            PlayerInfoClass target = g_PlayerInfoClassList.FirstOrDefault(item =>
+                string.IsNullOrWhiteSpace(oldCls.PIF_GUID) == false &&
+                item.PIF_GUID == oldCls.PIF_GUID);
+            if (target == null)
+            {
+                target = g_PlayerInfoClassList.FirstOrDefault(item => IsSamePlayerName(item.PIF_PlayerName, oldCls.PIF_PlayerName));
+            }
+            if (target == null)
+            {
+                return;
+            }
 
-            if (!string.IsNullOrWhiteSpace(oldCls.PIF_GUID))
+            g_PlayerInfoClassList.Remove(target);
+
+            if (!string.IsNullOrWhiteSpace(target.PIF_GUID))
             {
                 var weeklyManager = new WeeklyInfoManagerClass();
-                weeklyManager.DeleteWeeklySchedule(oldCls.PIF_GUID);
+                weeklyManager.DeleteWeeklySchedule(target.PIF_GUID);
             }
 
-            RemovePlayerFromDatabase(oldCls);
+            RemovePlayerFromDatabase(target);
         }
 
 
@@ -310,24 +345,42 @@ namespace AndoW_Manager
         {
             try
             {
-                int idx = 0;
-
-                foreach (PlayerInfoClass item in g_PlayerInfoClassList)
+                if (oldCls == null || newCls == null)
                 {
-                    if (item.PIF_PlayerName == oldCls.PIF_PlayerName)
-                    {
-                        break;
-                    }
-                    idx++;
-
+                    return;
                 }
-
-                g_PlayerInfoClassList.RemoveAt(idx);
 
                 PlayerInfoClass tmpCls = new PlayerInfoClass();
                 tmpCls.CopyData(newCls);
+                tmpCls.PIF_PlayerName = NormalizePlayerName(tmpCls.PIF_PlayerName);
+                if (string.IsNullOrWhiteSpace(tmpCls.PIF_PlayerName))
+                {
+                    return;
+                }
+
+                int idx = g_PlayerInfoClassList.FindIndex(item =>
+                    string.IsNullOrWhiteSpace(oldCls.PIF_GUID) == false &&
+                    item.PIF_GUID == oldCls.PIF_GUID);
+                if (idx < 0)
+                {
+                    idx = g_PlayerInfoClassList.FindIndex(item => IsSamePlayerName(item.PIF_PlayerName, oldCls.PIF_PlayerName));
+                }
+                if (idx < 0)
+                {
+                    return;
+                }
+
+                bool duplicatedName = g_PlayerInfoClassList.Any(item =>
+                    item != null &&
+                    item.PIF_GUID != g_PlayerInfoClassList[idx].PIF_GUID &&
+                    IsSamePlayerName(item.PIF_PlayerName, tmpCls.PIF_PlayerName));
+                if (duplicatedName)
+                {
+                    return;
+                }
+
                 //g_DeviceInfoClassList.Add(tmpCls);
-                g_PlayerInfoClassList.Insert(idx, tmpCls);
+                g_PlayerInfoClassList[idx] = tmpCls;
                 SavePlayer(tmpCls);
             }
             catch { }
@@ -342,13 +395,14 @@ namespace AndoW_Manager
             }
 
             List<PlayerInfoClass> changedPlayers = new List<PlayerInfoClass>();
+            string normalizedPlayerName = NormalizePlayerName(playerName);
             foreach (PlayerInfoClass item in g_PlayerInfoClassList)
             {
-                if (item.PIF_PlayerName == playerName)
+                if (IsSamePlayerName(item.PIF_PlayerName, normalizedPlayerName))
                 {
                     item.PIF_MacAddress = normalizedMac;
                     changedPlayers.Add(item);
-                } else if(item.PIF_MacAddress == normalizedMac)
+                } else if(string.IsNullOrWhiteSpace(normalizedMac) == false && item.PIF_MacAddress == normalizedMac)
                 {
                     item.PIF_MacAddress = string.Empty;
                     changedPlayers.Add(item);
@@ -364,13 +418,14 @@ namespace AndoW_Manager
         public void SetIPForPlayer(string playerName, string ip)
         {
             List<PlayerInfoClass> changedPlayers = new List<PlayerInfoClass>();
+            string normalizedPlayerName = NormalizePlayerName(playerName);
             foreach (PlayerInfoClass item in g_PlayerInfoClassList)
             {
-                if (item.PIF_PlayerName == playerName)
+                if (IsSamePlayerName(item.PIF_PlayerName, normalizedPlayerName))
                 {
                     item.PIF_IPAddress = ip;
                     changedPlayers.Add(item);
-                } else if(item.PIF_IPAddress == ip)
+                } else if(string.IsNullOrWhiteSpace(ip) == false && item.PIF_IPAddress == ip)
                 {
                     item.PIF_IPAddress = string.Empty;
                     changedPlayers.Add(item);
@@ -386,7 +441,7 @@ namespace AndoW_Manager
         {
             try
             {
-                object _obj = g_PlayerInfoClassList.SingleOrDefault(x => x.PIF_PlayerName == pname);
+                object _obj = g_PlayerInfoClassList.FirstOrDefault(x => IsSamePlayerName(x.PIF_PlayerName, pname));
 
                 if (_obj == null)
                     return string.Empty;
@@ -404,7 +459,7 @@ namespace AndoW_Manager
         {
             try
             {
-                object _obj = g_PlayerInfoClassList.SingleOrDefault(x => x.PIF_PlayerName == pname);
+                object _obj = g_PlayerInfoClassList.FirstOrDefault(x => IsSamePlayerName(x.PIF_PlayerName, pname));
 
                 if (_obj == null)
                     return string.Empty;
@@ -426,13 +481,13 @@ namespace AndoW_Manager
             }
 
             PlayerInfoClass player = g_PlayerInfoClassList
-                .FirstOrDefault(x => x.PIF_PlayerName.Equals(playerName, StringComparison.CurrentCultureIgnoreCase));
+                .FirstOrDefault(x => IsSamePlayerName(x.PIF_PlayerName, playerName));
             if (player != null)
             {
                 return player;
             }
 
-            player = Find(x => x.PIF_PlayerName.Equals(playerName, StringComparison.CurrentCultureIgnoreCase))
+            player = Find(x => IsSamePlayerName(x.PIF_PlayerName, playerName))
                 .FirstOrDefault();
             if (player != null)
             {
@@ -491,11 +546,11 @@ namespace AndoW_Manager
             }
 
             var player = g_PlayerInfoClassList
-                .FirstOrDefault(x => x.PIF_PlayerName.Equals(playerName, StringComparison.CurrentCultureIgnoreCase));
+                .FirstOrDefault(x => IsSamePlayerName(x.PIF_PlayerName, playerName));
 
             if (player == null)
             {
-                var dbPlayer = Find(x => x.PIF_PlayerName.Equals(playerName, StringComparison.CurrentCultureIgnoreCase))
+                var dbPlayer = Find(x => IsSamePlayerName(x.PIF_PlayerName, playerName))
                     .FirstOrDefault();
                 if (dbPlayer == null)
                 {
@@ -617,6 +672,16 @@ namespace AndoW_Manager
                 .OrderBy(p => p.PIF_Order <= 0 ? int.MaxValue : p.PIF_Order)
                 .ThenBy(p => p.PIF_PlayerName, StringComparer.CurrentCultureIgnoreCase)
                 .ToList() ?? new List<PlayerInfoClass>();
+        }
+
+        private static string NormalizePlayerName(string playerName)
+        {
+            return (playerName ?? string.Empty).Trim();
+        }
+
+        private static bool IsSamePlayerName(string left, string right)
+        {
+            return string.Equals(NormalizePlayerName(left), NormalizePlayerName(right), StringComparison.CurrentCultureIgnoreCase);
         }
 
     }

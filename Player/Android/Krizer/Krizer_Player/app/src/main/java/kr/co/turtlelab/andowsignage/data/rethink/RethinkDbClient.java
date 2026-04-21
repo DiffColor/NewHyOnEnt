@@ -224,19 +224,30 @@ public class RethinkDbClient {
     }
 
     private RethinkModels.PlayerInfoRecord fetchPlayerInternal(String playerName, boolean persistSkeleton) {
-        if (playerName == null || playerName.isEmpty()) {
+        return fetchPlayerInternal(playerName, persistSkeleton, getStoredPlayerGuid());
+    }
+
+    private RethinkModels.PlayerInfoRecord fetchPlayerInternal(String playerName, boolean persistSkeleton, String preferredGuid) {
+        String normalizedPlayerName = normalizePlayerName(playerName);
+        if (TextUtils.isEmpty(normalizedPlayerName)) {
             return null;
         }
-        String lowered = playerName.toLowerCase(Locale.US);
-        ReqlExpr query = R.db(DATABASE)
-                .table(TABLE_PLAYER)
-                .filter(row -> row.g("PIF_PlayerName").downcase().eq(lowered))
-                .limit(1);
+        ReqlExpr query = R.db(DATABASE).table(TABLE_PLAYER);
         List<Map> result = runList(query);
-        if (result.isEmpty()) {
+        List<RethinkModels.PlayerInfoRecord> candidates = new ArrayList<>();
+        for (Map row : result) {
+            RethinkModels.PlayerInfoRecord candidate = convert(row, RethinkModels.PlayerInfoRecord.class);
+            if (candidate == null) {
+                continue;
+            }
+            if (isSamePlayerName(candidate.getPlayerName(), normalizedPlayerName)) {
+                candidates.add(candidate);
+            }
+        }
+        RethinkModels.PlayerInfoRecord record = selectCanonicalPlayer(candidates, preferredGuid);
+        if (record == null) {
             return null;
         }
-        RethinkModels.PlayerInfoRecord record = convert(result.get(0), RethinkModels.PlayerInfoRecord.class);
         if (persistSkeleton) {
             saveRealmPlayerSkeleton(record);
         }
@@ -796,7 +807,7 @@ public class RethinkDbClient {
     }
 
     public String ensurePlayerGuid(String playerName) {
-        String normalizedPlayerName = playerName == null ? "" : playerName.trim();
+        String normalizedPlayerName = normalizePlayerName(playerName);
         String storedGuid = getStoredPlayerGuid();
         String guid = storedGuid;
         String storedPlayerName = getStoredPlayerName();
@@ -807,7 +818,7 @@ public class RethinkDbClient {
         }
         boolean isStoredNameMismatched = !TextUtils.isEmpty(normalizedPlayerName)
                 && !TextUtils.isEmpty(storedPlayerName)
-                && !normalizedPlayerName.equalsIgnoreCase(storedPlayerName.trim());
+                && !normalizedPlayerName.equalsIgnoreCase(normalizePlayerName(storedPlayerName));
         if (isStoredNameMismatched) {
             guid = null;
             guidVerified = false;
@@ -821,7 +832,7 @@ public class RethinkDbClient {
                 || (now - lastGuidVerificationEpochMs) >= GUID_VERIFICATION_INTERVAL_MS;
 
         if (shouldVerifyRemotely) {
-            playerRecord = fetchPlayerInternal(normalizedPlayerName, false);
+            playerRecord = fetchPlayerInternal(normalizedPlayerName, false, storedGuid);
             if (playerRecord != null && !TextUtils.isEmpty(playerRecord.getGuid())) {
                 guid = playerRecord.getGuid();
                 guidVerified = true;
@@ -1024,6 +1035,50 @@ public class RethinkDbClient {
             return;
         }
         ensurePlayerGuid(playerName);
+    }
+
+    private RethinkModels.PlayerInfoRecord selectCanonicalPlayer(List<RethinkModels.PlayerInfoRecord> candidates,
+                                                                 String preferredGuid) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        RethinkModels.PlayerInfoRecord best = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (RethinkModels.PlayerInfoRecord candidate : candidates) {
+            if (candidate == null || TextUtils.isEmpty(candidate.getGuid())) {
+                continue;
+            }
+            int score = 0;
+            if (!TextUtils.isEmpty(candidate.getPlaylist())) {
+                score += 4;
+            }
+            if (!TextUtils.isEmpty(preferredGuid) && preferredGuid.equalsIgnoreCase(candidate.getGuid())) {
+                score += 2;
+            }
+            if (!TextUtils.isEmpty(candidate.getPlayerName())) {
+                score += 1;
+            }
+            if (best == null || score > bestScore
+                    || (score == bestScore && compareGuid(candidate.getGuid(), best.getGuid()) < 0)) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private int compareGuid(String left, String right) {
+        String safeLeft = left == null ? "" : left;
+        String safeRight = right == null ? "" : right;
+        return safeLeft.compareToIgnoreCase(safeRight);
+    }
+
+    private boolean isSamePlayerName(String left, String right) {
+        return normalizePlayerName(left).equalsIgnoreCase(normalizePlayerName(right));
+    }
+
+    private String normalizePlayerName(String playerName) {
+        return playerName == null ? "" : playerName.trim();
     }
 
     private String resolveLocalIpAddress() {

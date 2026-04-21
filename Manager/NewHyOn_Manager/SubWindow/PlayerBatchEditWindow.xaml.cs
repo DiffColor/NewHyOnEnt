@@ -94,10 +94,12 @@ namespace AndoW_Manager
             List<string> pnames = new List<string>();
             foreach(BatchEditPlayerInfo item in g_BatchEditPlayerInfoElementList)
             {
-                pnames.Add(item.PlayerNameText.Text);
+                pnames.Add((item.PlayerNameText.Text ?? string.Empty).Trim());
             }
 
-            bool _wrongname = pnames.Any(n => FileTools.HasWrongPathCharacter(n)) || pnames.Any(n => n.Contains(","));
+            bool _wrongname = pnames.Any(string.IsNullOrWhiteSpace)
+                || pnames.Any(n => FileTools.HasWrongPathCharacter(n))
+                || pnames.Any(n => n.Contains(","));
 
             if(_wrongname)
             {
@@ -105,7 +107,7 @@ namespace AndoW_Manager
                 return;
             }
 
-            bool _hasDup = pnames.GroupBy(n => n).Any(c => c.Count() > 1);
+            bool _hasDup = pnames.GroupBy(n => n, StringComparer.CurrentCultureIgnoreCase).Any(c => c.Count() > 1);
 
             if (_hasDup)
             {
@@ -127,7 +129,15 @@ namespace AndoW_Manager
                     pinfos.Add(_pinfo);
                 }
 
-                DataShop.Instance.g_PlayerInfoManager.UpdatePlayerInfoList(pinfos);
+                try
+                {
+                    DataShop.Instance.g_PlayerInfoManager.UpdatePlayerInfoList(pinfos);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    MessageTools.ShowMessageBox(ex.Message, "확인");
+                    return;
+                }
                 Page3.Instance.RefreshPlayerInfoList();
 
                 this.Close();

@@ -140,14 +140,19 @@ namespace NewHyOnPlayer
                 string host = localManager.Settings.ManagerIP;
                 UpdateHost(host);
 
-                string playerName = manager.g_PlayerInfo.PIF_PlayerName;
+                string playerName = NormalizePlayerName(manager.g_PlayerInfo.PIF_PlayerName);
+                if (!string.Equals(playerName, manager.g_PlayerInfo.PIF_PlayerName, StringComparison.Ordinal))
+                {
+                    manager.g_PlayerInfo.PIF_PlayerName = playerName;
+                    manager.SaveData();
+                }
                 string localGuid = manager.g_PlayerInfo.PIF_GUID;
 
                 string remoteGuid = null;
                 bool createdRemotePlayer = false;
                 if (!string.IsNullOrWhiteSpace(playerName))
                 {
-                    bool lookupSucceeded = TryFetchGuidByName(playerName, out remoteGuid);
+                    bool lookupSucceeded = TryFetchGuidByName(playerName, localGuid, out remoteGuid);
                     if (!lookupSucceeded)
                     {
                         NotifySyncFailed();
@@ -172,7 +177,20 @@ namespace NewHyOnPlayer
 
                 if (string.IsNullOrWhiteSpace(remoteGuid) && !string.IsNullOrWhiteSpace(localGuid))
                 {
-                    remoteGuid = localGuid;
+                    remoteGuid = FetchPlayerByGuid(localGuid) == null ? null : localGuid;
+                }
+
+                if (string.IsNullOrWhiteSpace(remoteGuid) && !string.IsNullOrWhiteSpace(playerName))
+                {
+                    string createdGuid = CreateNewGuidNotExists();
+                    if (string.IsNullOrWhiteSpace(createdGuid))
+                    {
+                        NotifySyncFailed();
+                        return;
+                    }
+
+                    remoteGuid = createdGuid;
+                    createdRemotePlayer = true;
                 }
 
                 if (string.IsNullOrWhiteSpace(remoteGuid))
@@ -235,7 +253,7 @@ namespace NewHyOnPlayer
             }
         }
 
-        private bool TryFetchGuidByName(string playerName, out string guid)
+        private bool TryFetchGuidByName(string playerName, string localGuid, out string guid)
         {
             guid = null;
 
@@ -244,7 +262,7 @@ namespace NewHyOnPlayer
                 return true;
             }
 
-            string lowered = playerName.ToLowerInvariant();
+            string normalizedName = NormalizePlayerName(playerName);
 
             try
             {
@@ -254,12 +272,13 @@ namespace NewHyOnPlayer
                     return false;
                 }
 
-                ReqlExpr query = R.Db(DatabaseName)
-                    .Table(PlayerTable)
-                    .Filter(row => row["PIF_PlayerName"].Downcase().Eq(lowered))
-                    .Limit(1);
+                ReqlExpr query = R.Db(DatabaseName).Table(PlayerTable);
 
-                PlayerInfoClass playerInfo = query.RunCursor<PlayerInfoClass>(conn).BufferedItems.FirstOrDefault();
+                var candidates = query.RunCursor<PlayerInfoClass>(conn)
+                    .BufferedItems
+                    .Where(player => IsSamePlayerName(player?.PIF_PlayerName, normalizedName))
+                    .ToList();
+                PlayerInfoClass playerInfo = SelectCanonicalPlayer(candidates, localGuid);
                 guid = playerInfo == null ? string.Empty : playerInfo.PIF_GUID;
                 return true;
             }
@@ -268,6 +287,46 @@ namespace NewHyOnPlayer
                 Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
                 return false;
             }
+        }
+
+        private static PlayerInfoClass SelectCanonicalPlayer(IEnumerable<PlayerInfoClass> candidates, string localGuid)
+        {
+            var list = candidates?
+                .Where(player => player != null && !string.IsNullOrWhiteSpace(player.PIF_GUID))
+                .ToList() ?? new List<PlayerInfoClass>();
+            if (list.Count == 0)
+            {
+                return null;
+            }
+
+            return list
+                .OrderByDescending(HasPlayableConfiguration)
+                .ThenByDescending(player => !string.IsNullOrWhiteSpace(player.PIF_AuthKey))
+                .ThenByDescending(player => !string.IsNullOrWhiteSpace(localGuid)
+                    && string.Equals(player.PIF_GUID, localGuid, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(player => player.PIF_GUID, StringComparer.OrdinalIgnoreCase)
+                .First();
+        }
+
+        private static bool HasPlayableConfiguration(PlayerInfoClass player)
+        {
+            if (player == null)
+            {
+                return false;
+            }
+
+            return !string.IsNullOrWhiteSpace(player.PIF_CurrentPlayList)
+                || !string.IsNullOrWhiteSpace(player.PIF_DefaultPlayList);
+        }
+
+        private static bool IsSamePlayerName(string left, string right)
+        {
+            return string.Equals(NormalizePlayerName(left), NormalizePlayerName(right), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizePlayerName(string playerName)
+        {
+            return (playerName ?? string.Empty).Trim();
         }
 
         private Connection GetConnection()
