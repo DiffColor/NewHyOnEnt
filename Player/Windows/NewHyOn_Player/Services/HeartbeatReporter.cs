@@ -13,6 +13,7 @@ namespace NewHyOnPlayer
         private readonly MainWindow owner;
         private readonly SignalRClientService signalRClientService;
         private readonly MultimediaTimer.Timer timer;
+        private readonly object timerLock = new object();
         private readonly object updateStateLock = new object();
         private readonly int intervalMs;
         private int isExecuting;
@@ -32,7 +33,7 @@ namespace NewHyOnPlayer
 
             timer = new MultimediaTimer.Timer
             {
-                Mode = MultimediaTimer.TimerMode.OneShot,
+                Mode = MultimediaTimer.TimerMode.Periodic,
                 Period = this.intervalMs,
                 Resolution = 1
             };
@@ -42,13 +43,17 @@ namespace NewHyOnPlayer
         public void Start()
         {
             if (disposed || IsTerminalStopped()) return;
-            ScheduleNext();
+            StartTimer();
         }
 
         public void Stop()
         {
-            if (disposed) return;
-            timer.Stop();
+            if (!disposed && !IsTerminalStopped())
+            {
+                return;
+            }
+
+            StopTimer();
         }
 
         public void SendHeartbeatNow()
@@ -148,7 +153,7 @@ namespace NewHyOnPlayer
             try
             {
                 Interlocked.Exchange(ref terminalStopped, 1);
-                Stop();
+                StopTimer();
 
                 lock (updateStateLock)
                 {
@@ -181,14 +186,7 @@ namespace NewHyOnPlayer
             if (disposed) return;
             disposed = true;
             Interlocked.Exchange(ref terminalStopped, 1);
-            try
-            {
-                timer.Stop();
-                timer.Dispose();
-            }
-            catch
-            {
-            }
+            StopTimer(disposeTimer: true);
         }
 
         private void OnElapsed(object sender, EventArgs e)
@@ -200,39 +198,78 @@ namespace NewHyOnPlayer
 
             if (Interlocked.Exchange(ref isExecuting, 1) == 1)
             {
-                ScheduleNext();
                 return;
             }
 
-            ThreadPool.QueueUserWorkItem(_ =>
+            try
             {
-                try
+                ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    if (IsTerminalStopped())
+                    try
                     {
-                        return;
-                    }
+                        if (IsTerminalStopped())
+                        {
+                            return;
+                        }
 
-                    SendHeartbeatInternal(forceUpdateKeepAlive: false);
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref isExecuting, 0);
-                    ScheduleNext();
-                }
-            });
+                        SendHeartbeatInternal(forceUpdateKeepAlive: false);
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref isExecuting, 0);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Exchange(ref isExecuting, 0);
+                Logger.WriteErrorLog($"Heartbeat timer worker queue failed: {ex}", Logger.GetLogFileName());
+            }
         }
 
-        private void ScheduleNext()
+        private void StartTimer()
         {
             if (disposed || IsTerminalStopped())
             {
                 return;
             }
 
-            timer.Stop();
-            timer.Period = intervalMs;
-            timer.Start();
+            lock (timerLock)
+            {
+                if (disposed || IsTerminalStopped())
+                {
+                    return;
+                }
+
+                try
+                {
+                    timer.Period = intervalMs;
+                    timer.Start();
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteErrorLog($"Heartbeat timer start failed: {ex}", Logger.GetLogFileName());
+                }
+            }
+        }
+
+        private void StopTimer(bool disposeTimer = false)
+        {
+            lock (timerLock)
+            {
+                try
+                {
+                    timer.Stop();
+                    if (disposeTimer)
+                    {
+                        timer.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteErrorLog($"Heartbeat timer stop failed: {ex}", Logger.GetLogFileName());
+                }
+            }
         }
 
         private void SendHeartbeatInternal(bool forceUpdateKeepAlive)

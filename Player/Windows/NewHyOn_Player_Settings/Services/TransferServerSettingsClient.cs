@@ -135,7 +135,7 @@ public sealed class TransferServerSettingsClient : IDisposable
                 return RemoteWeeklyScheduleQueryResult.DatabaseMissing();
             }
 
-            if (!HasTable(conn, WeeklyScheduleTableName))
+            if (!EnsureTable(conn, WeeklyScheduleTableName))
             {
                 return RemoteWeeklyScheduleQueryResult.TableMissing();
             }
@@ -196,6 +196,18 @@ public sealed class TransferServerSettingsClient : IDisposable
     {
         List<string> tables = R.Db(DatabaseName).TableList().RunAtom<List<string>>(conn) ?? [];
         return tables.Contains(tableName);
+    }
+
+    private static bool EnsureTable(Connection conn, string tableName)
+    {
+        List<string> tables = R.Db(DatabaseName).TableList().RunAtom<List<string>>(conn) ?? [];
+        if (tables.Contains(tableName))
+        {
+            return true;
+        }
+
+        R.Db(DatabaseName).TableCreate(tableName).Run(conn);
+        return true;
     }
 
     public void Dispose()

@@ -482,6 +482,7 @@ namespace NewHyOnPlayer
         {
             if (Interlocked.Exchange(ref commStarted, 1) == 1)
             {
+                heartbeatReporter?.Start();
                 heartbeatReporter?.SendHeartbeatNow();
                 return;
             }

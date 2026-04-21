@@ -198,7 +198,8 @@ namespace NewHyOnPlayer
 
                 SyncAuthKey(manager.g_PlayerInfo, remoteGuid);
 
-                bool shouldNotifyPlayerSynced = createdRemotePlayer || guidChanged || !infoSyncedAfterConnect;
+                bool shouldSyncSchedulesForConnection = createdRemotePlayer || guidChanged || !infoSyncedAfterConnect;
+                bool shouldNotifyPlayerSynced = shouldSyncSchedulesForConnection;
                 infoSyncedAfterConnect = true;
 
                 if (guidChanged)
@@ -211,8 +212,11 @@ namespace NewHyOnPlayer
                     PlayerSynced?.Invoke();
                 }
 
-                SyncWeeklySchedule(remoteGuid, manager.g_PlayerInfo.PIF_PlayerName);
-                SyncSpecialSchedule(remoteGuid, manager.g_PlayerInfo.PIF_PlayerName);
+                if (shouldSyncSchedulesForConnection)
+                {
+                    SyncWeeklySchedule(remoteGuid, manager.g_PlayerInfo.PIF_PlayerName);
+                    SyncSpecialSchedule(remoteGuid, manager.g_PlayerInfo.PIF_PlayerName);
+                }
             }
             catch (Exception ex)
             {
@@ -289,6 +293,39 @@ namespace NewHyOnPlayer
                 Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
                 ResetConnection();
                 return null;
+            }
+        }
+
+        private bool EnsureTableExists(string tableName)
+        {
+            if (string.IsNullOrWhiteSpace(tableName))
+            {
+                return false;
+            }
+
+            try
+            {
+                var conn = GetConnection();
+                if (conn == null)
+                {
+                    return false;
+                }
+
+                var tables = R.Db(DatabaseName).TableList().RunAtom<List<string>>(conn) ?? new List<string>();
+                if (tables.Any(x => string.Equals(x, tableName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                R.Db(DatabaseName).TableCreate(tableName).Run(conn);
+                Logger.WriteLog($"RethinkSyncService created missing table: {tableName}", Logger.GetLogFileName());
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"EnsureTableExists({tableName}) error: {ex}", Logger.GetLogFileName());
+                ResetConnection();
+                return false;
             }
         }
 
@@ -1201,6 +1238,11 @@ namespace NewHyOnPlayer
 
             try
             {
+                if (!EnsureTableExists(WeeklyTable))
+                {
+                    return;
+                }
+
                 var conn = GetConnection();
                 if (conn == null)
                 {
