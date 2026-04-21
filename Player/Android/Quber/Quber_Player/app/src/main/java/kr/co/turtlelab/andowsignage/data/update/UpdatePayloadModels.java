@@ -19,6 +19,7 @@ public final class UpdatePayloadModels {
         public List<PageInfoClass> Pages;
         public ContractPlaylistPayload Contract;
         public ScheduleUpdatePayload Schedule;
+        public List<ContentPeriodPayload> ContentPeriods = new ArrayList<>();
     }
 
     public static final class ScheduleUpdatePayload {
@@ -35,6 +36,14 @@ public final class UpdatePayloadModels {
         public PageListInfoClass PageList;
         public List<PageInfoClass> Pages = new ArrayList<>();
         public ContractPlaylistPayload Contract;
+        public List<ContentPeriodPayload> ContentPeriods = new ArrayList<>();
+    }
+
+    public static final class ContentPeriodPayload {
+        public String ContentGuid = "";
+        public String FileName = "";
+        public String StartDate = "";
+        public String EndDate = "";
     }
 
     public static final class SpecialSchedulePayload {

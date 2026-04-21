@@ -4,7 +4,6 @@ using FluentFTP;
 using NewHyOnPlayer.DataManager;
 using Newtonsoft.Json;
 using RethinkDb.Driver;
-using RethinkDb.Driver.Net;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -158,21 +157,32 @@ namespace NewHyOnPlayer
             serverSettingsClient?.Dispose();
         }
 
-        public void RunUpdateAsync(PlayerInfoClass player)
+        public bool RunUpdateAsync(PlayerInfoClass player, SharedUpdatePayload payloadData, bool isUrgent)
         {
-            RunUpdateAsync(player, null, false);
-        }
+            if (!IsUpdatePayloadRunnable(player, payloadData, out string reason))
+            {
+                Logger.WriteLog($"UpdateService: update rejected. {reason}", Logger.GetLogFileName());
+                return false;
+            }
 
-        public void RunUpdateAsync(PlayerInfoClass player, SharedUpdatePayload payloadData, bool isUrgent)
-        {
-            if (player == null) return;
+            if (string.IsNullOrWhiteSpace(managerHost))
+            {
+                Logger.WriteLog("UpdateService: manager host is empty; cannot proceed update.", Logger.GetLogFileName());
+                return false;
+            }
+
+            if (!isUrgent && HasActiveQueue(player.PIF_GUID))
+            {
+                Logger.WriteLog($"UpdateService: active queue exists for player {player.PIF_GUID}, skip enqueue.", Logger.GetLogFileName());
+                return false;
+            }
 
             if (isUrgent)
             {
                 if (Interlocked.Exchange(ref urgentUpdateInProgress, 1) == 1)
                 {
                     Logger.WriteLog("UpdateService: urgent update already running, skip.", Logger.GetLogFileName());
-                    return;
+                    return false;
                 }
             }
             else
@@ -180,7 +190,7 @@ namespace NewHyOnPlayer
                 if (Interlocked.Exchange(ref isUpdateRequested, 1) == 1)
                 {
                     Logger.WriteLog("UpdateService: update already requested, skip.", Logger.GetLogFileName());
-                    return;
+                    return false;
                 }
             }
 
@@ -188,25 +198,13 @@ namespace NewHyOnPlayer
             {
                 try
                 {
-                    if (string.IsNullOrWhiteSpace(managerHost))
-                    {
-                        Logger.WriteLog("UpdateService: manager host is empty; cannot proceed update.", Logger.GetLogFileName());
-                        return;
-                    }
-
-                    if (!isUrgent && HasActiveQueue(player.PIF_GUID))
-                    {
-                        Logger.WriteLog($"UpdateService: active queue exists for player {player.PIF_GUID}, skip enqueue.", Logger.GetLogFileName());
-                        return;
-                    }
-
                     if (isUrgent)
                     {
                         RunUrgentUpdate(payloadData, player);
                         return;
                     }
 
-                    EnqueueAndProcess(player, managerHost, payloadData);
+                    EnqueueAndProcess(player, payloadData);
                 }
                 finally
                 {
@@ -220,6 +218,44 @@ namespace NewHyOnPlayer
                     }
                 }
             });
+
+            return true;
+        }
+
+        private static bool IsUpdatePayloadRunnable(PlayerInfoClass player, SharedUpdatePayload payloadData, out string reason)
+        {
+            if (player == null)
+            {
+                reason = "player is null";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(player.PIF_GUID))
+            {
+                reason = "player GUID empty";
+                return false;
+            }
+
+            if (payloadData == null)
+            {
+                reason = "payload missing";
+                return false;
+            }
+
+            if (payloadData.PageList == null)
+            {
+                reason = "playlist missing";
+                return false;
+            }
+
+            if (payloadData.Pages == null || payloadData.Pages.Count == 0)
+            {
+                reason = "pages missing";
+                return false;
+            }
+
+            reason = string.Empty;
+            return true;
         }
 
         public void EnqueueFromSchedule(PlayerInfoClass player, SharedUpdatePayload payloadData)
@@ -239,7 +275,7 @@ namespace NewHyOnPlayer
             {
                 try
                 {
-                    EnqueueAndProcess(player, managerHost, payloadData, true);
+                    EnqueueAndProcess(player, payloadData, true);
                 }
                 catch (Exception ex)
                 {
@@ -248,7 +284,7 @@ namespace NewHyOnPlayer
             });
         }
 
-        private void EnqueueAndProcess(PlayerInfoClass player, string managerHost, SharedUpdatePayload payloadData, bool isSchedulePayload = false)
+        private void EnqueueAndProcess(PlayerInfoClass player, SharedUpdatePayload payloadData, bool isSchedulePayload = false)
         {
             try
             {
@@ -259,7 +295,7 @@ namespace NewHyOnPlayer
                     return;
                 }
 
-                // 同一 플레이어/플레이리스트/페이로드가 기존에 대기 중이면 중복 적재 방지
+                // 동일한 플레이어/플레이리스트/페이로드가 기존에 대기 중이면 중복 적재를 방지한다.
                 var existing = queueRepository.LoadAll() ?? new List<UpdateQueue>();
                 bool duplicate = existing.Any(q =>
                     q != null
@@ -275,7 +311,7 @@ namespace NewHyOnPlayer
                     && string.Equals(q.PayloadJson ?? string.Empty, queue.PayloadJson ?? string.Empty, StringComparison.Ordinal));
                 if (duplicate)
                 {
-                    Logger.WriteLog("UpdateService: duplicate schedule payload detected, skip enqueue.", Logger.GetLogFileName());
+                    Logger.WriteLog("UpdateService: duplicate payload detected, skip enqueue.", Logger.GetLogFileName());
                     return;
                 }
 
@@ -284,53 +320,6 @@ namespace NewHyOnPlayer
                 SyncQueueToRethink(queue);
 
                 historyClient.UpsertQueued(queue.Id, queue.PlayerId, queue.PlayerName, "updatelist");
-                ProcessQueue();
-                return;
-
-                var rethinkClient = new RethinkContentClient(managerHost);
-                // 1) 메타 조회
-                var pageList = rethinkClient.FetchPageList(player.PIF_CurrentPlayList, player.PIF_PlayerName);
-                if (pageList == null || pageList.PLI_Pages == null || pageList.PLI_Pages.Count == 0)
-                {
-                    Logger.WriteLog("UpdateService: PageList not found.", Logger.GetLogFileName());
-                    return;
-                }
-
-                var pages = rethinkClient.FetchPages(pageList.PLI_Pages);
-                if (pages == null || pages.Count == 0)
-                {
-                    Logger.WriteLog("UpdateService: Pages not found.", Logger.GetLogFileName());
-                    return;
-                }
-
-                // 2) 다운로드 리스트 작성
-                var downloads = BuildDownloadList(pages);
-
-                // 큐에 적재
-                var contract = BuildContractPayload(player, pageList, pages);
-                var payload = new UpdatePayload { PageList = pageList, Pages = pages, Contract = contract };
-                var now = DateTime.Now;
-                long nowTicks = now.Ticks;
-                string queueId = BuildQueueId(player.PIF_GUID, nowTicks);
-                var payloadQueue = new UpdateQueue
-                {
-                    Id = queueId,
-                    PlayerId = player.PIF_GUID,
-                    PlayerName = player.PIF_PlayerName,
-                    PlaylistId = pageList.PLI_PageListName,
-                    PayloadJson = JsonConvert.SerializeObject(payload),
-                    DownloadJson = JsonConvert.SerializeObject(downloads),
-                    Status = UpdateQueueStatus.Queued,
-                    RetryCount = 0,
-                    NextAttempt = new DateTime(nowTicks, DateTimeKind.Local),
-                    CreatedTicks = nowTicks,
-                    HistoryId = queueId
-                };
-                queueRepository.Upsert(payloadQueue);
-                Logger.WriteLog("UpdateService: enqueue update.", Logger.GetLogFileName());
-                SyncQueueToRethink(payloadQueue);
-
-                historyClient.UpsertQueued(payloadQueue.Id, payloadQueue.PlayerId, payloadQueue.PlayerName, "updatelist");
                 ProcessQueue();
             }
             catch (Exception ex)
@@ -1194,91 +1183,6 @@ namespace NewHyOnPlayer
                 }
             }
             return list;
-        }
-
-        private ContractPlaylistPayload BuildContractPayload(PlayerInfoClass player, PageListInfoClass pageList, List<PageInfoClass> pages)
-        {
-            var payload = new ContractPlaylistPayload
-            {
-                playerId = player?.PIF_GUID ?? string.Empty,
-                playerName = player?.PIF_PlayerName ?? string.Empty,
-                playerLandscape = player?.PIF_IsLandScape ?? false,
-                playlistId = pageList?.PLI_PageListName ?? string.Empty,
-                playlistName = pageList?.PLI_PageListName ?? string.Empty,
-                pages = new List<ContractPagePayload>()
-            };
-
-            var orderedIds = pageList?.PLI_Pages ?? new List<string>();
-
-            foreach (var page in pages ?? new List<PageInfoClass>())
-            {
-                var pageEntry = new ContractPagePayload
-                {
-                    pageId = page.PIC_GUID,
-                    pageName = page.PIC_PageName,
-                    orderIndex = orderedIds.IndexOf(page.PIC_GUID),
-                    playHour = page.PIC_PlaytimeHour,
-                    playMinute = page.PIC_PlaytimeMinute,
-                    playSecond = page.PIC_PlaytimeSecond,
-                    volume = page.PIC_Volume,
-                    landscape = page.PIC_IsLandscape,
-                    elements = new List<ContractElementPayload>()
-                };
-                if (pageEntry.orderIndex < 0)
-                {
-                    pageEntry.orderIndex = payload.pages.Count;
-                }
-
-                if (page.PIC_Elements != null)
-                {
-                    foreach (var element in page.PIC_Elements)
-                    {
-                        var elementId = $"{page.PIC_GUID}_{element.EIF_Name}";
-                        var elementEntry = new ContractElementPayload
-                        {
-                            elementId = elementId,
-                            pageId = page.PIC_GUID,
-                            name = element.EIF_Name,
-                            type = element.EIF_Type,
-                            width = element.EIF_Width,
-                            height = element.EIF_Height,
-                            posLeft = element.EIF_PosLeft,
-                            posTop = element.EIF_PosTop,
-                            zIndex = element.EIF_ZIndex,
-                            muted = element.EIF_IsMuted,
-                            contents = new List<ContractContentPayload>()
-                        };
-
-                        var contents = element.EIF_ContentsInfoClassList ?? new List<AndoW.Shared.ContentsInfoClass>();
-                        for (int idx = 0; idx < contents.Count; idx++)
-                        {
-                            var content = contents[idx];
-                            var uid = $"{elementId}_{idx}";
-                            var contentEntry = new ContractContentPayload
-                            {
-                                uid = uid,
-                                elementId = elementId,
-                                fileName = content.CIF_FileName,
-                                fileFullPath = content.CIF_FileFullPath,
-                                contentType = content.CIF_ContentType,
-                                playMinute = content.CIF_PlayMinute,
-                                playSecond = content.CIF_PlaySec,
-                                valid = content.CIF_ValidTime,
-                                scrollSpeedSec = content.CIF_ScrollTextSpeedSec,
-                                remoteChecksum = string.IsNullOrWhiteSpace(content.CIF_FileHash) ? content.CIF_StrGUID : content.CIF_FileHash,
-                                fileSize = content.CIF_FileSize,
-                                fileExist = content.CIF_FileExist
-                            };
-                            elementEntry.contents.Add(contentEntry);
-                        }
-                        pageEntry.elements.Add(elementEntry);
-                    }
-                }
-                payload.pages.Add(pageEntry);
-            }
-
-            payload.pages = payload.pages.OrderBy(p => p.orderIndex).ToList();
-            return payload;
         }
 
         private static double CalculateDownloadProgress(List<DownloadEntry> entries)
@@ -2578,154 +2482,6 @@ namespace NewHyOnPlayer
             {
             }
         }
-    }
-
-    internal sealed class RethinkContentClient
-    {
-        private const string Database = "NewHyOn";
-        private static readonly RethinkDB R = RethinkDB.R;
-
-        private readonly string host;
-        private Connection connection;
-
-        public RethinkContentClient(string host)
-        {
-            this.host = string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host;
-        }
-
-        public PageListInfoClass FetchPageList(string playlistIdOrName, string playerName)
-        {
-            var conn = GetConnection();
-            if (conn == null) return null;
-
-            // 우선 ID로 조회, 없으면 이름으로 조회
-            Dictionary<string, object> map = null;
-            try
-            {
-                map = R.Db(Database).Table("PageListInfoManager").Get(playlistIdOrName).RunAtom<Dictionary<string, object>>(conn);
-            }
-            catch { /* ignore */ }
-
-            if (map == null && !string.IsNullOrWhiteSpace(playlistIdOrName))
-            {
-                var cursor = R.Db(Database).Table("PageListInfoManager")
-                    .Filter(r => r["PLI_PageListName"].Downcase().Eq(playlistIdOrName.ToLowerInvariant()))
-                    .Limit(1)
-                    .RunCursor<Dictionary<string, object>>(conn);
-                map = cursor.FirstOrDefault();
-            }
-            if (map == null) return null;
-
-            if (map.TryGetValue("id", out var idObj) && idObj != null)
-            {
-                map["Id"] = idObj.ToString();
-                map.Remove("id");
-            }
-
-            string json = JsonConvert.SerializeObject(map);
-            var pl = JsonConvert.DeserializeObject<PageListInfoClass>(json);
-            return pl;
-        }
-
-        public List<PageInfoClass> FetchPages(IEnumerable<string> pageIds)
-        {
-            var conn = GetConnection();
-            if (conn == null) return new List<PageInfoClass>();
-            var ids = pageIds?.ToList() ?? new List<string>();
-            if (ids.Count == 0) return new List<PageInfoClass>();
-
-            var list = R.Db(Database).Table("PageInfoManager").GetAll(ids).RunCursor<PageInfoClass>(conn);
-            
-            // 정렬: 입력 순서대로
-            var ordered = new List<PageInfoClass>();
-            foreach (var id in ids)
-            {
-                var found = list.FirstOrDefault(p => p.PIC_GUID == id);
-                if (found != null) ordered.Add(found);
-            }
-            return ordered;
-        }
-
-        private Connection GetConnection()
-        {
-            try
-            {
-                if (connection != null && connection.Open) return connection;
-                connection = R.Connection()
-                    .Hostname(host)
-                    .Port(28015)
-                    .User("admin", "turtle04!9")
-                    .Connect();
-                return connection;
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog($"RethinkContentClient connection error: {ex}", Logger.GetLogFileName());
-                connection = null;
-                return null;
-            }
-        }
-    }
-
-    internal sealed class UpdatePayload
-    {
-        public PageListInfoClass PageList { get; set; }
-        public List<PageInfoClass> Pages { get; set; }
-        public ContractPlaylistPayload Contract { get; set; }
-    }
-
-    internal sealed class ContractPlaylistPayload
-    {
-        public string playerId { get; set; }
-        public string playerName { get; set; }
-        public bool playerLandscape { get; set; }
-        public string playlistId { get; set; }
-        public string playlistName { get; set; }
-        public List<ContractPagePayload> pages { get; set; } = new List<ContractPagePayload>();
-    }
-
-    internal sealed class ContractPagePayload
-    {
-        public string pageId { get; set; }
-        public string pageName { get; set; }
-        public int orderIndex { get; set; }
-        public int playHour { get; set; }
-        public int playMinute { get; set; }
-        public int playSecond { get; set; }
-        public int volume { get; set; }
-        public bool landscape { get; set; }
-        public List<ContractElementPayload> elements { get; set; } = new List<ContractElementPayload>();
-    }
-
-    internal sealed class ContractElementPayload
-    {
-        public string elementId { get; set; }
-        public string pageId { get; set; }
-        public string name { get; set; }
-        public string type { get; set; }
-        public double width { get; set; }
-        public double height { get; set; }
-        public double posTop { get; set; }
-        public double posLeft { get; set; }
-        public int zIndex { get; set; }
-        public bool muted { get; set; } = true;
-        public List<ContractContentPayload> contents { get; set; } = new List<ContractContentPayload>();
-    }
-
-    internal sealed class ContractContentPayload
-    {
-        public string uid { get; set; }
-        public string elementId { get; set; }
-        public string fileName { get; set; }
-        public string fileFullPath { get; set; }
-        public string contentType { get; set; }
-        public string playMinute { get; set; }
-        public string playSecond { get; set; }
-        public bool valid { get; set; }
-        public int scrollSpeedSec { get; set; }
-        public string remoteChecksum { get; set; }
-        public long fileSize { get; set; }
-        public bool fileExist { get; set; }
     }
 
 }

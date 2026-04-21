@@ -291,6 +291,11 @@ namespace AndoW_Manager
             {
                 resolvedPayload = BuildSchedulePayloadBase64(player);
             }
+            if (string.IsNullOrWhiteSpace(resolvedPayload)
+                && string.Equals(normalizedCommand, RP_ORDER.updateweekly.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                resolvedPayload = BuildWeeklyPayloadBase64(player);
+            }
 
             var queueManager = DataShop.Instance.g_CommandQueueManager;
             var entry = queueManager.EnqueueCommand(playerId, normalizedCommand, resolvedPayload, "manager");
@@ -429,14 +434,41 @@ namespace AndoW_Manager
                 PlayerName = playerName,
                 GeneratedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
                 SpecialSchedules = schedules,
-                Playlists = playlistPayloads,
-                WeeklySchedule = LoadWeeklyScheduleSnapshot(player.PIF_GUID, playerName)
+                Playlists = playlistPayloads
             };
 
             var payload = new UpdatePayload
             {
                 Schedule = schedulePayload,
                 ContentPeriods = MergeContentPeriods(playlistPayloads)
+            };
+
+            return UpdatePayloadCodec.Encode(payload);
+        }
+
+        private static string BuildWeeklyPayloadBase64(PlayerInfoClass player)
+        {
+            if (player == null)
+            {
+                return string.Empty;
+            }
+
+            string playerName = player.PIF_PlayerName ?? string.Empty;
+            var weeklySchedule = LoadWeeklyScheduleSnapshot(player.PIF_GUID, playerName);
+            if (weeklySchedule == null)
+            {
+                return string.Empty;
+            }
+
+            var payload = new UpdatePayload
+            {
+                Schedule = new ScheduleUpdatePayload
+                {
+                    PlayerId = player.PIF_GUID ?? string.Empty,
+                    PlayerName = playerName,
+                    GeneratedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                    WeeklySchedule = weeklySchedule
+                }
             };
 
             return UpdatePayloadCodec.Encode(payload);

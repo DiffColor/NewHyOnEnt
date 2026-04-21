@@ -16,7 +16,7 @@ namespace AndoW_Manager
     }
     public enum PlayerStatus { Playing, Stopped, Updating }
     public enum RP_STATUS { playing, stopped, updating };
-    public enum RP_ORDER { updatelist, updateschedule, upgrade, reboot, check, getmac, poweroff, clearqueue, sync };
+    public enum RP_ORDER { updatelist, updateschedule, updateweekly, upgrade, reboot, check, getmac, poweroff, clearqueue, sync };
     
     public class DataShop
     {

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Newtonsoft.Json;
 using RethinkDb.Driver;
@@ -13,6 +14,7 @@ namespace NewHyOnPlayer
     {
         private const string DatabaseName = "NewHyOn";
         private const string TableName = "CommandQueue";
+        private const int SentRetryDelayMs = 15000;
 
         private static readonly RethinkDB R = RethinkDB.R;
         private readonly object syncRoot = new object();
@@ -60,7 +62,7 @@ namespace NewHyOnPlayer
 
                 return entries
                     .Where(entry => HasPlayer(entry, normalizedPlayerId)
-                        && IsStatus(entry, normalizedPlayerId, "pending"))
+                        && IsActionableStatus(entry, normalizedPlayerId))
                     .ToList();
             }
             catch (Exception ex)
@@ -219,6 +221,66 @@ namespace NewHyOnPlayer
 
             string current = GetStatus(entry, normalizedPlayerId);
             return string.Equals(current, expected, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsActionableStatus(CommandQueueEntry entry, string normalizedPlayerId)
+        {
+            if (IsStatus(entry, normalizedPlayerId, "pending"))
+            {
+                return true;
+            }
+
+            if (!IsStatus(entry, normalizedPlayerId, "sent"))
+            {
+                return false;
+            }
+
+            return IsSentDeliveryStale(entry);
+        }
+
+        private static bool IsSentDeliveryStale(CommandQueueEntry entry)
+        {
+            if (entry == null)
+            {
+                return false;
+            }
+
+            DateTime sentAt = ParseTimestamp(entry.UpdatedAt);
+            if (sentAt == DateTime.MinValue)
+            {
+                sentAt = ParseTimestamp(entry.CreatedAt);
+            }
+            if (sentAt == DateTime.MinValue)
+            {
+                return true;
+            }
+
+            return DateTime.Now - sentAt >= TimeSpan.FromMilliseconds(SentRetryDelayMs);
+        }
+
+        private static DateTime ParseTimestamp(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return DateTime.MinValue;
+            }
+
+            if (DateTime.TryParseExact(
+                    value.Trim(),
+                    "yyyy-MM-dd HH:mm:ss",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeLocal,
+                    out DateTime exact))
+            {
+                return exact;
+            }
+
+            if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out DateTime parsed))
+            {
+                return parsed;
+            }
+
+            return DateTime.MinValue;
         }
 
         private Connection GetConnection()

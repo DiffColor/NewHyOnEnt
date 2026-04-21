@@ -239,6 +239,7 @@ public class UpdateManagerService extends Service implements SignalRClientServic
         }
         String command = entry.Command;
         if (TextUtils.isEmpty(command)) {
+            commandQueueClient.markFailed(entry.id, playerGuid);
             return;
         }
         UpdatePayloadModels.UpdatePayload payload = UpdatePayloadModels.UpdatePayloadCodec.decode(entry.payloadJson);
@@ -301,11 +302,11 @@ public class UpdateManagerService extends Service implements SignalRClientServic
         });
     }
 
-    private String applySchedulePayload(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+    private boolean applySchedulePayload(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
         if (schedule == null) {
-            return "";
+            return false;
         }
-        return syncManager.enqueueScheduleUpdate(schedule);
+        return syncManager.applyScheduleUpdate(schedule);
     }
 
     private void executeCommandAsync(Runnable task) {
@@ -329,40 +330,43 @@ public class UpdateManagerService extends Service implements SignalRClientServic
         if (TextUtils.isEmpty(playerGuid) || TextUtils.isEmpty(command)) {
             return false;
         }
+        String normalizedCommand = command.trim().toLowerCase();
+        if (TextUtils.isEmpty(normalizedCommand)) {
+            return false;
+        }
+
         RethinkDbClient client = RethinkDbClient.getInstance();
         RethinkModels.PlayerInfoRecord playerInfo = client.fetchPlayerByGuid(playerGuid);
         String playerName = playerInfo != null ? playerInfo.getPlayerName() : "";
         String historyId = null;
-        if (!"updatelist".equals(command)) {
-            historyId = client.createCommandHistory(playerGuid, playerName, command);
-        }
-        boolean isClearQueue = "clearqueue".equals(command);
-        boolean hasActiveQueue = UpdateQueueHelper.hasActiveQueue();
-        if (hasActiveQueue && !isClearQueue) {
-            int cancelled = UpdateQueueHelper.cancelActiveQueues("Cancelled due to new command");
-            UpdateQueueHelper.requeueFailedQueuesIfDue();
-            syncManager.releaseActiveLease();
-//            SystemUtils.runOnUiThread(() -> Toast.makeText(AndoWSignage.getCtx(),
-//                    "Cancelling active queue (" + cancelled + ") and executing " + command,
-//                    Toast.LENGTH_SHORT).show());
+        if (!"updatelist".equals(normalizedCommand)) {
+            historyId = client.createCommandHistory(playerGuid, playerName, normalizedCommand);
         }
         client.clearCommand(playerGuid);
 //        SystemUtils.runOnUiThread(() -> Toast.makeText(AndoWSignage.getCtx(), command, Toast.LENGTH_SHORT).show());
         boolean handled = true;
-        switch (command) {
+        switch (normalizedCommand) {
             case "updatelist":
                 if (isUrgent && !urgentUpdateInProgress.compareAndSet(false, true)) {
-                    // Windows와 동일하게 이미 urgent 업데이트가 진행 중이면 무시(Handled 처리)
-                    handled = true;
+                    historyId = client.createCommandHistory(playerGuid, playerName, normalizedCommand);
+                    client.updateCommandHistory(historyId, "failed", "UPDATE_BUSY", "Urgent update already running", null);
+                    handled = false;
                     break;
                 }
                 try {
-                    if (payload == null || payload.PageList == null || payload.Pages == null || payload.Pages.isEmpty()) {
-                        historyId = client.createCommandHistory(playerGuid, playerName, command);
+                    if (!hasUsableUpdatePayload(payload)) {
+                        historyId = client.createCommandHistory(playerGuid, playerName, normalizedCommand);
                         client.updateCommandHistory(historyId, "failed", "PAYLOAD_MISSING", "Missing update payload", null);
                         handled = false;
                         break;
                     }
+
+                    if (UpdateQueueHelper.hasActiveQueue()) {
+                        UpdateQueueHelper.cancelActiveQueues("Cancelled due to new updatelist command");
+                        UpdateQueueHelper.requeueFailedQueuesIfDue();
+                        syncManager.releaseActiveLease();
+                    }
+
                     long queueId = syncManager.enqueuePayloadUpdate(payload, false);
                     if (queueId > 0) {
                         Long createdTicks = null;
@@ -385,7 +389,7 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                         } catch (Exception ignored) { }
                         historyId = client.upsertCommandHistoryForQueue(playerGuid,
                                 playerName,
-                                command,
+                                normalizedCommand,
                                 externalId,
                                 "queued",
                                 null,
@@ -397,7 +401,7 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                             syncManager.processQueueImmediate(queueId, true);
                         }
                     } else {
-                        historyId = client.createCommandHistory(playerGuid, playerName, command);
+                        historyId = client.createCommandHistory(playerGuid, playerName, normalizedCommand);
                         client.updateCommandHistory(historyId, "failed", "ENQUEUE_FAIL", "Failed to enqueue playlist", null);
                         handled = false;
                     }
@@ -414,13 +418,12 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                     handled = false;
                     break;
                 }
-                String scheduleRefQueueId = applySchedulePayload(payload.Schedule);
-                if (!TextUtils.isEmpty(scheduleRefQueueId)) {
-                    client.updateCommandHistory(historyId, "queued", null, null, scheduleRefQueueId);
-                } else {
-                    client.updateCommandHistory(historyId, "failed", "SCHEDULE_PAYLOAD", "payload missing", null);
+                if (!applySchedulePayload(payload.Schedule)) {
+                    client.updateCommandHistory(historyId, "failed", "SCHEDULE_PAYLOAD", "payload apply failed", null);
                     handled = false;
+                    break;
                 }
+                client.updateCommandHistory(historyId, "done", null, null, null);
                 //PowerApi.pushScheduleToDevice();
                 break;
             case "updateweekly":
@@ -471,12 +474,35 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                         null,
                         metadata);
                 break;
+            case "check":
+                client.updateCommandHistory(historyId, "in_progress", null, null, null);
+                requestHeartbeatNow();
+                client.updateCommandHistory(historyId, "done", null, null, null);
+                break;
+            case "getmac":
+                client.updateCommandHistory(historyId, "in_progress", null, null, null);
+                syncPlayerGuidAndRecoverCommunication(false);
+                requestHeartbeatNow();
+                client.updateCommandHistory(historyId, "done", null, null, null);
+                break;
+            case "upgrade":
+            case "sync":
+                client.updateCommandHistory(historyId, "failed", "UNSUPPORTED_COMMAND", "Unsupported command", null);
+                handled = false;
+                break;
             default:
-                client.updateCommandHistory(historyId, "failed", "UNKNOWN", "Unknown command", null);
+                client.updateCommandHistory(historyId, "failed", "UNKNOWN_COMMAND", "Unknown command", null);
                 handled = false;
                 break;
         }
         return handled;
+    }
+
+    private boolean hasUsableUpdatePayload(UpdatePayloadModels.UpdatePayload payload) {
+        return payload != null
+                && payload.PageList != null
+                && payload.Pages != null
+                && !payload.Pages.isEmpty();
     }
 
     @Override

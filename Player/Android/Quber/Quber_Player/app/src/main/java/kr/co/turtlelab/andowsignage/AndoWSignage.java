@@ -381,14 +381,13 @@ public class AndoWSignage extends Activity {
 		checkBakFile();
         
 		playerData = PlayerDataProvider.getPlayerData();
-		basePlaylistName = TextUtils.isEmpty(playerData.getPlaylist()) ? "" : playerData.getPlaylist();
-		refreshSchedulePlaybackState(System.currentTimeMillis());
-		
 		String idStr = playerData.getPlayerName();
 		
 		AndoWSignageApp.MANAGER_IP = playerData.getManagerIP();
 		
 		AndoWSignageApp.PLAYER_ID = idStr;
+		basePlaylistName = TextUtils.isEmpty(playerData.getPlaylist()) ? "" : playerData.getPlaylist();
+		refreshSchedulePlaybackState(System.currentTimeMillis());
 		
 		String manualIP = playerData.getPlayerIP();
 		if(manualIP != null) {
@@ -1623,6 +1622,15 @@ public class AndoWSignage extends Activity {
 		invalidatePageListCache(playlistName);
 	}
 
+	public void requestSchedulePlaybackRefresh() {
+		long now = System.currentTimeMillis();
+		refreshSchedulePlaybackState(now);
+		boolean switchRequested = maybeSwitchScheduledPlayback(now);
+		if (!switchRequested) {
+			stageSpecialPlaybackTarget();
+		}
+	}
+
 	private void syncCurrentPlaylistPages() {
 		pageDataList = getOrLoadPageList(playbackPlaylistName);
 	}
@@ -1804,6 +1812,10 @@ public class AndoWSignage extends Activity {
 	}
 
 	private void requestRuntimeActivation(PageRuntime runtime, int nextPageIndex) {
+		requestRuntimeActivation(runtime, nextPageIndex, false);
+	}
+
+	private void requestRuntimeActivation(PageRuntime runtime, int nextPageIndex, boolean forceImmediate) {
 		if (runtime == null) {
 			return;
 		}
@@ -1812,7 +1824,7 @@ public class AndoWSignage extends Activity {
 			clearPendingActivation(runtime);
 			return;
 		}
-		if (shouldDelayRuntimeActivation(runtime)) {
+		if (!forceImmediate && shouldDelayRuntimeActivation(runtime)) {
 			markPendingActivation(runtime);
 			tryActivatePendingRuntime();
 			return;
@@ -1930,6 +1942,9 @@ public class AndoWSignage extends Activity {
 
 	private void stageSpecialPlaybackTarget() {
 		ensurePageContainersAttached();
+		if (isImmediateScheduleRuntimePreparing()) {
+			return;
+		}
 		long now = System.currentTimeMillis();
 		boolean shouldPrepareSpecial = !TextUtils.isEmpty(pendingSchedulePlaylistName)
 				&& pendingScheduleSwitchAtMillis > 0
@@ -1954,6 +1969,14 @@ public class AndoWSignage extends Activity {
 		specialPageRuntime = null;
 		specialPageSpec = null;
 		requestPageBuildSpec(target, true);
+	}
+
+	private boolean isImmediateScheduleRuntimePreparing() {
+		return specialPageRuntime != null
+				&& specialPageRuntime != activePageRuntime
+				&& specialPageRuntime.activateWhenPrepared
+				&& !TextUtils.isEmpty(playbackPlaylistName)
+				&& TextUtils.equals(specialPageRuntime.playlistName, playbackPlaylistName);
 	}
 
 	private boolean matchesPageBuildSpec(PageBuildSpec spec, PlaybackTarget target) {
@@ -2072,7 +2095,7 @@ public class AndoWSignage extends Activity {
 	private void refreshSchedulePlaybackState(long nowMillis) {
 		long previousSwitchAtMillis = pendingScheduleSwitchAtMillis;
 		SpecialScheduleEvaluator.ScheduleDecision decision = scheduleEvaluator.evaluate(
-				AndoWSignageApp.PLAYER_ID,
+				playerData != null ? playerData.getPlayerId() : "",
 				playerData != null ? playerData.getPlayerName() : "",
 				basePlaylistName,
 				nowMillis);
@@ -2083,7 +2106,15 @@ public class AndoWSignage extends Activity {
 		boolean scheduleBoundaryDue = previousSwitchAtMillis > 0
 				&& previousSwitchAtMillis <= nowMillis
 				&& previousSwitchAtMillis != handledScheduleSwitchAtMillis;
-		if (activePageRuntime == null || scheduleBoundaryDue || TextUtils.isEmpty(playbackPlaylistName)) {
+		String currentRuntimePlaylist = activePageRuntime != null
+				? activePageRuntime.playlistName
+				: playbackPlaylistName;
+		boolean resolvedPlaylistChanged = activePageRuntime != null
+				&& !TextUtils.equals(resolvedPlaylistName, currentRuntimePlaylist);
+		if (activePageRuntime == null
+				|| scheduleBoundaryDue
+				|| resolvedPlaylistChanged
+				|| TextUtils.isEmpty(playbackPlaylistName)) {
 			playbackPlaylistName = resolvedPlaylistName;
 		} else if (activePageRuntime != null && !TextUtils.isEmpty(activePageRuntime.playlistName)) {
 			playbackPlaylistName = activePageRuntime.playlistName;
@@ -2092,6 +2123,8 @@ public class AndoWSignage extends Activity {
 		pendingScheduleSwitchAtMillis = decision.getNextSwitchAtMillis();
 		if (scheduleBoundaryDue) {
 			pendingScheduleDueSwitchAtMillis = previousSwitchAtMillis;
+		} else if (resolvedPlaylistChanged) {
+			pendingScheduleDueSwitchAtMillis = nowMillis;
 		}
 	}
 
@@ -2111,13 +2144,16 @@ public class AndoWSignage extends Activity {
 		}
 		List<PageDataModel> targetPages = getOrLoadPageList(playbackPlaylistName);
 		if (targetPages == null || targetPages.isEmpty()) {
+			if (!TextUtils.isEmpty(currentRuntimePlaylist)) {
+				playbackPlaylistName = currentRuntimePlaylist;
+			}
 			return false;
 		}
 		pageDataList = targetPages;
 		pageIdx = 0;
 		PlaybackTarget target = createActivePageTarget();
 		PageRuntime nextRuntime = resolveRuntimeForTarget(target, true);
-		requestRuntimeActivation(nextRuntime, 1);
+		requestRuntimeActivation(nextRuntime, 1, true);
 		markScheduleSwitchHandledIfDue(nowMillis);
 		return true;
 	}
@@ -2154,12 +2190,15 @@ public class AndoWSignage extends Activity {
 			return;
 		}
 		refreshSchedulePlaybackState(now);
-		if (!maybeSwitchScheduledPlayback(now)
+		boolean switchRequested = maybeSwitchScheduledPlayback(now);
+		if (!switchRequested
 				&& !stageNextDeferredPending
 				&& now >= nextStageAllowedAtMillis) {
 			stageNextPlaybackTarget();
 		}
-		stageSpecialPlaybackTarget();
+		if (!switchRequested) {
+			stageSpecialPlaybackTarget();
+		}
 		checkReadyQueue();
 		if (debugOverlayVisible) {
 			refreshDebugOverlay();

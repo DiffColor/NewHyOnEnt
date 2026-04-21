@@ -2,9 +2,6 @@
 using Newtonsoft.Json;
 using SharedUpdatePayload = AndoW.Shared.UpdatePayload;
 using NewHyOnPlayer.DataManager;
-using RethinkDb.Driver;
-using RethinkDb.Driver.Ast;
-using RethinkDb.Driver.Net;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,12 +15,10 @@ namespace NewHyOnPlayer
     internal sealed class RemoteCommandService : IDisposable
     {
         private readonly MainWindow owner;
-        private readonly RethinkCommandClient client;
         private readonly CommandQueueClient commandQueueClient;
         private readonly MultimediaTimer.Timer timer;
         private readonly UpdateService updateService;
         private readonly CommandHistoryClient historyClient;
-        private readonly string managerHost;
         private readonly ScheduleEvaluator scheduleEvaluator;
         private int isExecuting;
         private int isHandlingCommand;
@@ -34,8 +29,7 @@ namespace NewHyOnPlayer
         {
             this.owner = owner;
             this.intervalMs = (int)Math.Max(1, intervalMs);
-            managerHost = owner?.g_LocalSettingsManager?.Settings?.ManagerIP;
-            client = new RethinkCommandClient(managerHost);
+            var managerHost = owner?.g_LocalSettingsManager?.Settings?.ManagerIP;
             commandQueueClient = new CommandQueueClient(managerHost);
             historyClient = new CommandHistoryClient(string.IsNullOrWhiteSpace(managerHost) ? "127.0.0.1" : managerHost);
             updateService = new UpdateService(owner);
@@ -100,36 +94,6 @@ namespace NewHyOnPlayer
 
             commandQueueClient.MarkAttempt(entry.Id);
             HandleCommandEntry(playerInfo, entry, false);
-            return;
-
-            string playerName = infoManager.g_PlayerInfo.PIF_PlayerName;
-            string localGuid = infoManager.g_PlayerInfo.PIF_GUID;
-
-            PlayerInfoClass remotePlayer = null;
-            if (!string.IsNullOrWhiteSpace(playerName))
-            {
-                remotePlayer = client.FetchPlayerByName(playerName);
-            }
-
-            if (remotePlayer == null)
-            {
-                // 서버에 플레이어가 아직 생성되지 않음 → 아무 것도 하지 않고 대기
-                return;
-            }
-
-            if (!localGuid.Equals(remotePlayer.PIF_GUID)) {
-                infoManager.g_PlayerInfo.PIF_GUID = remotePlayer.PIF_GUID;
-                infoManager.SaveData();
-            }
-                        
-            string command = client.FetchCommand(remotePlayer.PIF_GUID);
-            if (string.IsNullOrWhiteSpace(command))
-            {
-                return;
-            }
-
-            command = command.Trim().ToLowerInvariant();
-            HandleCommand(remotePlayer, command, true);
         }
 
         private void ScheduleNext()
@@ -149,6 +113,7 @@ namespace NewHyOnPlayer
             string command = entry.Command?.Trim().ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(command))
             {
+                commandQueueClient.MarkFailed(entry.Id, playerInfo.PIF_GUID);
                 return;
             }
 
@@ -190,36 +155,49 @@ namespace NewHyOnPlayer
                 return false;
             }
 
+            string normalizedCommand = command.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalizedCommand))
+            {
+                return false;
+            }
+
             Interlocked.Exchange(ref isHandlingCommand, 1);
-            currentCommand = command ?? string.Empty;
+            currentCommand = normalizedCommand;
             try
             {
                 string playerGuid = playerInfo.PIF_GUID;
-                bool isClearQueue = string.Equals(command, "clearqueue", StringComparison.OrdinalIgnoreCase);
 
-                if (!isClearQueue && HasActiveQueue())
-                {
-                    updateService.CancelActiveQueues("Cancelled due to new command");
-                }
-
-                switch (command)
+                switch (normalizedCommand)
                 {
                     case "updatelist":
-                        if (payloadData == null)
+                        if (!HasUsableUpdatePayload(payloadData))
                         {
-                            Logger.WriteLog("updatelist command missing payload.", Logger.GetLogFileName());
+                            Logger.WriteLog("updatelist command missing or invalid payload.", Logger.GetLogFileName());
                             return false;
                         }
-                        updateService.RunUpdateAsync(playerInfo, payloadData, isUrgent);
-                        return true;
+
+                        if (HasActiveQueue())
+                        {
+                            updateService.CancelActiveQueues("Cancelled due to new updatelist command");
+                        }
+
+                        return updateService.RunUpdateAsync(playerInfo, payloadData, isUrgent);
                     case "updateschedule":
                         {
-                            string historyId = RecordCommandQueued(playerGuid, command);
-                            bool applied = payloadData != null && ApplySchedulePayload(payloadData.Schedule);
-                            owner?.RequestWeeklyScheduleSyncNow();
-                            if (!applied && payloadData == null)
+                            string historyId = RecordCommandQueued(playerGuid, normalizedCommand);
+                            if (payloadData?.Schedule == null)
                             {
-                                Logger.WriteLog("updateschedule payload missing. Triggered weekly sync only.", Logger.GetLogFileName());
+                                Logger.WriteLog("updateschedule payload missing or invalid.", Logger.GetLogFileName());
+                                RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "SCHEDULE_PAYLOAD", "payload missing");
+                                return false;
+                            }
+
+                            bool applied = ApplySchedulePayload(payloadData.Schedule);
+                            if (!applied)
+                            {
+                                Logger.WriteLog("updateschedule payload apply failed.", Logger.GetLogFileName());
+                                RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "SCHEDULE_PAYLOAD", "payload apply failed");
+                                return false;
                             }
 
                             RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
@@ -227,7 +205,7 @@ namespace NewHyOnPlayer
                         }
                     case "updateweekly":
                         {
-                            string historyId = RecordCommandQueued(playerGuid, command);
+                            string historyId = RecordCommandQueued(playerGuid, normalizedCommand);
                             bool applied = payloadData != null && ApplyWeeklySchedule(payloadData.Schedule?.WeeklySchedule, playerInfo);
                             if (applied)
                             {
@@ -242,30 +220,44 @@ namespace NewHyOnPlayer
                         }
                     case "reboot":
                         {
-                            string historyId = RecordCommandQueued(playerGuid, command);
+                            string historyId = RecordCommandQueued(playerGuid, normalizedCommand);
                             ProcessTools.ExecuteCommand("shutdown /r /t 0");
                             RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
                             return true;
                         }
                     case "poweroff":
                         {
-                            string historyId = RecordCommandQueued(playerGuid, command);
+                            string historyId = RecordCommandQueued(playerGuid, normalizedCommand);
                             ProcessTools.ExecuteCommand("shutdown /s /t 0");
                             RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
                             return true;
                         }
                     case "clearqueue":
                         {
-                            string historyId = RecordCommandQueued(playerGuid, command);
+                            string historyId = RecordCommandQueued(playerGuid, normalizedCommand);
                             int cancelled = updateService.CancelActiveQueues("Cancelled via command");
                             Logger.WriteLog($"clearqueue command received, cancelled={cancelled}", Logger.GetLogFileName());
-                            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Cancelled, null, $"cancelled={cancelled}");
+                            string status = cancelled > 0 ? CommandHistoryStatus.Cancelled : CommandHistoryStatus.Done;
+                            RecordCommandDone(historyId, playerGuid, status, null, $"cancelled={cancelled}");
                             return true;
                         }
+                    case "check":
+                        {
+                            string historyId = RecordCommandQueued(playerGuid, normalizedCommand);
+                            owner?.SendHeartbeatNow();
+                            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
+                            return true;
+                        }
+                    case "sync":
+                        return HandleSyncCommand(playerGuid, normalizedCommand);
+                    case "upgrade":
+                        return RecordUnsupportedCommand(playerGuid, normalizedCommand);
+                    case "getmac":
+                        return HandleGetMacCommand(playerGuid, normalizedCommand);
                     default:
                         {
-                            string historyId = RecordCommandQueued(playerGuid, command);
-                            Logger.WriteLog($"Unknown remote command: {command}", Logger.GetLogFileName());
+                            string historyId = RecordCommandQueued(playerGuid, normalizedCommand);
+                            Logger.WriteLog($"Unknown remote command: {normalizedCommand}", Logger.GetLogFileName());
                             RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "UNKNOWN_COMMAND", null);
                             return false;
                         }
@@ -281,6 +273,38 @@ namespace NewHyOnPlayer
                 currentCommand = string.Empty;
                 Interlocked.Exchange(ref isHandlingCommand, 0);
             }
+        }
+
+        private bool RecordUnsupportedCommand(string playerGuid, string command)
+        {
+            string historyId = RecordCommandQueued(playerGuid, command);
+            Logger.WriteLog($"Unsupported remote command on Windows player: {command}", Logger.GetLogFileName());
+            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "UNSUPPORTED_COMMAND", null);
+            return false;
+        }
+
+        private bool HandleSyncCommand(string playerGuid, string command)
+        {
+            string historyId = RecordCommandQueued(playerGuid, command);
+            bool requested = owner?.RequestPlaybackSyncNow() ?? false;
+            if (!requested)
+            {
+                Logger.WriteLog("sync command ignored: sync playback is inactive or not ready.", Logger.GetLogFileName());
+                RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "SYNC_INACTIVE", null);
+                return false;
+            }
+
+            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
+            return true;
+        }
+
+        private bool HandleGetMacCommand(string playerGuid, string command)
+        {
+            string historyId = RecordCommandQueued(playerGuid, command);
+            owner?.RequestPlayerGuidSyncNow();
+            owner?.SendHeartbeatNow();
+            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
+            return true;
         }
 
         private SharedUpdatePayload DecodePayload(string payloadBase64)
@@ -306,91 +330,12 @@ namespace NewHyOnPlayer
             }
         }
 
-        private void HandleCommand(PlayerInfoClass playerInfo, string command, bool clearCommand)
+        private static bool HasUsableUpdatePayload(SharedUpdatePayload payloadData)
         {
-            HandleCommandCore(playerInfo, command, null, false);
-            return;
-
-            Interlocked.Exchange(ref isHandlingCommand, 1);
-            currentCommand = command ?? string.Empty;
-            try
-            {
-                string playerGuid = playerInfo.PIF_GUID;
-                string managerHost = this.managerHost;
-
-                bool isClearQueue = string.Equals(command, "clearqueue", StringComparison.OrdinalIgnoreCase);
-
-                // 새 명령이 오면 기존 큐를 즉시 취소하여 교체
-                if (!isClearQueue && HasActiveQueue())
-                {
-                    updateService.CancelActiveQueues("Cancelled due to new command");
-                }
-
-                switch (command)
-                {
-                    case "updatelist":
-                        updateService.RunUpdateAsync(playerInfo);
-                        break;
-                    case "updateschedule":
-                        {
-                            string historyId = RecordCommandQueued(playerInfo.PIF_GUID, command);
-                            bool applied = ApplySchedulePayload(null);
-                            if (applied)
-                            {
-                                RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
-                            }
-                            else
-                            {
-                                Logger.WriteLog("updateschedule payload missing or invalid.", Logger.GetLogFileName());
-                                RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "SCHEDULE_PAYLOAD", "payload missing");
-                            }
-                        }
-                        break;
-                    case "reboot":
-                        {
-                            string historyId = RecordCommandQueued(playerGuid, command);
-                            ProcessTools.ExecuteCommand("shutdown /r /t 0");
-                            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
-                        }
-                        break;
-                    case "poweroff":
-                        {
-                            string historyId = RecordCommandQueued(playerGuid, command);
-                            ProcessTools.ExecuteCommand("shutdown /s /t 0");
-                            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Done, null, null);
-                        }
-                        break;
-                    case "clearqueue":
-                        {
-                            string historyId = RecordCommandQueued(playerGuid, command);
-                            int cancelled = updateService.CancelActiveQueues("Cancelled via command");
-                            Logger.WriteLog($"clearqueue command received, cancelled={cancelled}", Logger.GetLogFileName());
-                            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Cancelled, null, $"cancelled={cancelled}");
-                        }
-                        break;
-                    default:
-                        {
-                            string historyId = RecordCommandQueued(playerGuid, command);
-                            Logger.WriteLog($"Unknown remote command: {command}", Logger.GetLogFileName());
-                            RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "UNKNOWN_COMMAND", null);
-                        }
-                        break;
-                }
-
-                if (clearCommand)
-                {
-                    client.ClearCommand(playerGuid);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-            }
-            finally
-            {
-                currentCommand = string.Empty;
-                Interlocked.Exchange(ref isHandlingCommand, 0);
-            }
+            return payloadData != null
+                   && payloadData.PageList != null
+                   && payloadData.Pages != null
+                   && payloadData.Pages.Count > 0;
         }
 
         private bool HasActiveQueue()
@@ -404,7 +349,10 @@ namespace NewHyOnPlayer
                     {
                         if (q.Status == UpdateQueueStatus.Queued
                             || q.Status == UpdateQueueStatus.Downloading
-                            || q.Status == UpdateQueueStatus.Validating)
+                            || q.Status == UpdateQueueStatus.Downloaded
+                            || q.Status == UpdateQueueStatus.Validating
+                            || q.Status == UpdateQueueStatus.Ready
+                            || q.Status == UpdateQueueStatus.Applying)
                         {
                             return true;
                         }
@@ -495,8 +443,7 @@ namespace NewHyOnPlayer
 
                 var playerInfo = owner?.g_PlayerInfoManager?.g_PlayerInfo;
                 EnqueueScheduleDownloads(playerInfo, playlists);
-                ApplyWeeklySchedule(payload.WeeklySchedule, playerInfo);
-                owner?.HandleWeeklyScheduleUpdated();
+                owner?.RequestScheduleEvaluation(force: true);
             }
             catch (Exception ex)
             {
@@ -741,155 +688,6 @@ namespace NewHyOnPlayer
 
                 Logger.WriteLog($"스케줄 수신: 플레이리스트 다운로드 예약 -> {payload.PageList?.PLI_PageListName}", Logger.GetLogFileName());
                 updateService.EnqueueFromSchedule(playerInfo, payload);
-            }
-        }
-    }
-
-    internal sealed class RethinkCommandClient
-    {
-        private const string DatabaseName = "NewHyOn";
-        private const string PlayerTableName = "PlayerInfoManager";
-
-        private static readonly RethinkDB R = RethinkDB.R;
-        private readonly object syncRoot = new object();
-        private Connection connection;
-        private string host = "127.0.0.1";
-        private int port = 28015;
-        private string username = "admin";
-        private string password = "turtle04!9";
-
-        public RethinkCommandClient(string managerHost = "127.0.0.1")
-        {
-            if (!string.IsNullOrWhiteSpace(managerHost))
-            {
-                host = managerHost;
-            }
-        }
-
-        public string FetchCommand(string playerGuid)
-        {
-            if (string.IsNullOrWhiteSpace(playerGuid))
-            {
-                return null;
-            }
-
-            try
-            {
-                var map = R.Db(DatabaseName)
-                    .Table(PlayerTableName)
-                    .Get(playerGuid)
-                    .Pluck("command")
-                    .RunAtom<Dictionary<string, object>>(GetConnection());
-
-                if (map == null || !map.ContainsKey("command"))
-                {
-                    return null;
-                }
-
-                return map["command"]?.ToString();
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-                ResetConnection();
-                return null;
-            }
-        }
-
-        public void ClearCommand(string playerGuid)
-        {
-            if (string.IsNullOrWhiteSpace(playerGuid))
-            {
-                return;
-            }
-
-            try
-            {
-                R.Db(DatabaseName)
-                    .Table(PlayerTableName)
-                    .Get(playerGuid)
-                    .Update(new { command = string.Empty })
-                    .Run(GetConnection());
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-                ResetConnection();
-            }
-        }
-
-        public PlayerInfoClass FetchPlayerByName(string playerName)
-        {
-            if (string.IsNullOrWhiteSpace(playerName))
-            {
-                return null;
-            }
-
-            string lowered = playerName.ToLowerInvariant();
-
-            try
-            {
-                var conn = GetConnection();
-                if (conn == null)
-                {
-                    return null;
-                }
-
-                ReqlExpr query = R.Db(DatabaseName)
-                    .Table(PlayerTableName)
-                    .Filter(row => row["PIF_PlayerName"].Downcase().Eq(lowered))
-                    .Limit(1);
-
-                var cursor = query.RunCursor<PlayerInfoClass>(conn);
-                if (cursor == null)
-                {
-                    return null;
-                }
-
-                return cursor.FirstOrDefault();
-            }
-            catch (Exception ex)
-            {
-                TurtleTools.Logger.WriteErrorLog(ex.ToString(), TurtleTools.Logger.GetLogFileName());
-                return null;
-            }
-        }
-
-        private Connection GetConnection()
-        {
-            lock (syncRoot)
-            {
-                if (connection != null && connection.Open)
-                {
-                    return connection;
-                }
-
-                connection = R.Connection()
-                    .Hostname(host)
-                    .Port(port)
-                    .User(username, password)
-                    .Connect();
-
-                return connection;
-            }
-        }
-
-        private void ResetConnection()
-        {
-            lock (syncRoot)
-            {
-                if (connection != null)
-                {
-                    try
-                    {
-                        connection.Close(false);
-                        connection.Dispose();
-                    }
-                    catch
-                    {
-                    }
-                    connection = null;
-                }
             }
         }
     }

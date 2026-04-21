@@ -27,7 +27,7 @@ public class AndoWSignageApp extends Application {
 	public enum DAY_OF_WEEK { MON, TUE, WED, THU, FRI, SAT, SUN };
 	
     public enum RP_STATUS { playing, stopped, updating };
-    public enum RP_ORDER { updatelist, updateschedule, upgrade, reboot, check, getmac, poweroff, wakeup, clearqueue };
+    public enum RP_ORDER { updatelist, updateschedule, updateweekly, upgrade, reboot, check, getmac, poweroff, wakeup, clearqueue };
 
 	public static String PLAYER_ID = "";
 	public static String MANAGER_IP = "";

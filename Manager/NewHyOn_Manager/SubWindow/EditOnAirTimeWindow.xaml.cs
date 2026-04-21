@@ -296,7 +296,7 @@ namespace AndoW_Manager
                 SyncWeeklyInfoFromUI();
                 g_WeeklyInfoManagerClass.SaveWeeklySchedule(this.g_CurrentSelectedPlayerInfoClass.PIF_GUID, this.g_CurrentSelectedPlayerInfoClass.PIF_PlayerName);
 
-                MainWindow.Instance.EnqueueCommandForPlayer(g_CurrentSelectedPlayerInfoClass, RP_ORDER.updateschedule.ToString(), pushSignalR: true);
+                MainWindow.Instance.EnqueueCommandForPlayer(g_CurrentSelectedPlayerInfoClass, RP_ORDER.updateweekly.ToString(), pushSignalR: true);
 
                 MessageTools.ShowMessageBox("방송시간 설정을 업데이트했습니다.", "확인");
             }
@@ -329,7 +329,7 @@ namespace AndoW_Manager
 
                 try
                 {
-                    MainWindow.Instance.EnqueueCommandForPlayer(item, RP_ORDER.updateschedule.ToString(), pushSignalR: true);
+                    MainWindow.Instance.EnqueueCommandForPlayer(item, RP_ORDER.updateweekly.ToString(), pushSignalR: true);
                 }
                 catch (Exception)
                 {

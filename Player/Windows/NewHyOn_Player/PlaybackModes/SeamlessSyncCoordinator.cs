@@ -85,6 +85,29 @@ namespace NewHyOnPlayer.PlaybackModes
             syncService = null;
         }
 
+        public bool RequestSyncNow()
+        {
+            if (!started || !IsSyncPlaybackActive || syncService == null)
+            {
+                return false;
+            }
+
+            if (!IsSyncLeader)
+            {
+                syncService.SendIndexRequestBroadcast();
+                return true;
+            }
+
+            if (playbackContainer != null
+                && playbackContainer.TryGetLeaderSyncPosition(out int playlistIndex, out TimeSpan position))
+            {
+                syncService.SendIndexWithPosition(syncTargets, playlistIndex, position);
+                return true;
+            }
+
+            return playbackContainer?.TryAdvanceLeaderToNextSyncIndex() ?? false;
+        }
+
         public void Dispose()
         {
             Stop();

@@ -844,6 +844,11 @@ namespace NewHyOnPlayer
             heartbeatReporter?.SendHeartbeatNow();
         }
 
+        internal bool RequestPlaybackSyncNow()
+        {
+            return playbackSyncCoordinator?.RequestSyncNow() ?? false;
+        }
+
         internal void ReportUpdateHeartbeatNow(string status, int progress, bool force, long sessionId)
         {
             heartbeatReporter?.ReportUpdateNow(status, progress, force, sessionId);

@@ -122,7 +122,7 @@ public class DataSyncManager {
             return false;
         }
 
-        return !TextUtils.isEmpty(enqueueScheduleUpdate(payload));
+        return applyScheduleUpdate(payload);
     }
 
 
@@ -352,37 +352,62 @@ public class DataSyncManager {
     }
 
     public String enqueueScheduleUpdate(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        return applyScheduleUpdate(schedule) ? "applied" : "";
+    }
+
+    public boolean applyScheduleUpdate(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
         if (schedule == null) {
-            return "";
+            return false;
         }
         String cacheId = resolveScheduleCacheId(schedule);
         if (TextUtils.isEmpty(cacheId)) {
-            return "";
+            return false;
         }
 
+        if (!applySchedulePayloadToLocalDb(schedule)) {
+            return false;
+        }
+        enqueueScheduleDownloads(schedule);
+        requestSchedulePlaybackRefresh();
+        return true;
+    }
+
+    private void enqueueScheduleDownloads(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (schedule == null || schedule.Playlists == null) {
+            return;
+        }
+        boolean queuedAny = false;
+        Set<String> enqueuedPlaylists = new HashSet<>();
         if (schedule.Playlists != null) {
             for (UpdatePayloadModels.SchedulePlaylistPayload playlist : schedule.Playlists) {
                 if (playlist == null || playlist.PageList == null || playlist.Pages == null || playlist.Pages.isEmpty()) {
                     continue;
                 }
+                String playlistName = !TextUtils.isEmpty(playlist.PlaylistName)
+                        ? playlist.PlaylistName
+                        : playlist.PageList.PLI_PageListName;
+                if (TextUtils.isEmpty(playlistName)) {
+                    continue;
+                }
+                String normalizedName = playlistName.trim().toLowerCase(java.util.Locale.US);
+                if (enqueuedPlaylists.contains(normalizedName)) {
+                    continue;
+                }
+                enqueuedPlaylists.add(normalizedName);
                 UpdatePayloadModels.UpdatePayload payload = new UpdatePayloadModels.UpdatePayload();
                 payload.PageList = playlist.PageList;
                 payload.Pages = playlist.Pages;
                 payload.Contract = playlist.Contract;
+                payload.ContentPeriods = playlist.ContentPeriods;
                 long queueId = enqueuePayloadUpdate(payload, true, false);
-                if (queueId <= 0 && !hasActivePayloadQueue(payload, true)) {
-                    return "";
+                if (queueId > 0) {
+                    queuedAny = true;
                 }
             }
         }
-
-        long scheduleQueueId = enqueueScheduleApplyQueue(schedule, false);
-        if (scheduleQueueId <= 0) {
-            return "";
+        if (queuedAny) {
+            queueProcessor.schedule();
         }
-
-        queueProcessor.schedule();
-        return getQueueExternalId(scheduleQueueId);
     }
 
     private String resolveScheduleCacheId(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
@@ -395,19 +420,7 @@ public class DataSyncManager {
         if (!TextUtils.isEmpty(schedule.PlayerName)) {
             return schedule.PlayerName;
         }
-        if (schedule.WeeklySchedule != null) {
-            if (!TextUtils.isEmpty(schedule.WeeklySchedule.PlayerID)) {
-                return schedule.WeeklySchedule.PlayerID;
-            }
-            if (!TextUtils.isEmpty(schedule.WeeklySchedule.PlayerName)) {
-                return schedule.WeeklySchedule.PlayerName;
-            }
-        }
-        String stored = rethinkClient.getStoredPlayerGuid();
-        if (TextUtils.isEmpty(stored)) {
-            stored = rethinkClient.ensurePlayerGuid();
-        }
-        return TextUtils.isEmpty(stored) ? "" : stored;
+        return "";
     }
 
     private String resolveSchedulePlayerId(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
@@ -416,9 +429,6 @@ public class DataSyncManager {
         }
         if (!TextUtils.isEmpty(schedule.PlayerId)) {
             return schedule.PlayerId;
-        }
-        if (schedule.WeeklySchedule != null && !TextUtils.isEmpty(schedule.WeeklySchedule.PlayerID)) {
-            return schedule.WeeklySchedule.PlayerID;
         }
         String stored = rethinkClient.getStoredPlayerGuid();
         if (TextUtils.isEmpty(stored)) {
@@ -433,9 +443,6 @@ public class DataSyncManager {
         }
         if (!TextUtils.isEmpty(schedule.PlayerName)) {
             return schedule.PlayerName;
-        }
-        if (schedule.WeeklySchedule != null && !TextUtils.isEmpty(schedule.WeeklySchedule.PlayerName)) {
-            return schedule.WeeklySchedule.PlayerName;
         }
         String storedPlayerName = rethinkClient.getStoredPlayerName();
         return TextUtils.isEmpty(storedPlayerName)
@@ -1063,10 +1070,14 @@ public class DataSyncManager {
         List<String> orderedIds = pageList.PLI_Pages == null ? new ArrayList<>() : pageList.PLI_Pages;
         for (int i = 0; i < pages.size(); i++) {
             UpdatePayloadModels.PageInfoClass page = pages.get(i);
+            String pageId = resolvePageId(page);
+            if (TextUtils.isEmpty(pageId)) {
+                continue;
+            }
             UpdateQueueContract.PagePayload pageEntry = new UpdateQueueContract.PagePayload();
-            pageEntry.pageId = page.PIC_GUID;
+            pageEntry.pageId = pageId;
             pageEntry.pageName = page.PIC_PageName;
-            int orderIndex = orderedIds.indexOf(page.PIC_GUID);
+            int orderIndex = orderedIds.indexOf(pageId);
             if (orderIndex < 0) {
                 orderIndex = i;
             }
@@ -1081,9 +1092,9 @@ public class DataSyncManager {
             if (page.PIC_Elements != null) {
                 for (UpdatePayloadModels.ElementInfoClass element : page.PIC_Elements) {
                     UpdateQueueContract.ElementPayload elementEntry = new UpdateQueueContract.ElementPayload();
-                    String elementId = page.PIC_GUID + "_" + element.EIF_Name;
+                    String elementId = pageId + "_" + element.EIF_Name;
                     elementEntry.elementId = elementId;
-                    elementEntry.pageId = page.PIC_GUID;
+                    elementEntry.pageId = pageId;
                     elementEntry.name = element.EIF_Name;
                     elementEntry.type = element.EIF_Type;
                     elementEntry.width = element.EIF_Width;
@@ -1122,6 +1133,16 @@ public class DataSyncManager {
         return result;
     }
 
+    private String resolvePageId(UpdatePayloadModels.PageInfoClass page) {
+        if (page == null) {
+            return "";
+        }
+        if (!TextUtils.isEmpty(page.PIC_GUID)) {
+            return page.PIC_GUID;
+        }
+        return TextUtils.isEmpty(page.Id) ? "" : page.Id;
+    }
+
     private void fillFallbackPlayerInfo(UpdateQueueContract.PlaylistPayload payload) {
         if (payload == null) {
             return;
@@ -1150,6 +1171,10 @@ public class DataSyncManager {
             if (page == null || page.PIC_Elements == null) {
                 continue;
             }
+            String pageId = resolvePageId(page);
+            if (TextUtils.isEmpty(pageId)) {
+                continue;
+            }
             for (UpdatePayloadModels.ElementInfoClass element : page.PIC_Elements) {
                 if (element == null || element.EIF_ContentsInfoClassList == null) {
                     continue;
@@ -1159,7 +1184,7 @@ public class DataSyncManager {
                     if (content == null || TextUtils.isEmpty(content.CIF_FileName)) {
                         continue;
                     }
-                    String elementId = page.PIC_GUID + "_" + element.EIF_Name;
+                    String elementId = pageId + "_" + element.EIF_Name;
                     UpdateQueueContract.DownloadEntry entry = new UpdateQueueContract.DownloadEntry();
                     entry.FileName = content.CIF_FileName;
                     entry.RemotePath = resolveRelativePath(content);
@@ -1416,14 +1441,14 @@ public class DataSyncManager {
             if (!TextUtils.isEmpty(playerGUID)) {
                 releasePlayerLeaseAsync(playerGUID);
             }
+            String playlistName = "";
+            UpdatePayloadModels.UpdatePayload appliedPayload =
+                    UpdatePayloadModels.UpdatePayloadCodec.decode(queue.getPayloadJson());
+            if (appliedPayload != null && appliedPayload.PageList != null
+                    && !TextUtils.isEmpty(appliedPayload.PageList.PLI_PageListName)) {
+                playlistName = appliedPayload.PageList.PLI_PageListName;
+            }
             if (!isScheduleQueue) {
-                String playlistName = "";
-                UpdatePayloadModels.UpdatePayload appliedPayload =
-                        UpdatePayloadModels.UpdatePayloadCodec.decode(queue.getPayloadJson());
-                if (appliedPayload != null && appliedPayload.PageList != null
-                        && !TextUtils.isEmpty(appliedPayload.PageList.PLI_PageListName)) {
-                    playlistName = appliedPayload.PageList.PLI_PageListName;
-                }
                 if (!TextUtils.isEmpty(playlistName)) {
                     kr.co.turtlelab.andowsignage.dataproviders.PlayerDataProvider.updateCurrentPListName(playlistName);
                 }
@@ -1434,6 +1459,8 @@ public class DataSyncManager {
                         }
                     });
                 }
+            } else if (!TextUtils.isEmpty(playlistName)) {
+                requestSchedulePlaybackRefresh();
             }
         } else {
             long delay = UpdateQueueContract.RetryPolicy.getDelayMs(queue.getRetryCount() + 1);
@@ -1460,6 +1487,14 @@ public class DataSyncManager {
     }
 
     private boolean applyQueuedSchedulePayload(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
+        if (!applySchedulePayloadToLocalDb(schedule)) {
+            return false;
+        }
+        requestSchedulePlaybackRefresh();
+        return true;
+    }
+
+    private boolean applySchedulePayloadToLocalDb(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
         if (schedule == null) {
             return false;
         }
@@ -1470,33 +1505,15 @@ public class DataSyncManager {
         if (!saveScheduleCache(cacheId, schedule)) {
             return false;
         }
-        if (schedule.WeeklySchedule != null) {
-            String weeklyKey = resolveWeeklyScheduleKey(schedule);
-            if (TextUtils.isEmpty(weeklyKey)
-                    || !applyWeeklySchedulePayload(weeklyKey, schedule.WeeklySchedule)) {
-                return false;
-            }
-        }
         return true;
     }
 
-    private String resolveWeeklyScheduleKey(UpdatePayloadModels.ScheduleUpdatePayload schedule) {
-        if (schedule == null) {
-            return "";
-        }
-        if (!TextUtils.isEmpty(schedule.PlayerId)) {
-            return schedule.PlayerId;
-        }
-        if (schedule.WeeklySchedule != null && !TextUtils.isEmpty(schedule.WeeklySchedule.PlayerID)) {
-            return schedule.WeeklySchedule.PlayerID;
-        }
-        if (!TextUtils.isEmpty(schedule.PlayerName)) {
-            return schedule.PlayerName;
-        }
-        if (schedule.WeeklySchedule != null && !TextUtils.isEmpty(schedule.WeeklySchedule.PlayerName)) {
-            return schedule.WeeklySchedule.PlayerName;
-        }
-        return resolveScheduleCacheId(schedule);
+    private void requestSchedulePlaybackRefresh() {
+        SystemUtils.runOnUiThread(() -> {
+            if (AndoWSignage.act != null) {
+                AndoWSignage.act.requestSchedulePlaybackRefresh();
+            }
+        });
     }
 
     public boolean applyNextReadyQueue() {
@@ -1949,8 +1966,9 @@ public class DataSyncManager {
             return index;
         }
         for (UpdatePayloadModels.PageInfoClass page : payload.Pages) {
-            if (page != null && !TextUtils.isEmpty(page.PIC_GUID)) {
-                index.put(page.PIC_GUID, page);
+            String pageId = resolvePageId(page);
+            if (!TextUtils.isEmpty(pageId)) {
+                index.put(pageId, page);
             }
         }
         return index;

@@ -85,6 +85,7 @@ namespace NewHyOnPlayer.PlaybackModes
                     }
                 }
 
+                ConfigureSingleVideoSlotLoop(slotPlan);
                 plan.Slots.Add(slotPlan);
             }
 
@@ -99,6 +100,25 @@ namespace NewHyOnPlayer.PlaybackModes
             }
 
             return plan;
+        }
+
+        private static void ConfigureSingleVideoSlotLoop(SeamlessSlotPlan slotPlan)
+        {
+            if (slotPlan == null || slotPlan.Items == null || slotPlan.Items.Count != 1)
+            {
+                return;
+            }
+
+            SeamlessContentItem item = slotPlan.Items[0];
+            if (item == null || !item.IsVideo)
+            {
+                return;
+            }
+
+            item.ShouldLoop = true;
+            item.TransitionByTimer = true;
+            item.LoopDisableAfterEndCount = 0;
+            item.TransitionEndEventCount = 0;
         }
 
         private SeamlessContentItem BuildContentItem(SharedContentsInfoClass content)
