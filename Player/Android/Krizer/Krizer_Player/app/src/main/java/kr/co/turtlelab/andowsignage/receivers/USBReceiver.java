@@ -26,7 +26,7 @@ public class USBReceiver extends BroadcastReceiver {
     USBCopyWorker mUSBCopyWorker = null;
 
     String BaseDir = "/mnt/usb_storage";
-    String USBDirname = "NewHyOn USB";
+    String USBDirname = "NewHyOn_USB";
     String USBSkipDirname = "TurtleAPKs";
     String listfilename = "listname";
     String USBDirPath = "";

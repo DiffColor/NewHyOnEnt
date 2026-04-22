@@ -139,13 +139,9 @@ public class AndoWSignageApp extends Application {
 			safeBaseWidth = fixed_base_width;
 			safeBaseHeight = fixed_base_height;
 		}
-		float scaleXFactor = safeBaseWidth / (fixed_base_width * 1.0f);
-		float scaleYFactor = safeBaseHeight / (fixed_base_height * 1.0f);
-		float scaleFactor = Math.max(scaleXFactor, scaleYFactor);
-		if (scaleFactor <= 0f) {
-			scaleFactor = 1.0f;
-		}
-		return new float[] { scaleFactor, scaleXFactor, scaleYFactor };
+		int targetWidth = sDevice_Width > 0 ? sDevice_Width : fixed_base_width;
+		int targetHeight = sDevice_Height > 0 ? sDevice_Height : fixed_base_height;
+		return CanvasUtils.getScaleFactors(safeBaseWidth, safeBaseHeight, targetWidth, targetHeight);
 	}
 	
 	public static float getScale() {

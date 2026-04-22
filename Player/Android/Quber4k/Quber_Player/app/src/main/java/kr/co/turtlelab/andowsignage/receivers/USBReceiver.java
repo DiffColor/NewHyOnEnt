@@ -29,7 +29,7 @@ import kr.co.turtlelab.andowsignage.tools.SystemUtils;
 public class USBReceiver extends BroadcastReceiver {
 
     private static final String TAG = "USBReceiver";
-    private static final String USB_DIRNAME = "NewHyOn";
+    private static final String USB_DIRNAME = "NewHyOn_USB";
     private static final String USB_SKIP_DIRNAME = "APKs";
     private static final String LIST_FILENAME = "listname";
 
