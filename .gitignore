@@ -217,6 +217,10 @@ coverage*.info
 **/local.properties
 Test/
 
+# Restored from GitHub Release runtime assets during Windows player builds.
+Player/Windows/NewHyOn_Player/lib/mpv-2.dll
+Player/Windows/NewHyOn_Player/mpv-2.dll
+
 # Misc
 **/ClientBin/
 tmp/

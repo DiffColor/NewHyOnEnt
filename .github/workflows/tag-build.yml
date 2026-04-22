@@ -22,8 +22,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v2
@@ -128,8 +126,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v2
@@ -163,6 +159,12 @@ jobs:
         shell: pwsh
         run: |
           & dotnet restore "Player/Windows/NewHyOn_Player_Settings/NewHyOn Player Settings.csproj" -r win-x64
+
+      - name: Restore Windows player runtime assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./.github/scripts/restore-windows-player-runtime.ps1
 
       - name: Prepare Player dependencies in build directories
         shell: pwsh
@@ -228,8 +230,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup JDK 17 for sdkmanager
         uses: actions/setup-java@v4
@@ -289,8 +289,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup JDK 17 for sdkmanager
         uses: actions/setup-java@v4
@@ -350,8 +348,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup JDK 17 for sdkmanager
         uses: actions/setup-java@v4
@@ -411,8 +407,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup JDK 17 for sdkmanager
         uses: actions/setup-java@v4
@@ -472,8 +466,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup JDK 17 for sdkmanager
         uses: actions/setup-java@v4
