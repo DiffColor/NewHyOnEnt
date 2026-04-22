@@ -193,6 +193,10 @@
     <Reference Include="MultimediaTimer">
       <HintPath>..\Dependencies\MultimediaTimer.dll</HintPath>
     </Reference>
+    <Reference Include="USB_Detector">
+      <HintPath>..\Dependencies\USB_Detector.dll</HintPath>
+      <Aliases>USBDetector</Aliases>
+    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
@@ -372,6 +376,8 @@
     <Compile Include="Services\UpdateQueueRethinkClient.cs" />
     <Compile Include="Services\UpdateThrottleSettingsClient.cs" />
     <Compile Include="Services\UpdateService.cs" />
+    <Compile Include="Services\UsbUpdateService.cs" />
+    <Compile Include="TurtleTools\SecureJsonTools.cs" />
     <Compile Include="TurtleTools\SecurityTools.cs" />
     <Compile Include="..\SharedLiteDb\LiteDbContext.cs">
       <Link>TurtleTools\LiteDbContext.cs</Link>

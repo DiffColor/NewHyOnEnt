@@ -6,7 +6,6 @@ using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -75,6 +74,7 @@ namespace NewHyOnPlayer
         private KeyboardHook keyboardHook;
         private ScheduleEvaluator scheduleEvaluator;
         private OnAirService onAirService;
+        private UsbUpdateService usbUpdateService;
         private IPlaybackContainer playbackContainer;
         private SeamlessSyncCoordinator playbackSyncCoordinator;
         private PortInfoManager portInfoManager;
@@ -416,6 +416,12 @@ namespace NewHyOnPlayer
                 signalRStoppedForExit = true;
             }
 
+            if (usbUpdateService != null)
+            {
+                usbUpdateService.Dispose();
+                usbUpdateService = null;
+            }
+
             var signalRServiceLocal = signalRClientService;
             signalRClientService = null;
             if (!signalRStoppedForExit && signalRServiceLocal != null)
@@ -566,6 +572,7 @@ namespace NewHyOnPlayer
             SetInitialLoadingVisible(true);
             playbackContainer?.StartInitialPlayback(g_PlayerInfoManager.g_PlayerInfo.PIF_DefaultPlayList);
             HandleWeeklyScheduleUpdated();
+            usbUpdateService = new UsbUpdateService(this);
 
             //LoadPeriodData();
 
