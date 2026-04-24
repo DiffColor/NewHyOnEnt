@@ -19,6 +19,7 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly AppManager _appManager;
     private readonly AppDependencyService _dependencyService;
+    private readonly GlobalHotkeyService _globalHotkeyService;
     private readonly AppProfile _profile;
     private bool _initialized;
     private bool _isSequentialQueueProcessing;
@@ -63,13 +64,15 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(NextSequentialCheckDisplay));
     }
 
-    public MainWindowViewModel(AppManager appManager, AppDependencyService dependencyService, AppProfile profile)
+    public MainWindowViewModel(AppManager appManager, AppDependencyService dependencyService, GlobalHotkeyService globalHotkeyService, AppProfile profile)
     {
         _appManager = appManager;
         _dependencyService = dependencyService;
+        _globalHotkeyService = globalHotkeyService;
         _profile = profile;
         AppTitle = _profile.DisplayName;
         _appManager.RuntimeStateChanged += OnRuntimeStateChanged;
+        _globalHotkeyService.HotkeyPressed += OnHotkeyPressed;
     }
 
     public async Task InitializeAsync()
@@ -120,6 +123,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         RefreshCounters();
         RefreshFtpState();
+        await SyncHotkeysAsync();
 
         foreach (var entry in EnumerateEntries().Where(e => e.IsEnabled && e.Definition.Zone != AppExecutionZone.Sequential))
         {
@@ -161,7 +165,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (existing == null)
         {
             var created = AddEntry(definition);
-            await SaveStateAsync();
+            await SaveStateAsync(synchronizeHotkeys: true, showHotkeyErrors: true);
             RefreshCounters();
             return created;
         }
@@ -177,7 +181,7 @@ public partial class MainWindowViewModel : ObservableObject
             newCollection.Add(existing);
         }
 
-        await SaveStateAsync();
+        await SaveStateAsync(synchronizeHotkeys: true, showHotkeyErrors: true);
         RefreshCounters();
         RefreshFtpState();
         return existing;
@@ -389,7 +393,7 @@ public partial class MainWindowViewModel : ObservableObject
         var sourceCollection = entry.Definition.Zone == AppExecutionZone.Sequential ? SequentialApps : ParallelApps;
         sourceCollection.Remove(entry);
 
-        await SaveStateAsync();
+        await SaveStateAsync(synchronizeHotkeys: true, showHotkeyErrors: true);
         RefreshCounters();
         RefreshFtpState();
         if (entry.Definition.Zone == AppExecutionZone.Sequential)
@@ -567,12 +571,36 @@ public partial class MainWindowViewModel : ObservableObject
         CanAddFtp = !EnumerateEntries().Any(e => e.Definition.Type == AppType.Ftp);
     }
 
-    private async Task SaveStateAsync()
+    private async Task SaveStateAsync(bool synchronizeHotkeys = false, bool showHotkeyErrors = false)
     {
         ApplyDisplayOrder(ParallelApps);
         ApplyDisplayOrder(SequentialApps);
         var definitions = EnumerateEntries().Select(e => e.Definition).ToList();
         await _appManager.SaveAsync(definitions);
+        if (synchronizeHotkeys)
+        {
+            await SyncHotkeysAsync(definitions, showHotkeyErrors);
+        }
+    }
+
+    private Task SyncHotkeysAsync(bool showErrors = false)
+    {
+        var definitions = EnumerateEntries().Select(x => x.Definition).ToList();
+        return SyncHotkeysAsync(definitions, showErrors);
+    }
+
+    private Task SyncHotkeysAsync(IReadOnlyList<AppDefinition> definitions, bool showErrors)
+    {
+        var result = _globalHotkeyService.Synchronize(definitions);
+        if (showErrors && result.HasFailures)
+        {
+            var messageLines = result.Failures
+                .Select(x => $"{x.AppName}: {x.ErrorMessage}");
+            var message = "일부 단축키를 등록하지 못했습니다.\n\n" + string.Join(Environment.NewLine, messageLines);
+            System.Windows.MessageBox.Show(message, "단축키 등록 실패", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        return Task.CompletedTask;
     }
 
     private static void ApplyDisplayOrder(IList<AppEntryViewModel> entries)
@@ -586,6 +614,29 @@ public partial class MainWindowViewModel : ObservableObject
     private void RefreshCounters()
     {
         ActiveAppCount = EnumerateEntries().Count(e => e.IsEnabled);
+    }
+
+    private void OnHotkeyPressed(object? sender, Guid appId)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            dispatcher.InvokeAsync(() => _ = HandleHotkeyPressedAsync(appId));
+            return;
+        }
+
+        _ = HandleHotkeyPressedAsync(appId);
+    }
+
+    private async Task HandleHotkeyPressedAsync(Guid appId)
+    {
+        var entry = EnumerateEntries().FirstOrDefault(x => x.Definition.Id == appId);
+        if (entry == null)
+        {
+            return;
+        }
+
+        await ToggleAppAsync(entry);
     }
 
     private CancellationTokenSource RegisterStartCancellation(Guid appId)

@@ -108,6 +108,8 @@ public partial class AppEntryViewModel : ObservableObject
         Definition.DelayMinutes = other.DelayMinutes;
         Definition.DelaySeconds = other.DelaySeconds;
         Definition.RequireNetworkAvailable = other.RequireNetworkAvailable;
+        Definition.ToggleShortcutModifiers = other.ToggleShortcutModifiers;
+        Definition.ToggleShortcutKey = other.ToggleShortcutKey;
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(TypeLabel));

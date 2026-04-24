@@ -36,6 +36,7 @@ public partial class MainWindow : FluentWindow
     private const string DragNewAppFormat = "StartApps.NewAppType";
 
     private readonly AppDependencyService _dependencyService;
+    private readonly GlobalHotkeyService _hotkeyService;
     private readonly AppProfile _profile;
     private Forms.NotifyIcon? _notifyIcon;
     private bool _isExitRequested;
@@ -54,11 +55,12 @@ public partial class MainWindow : FluentWindow
     private ItemsControl? _currentDropTarget;
     private int _currentDropIndex = -1;
 
-    public MainWindow(MainWindowViewModel viewModel, AppDependencyService dependencyService, AppProfile profile)
+    public MainWindow(MainWindowViewModel viewModel, AppDependencyService dependencyService, AppProfile profile, GlobalHotkeyService hotkeyService)
     {
         InitializeComponent();
         DataContext = viewModel;
         _dependencyService = dependencyService;
+        _hotkeyService = hotkeyService;
         _profile = profile;
         InitializeTrayIcon();
     }
@@ -256,7 +258,7 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        var settingsWindow = new AppSettingsWindow(entry.Definition, _dependencyService)
+        var settingsWindow = new AppSettingsWindow(entry.Definition, _dependencyService, _hotkeyService, CreateDefinitionsSnapshot())
         {
             Owner = this
         };
@@ -758,7 +760,7 @@ public partial class MainWindow : FluentWindow
 
         ApplyDefaults(definition, _dependencyService);
 
-        var settingsWindow = new AppSettingsWindow(definition, _dependencyService)
+        var settingsWindow = new AppSettingsWindow(definition, _dependencyService, _hotkeyService, CreateDefinitionsSnapshot())
         {
             Owner = this
         };
@@ -835,4 +837,9 @@ public partial class MainWindow : FluentWindow
 
         await ViewModel.DeleteEntryAsync(entry);
     }
+
+    private IReadOnlyList<AppDefinition> CreateDefinitionsSnapshot() =>
+        ViewModel.EnumerateEntries()
+            .Select(x => x.Definition)
+            .ToList();
 }

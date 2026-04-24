@@ -1,0 +1,46 @@
+<ui:FluentWindow
+    x:Class="StartApps.Views.Dialogs.ShortcutCaptureWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="단축키 등록"
+    Width="360"
+    Height="220"
+    WindowStartupLocation="CenterOwner"
+    ResizeMode="NoResize"
+    BorderThickness="0"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
+    ExtendsContentIntoTitleBar="True"
+    PreviewKeyDown="OnPreviewKeyDown">
+    <Grid x:Name="CaptureRoot" Focusable="True">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="24">
+            <TextBlock Text="등록할 단축키를 누르세요." FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="Ctrl, Alt, Shift, Win과 일반 키 조합 또는 F1~F24 단독 입력을 바로 저장합니다."
+                       Margin="0,8,0,0"
+                       Foreground="#FFB8C5D6"
+                       TextWrapping="Wrap" />
+            <Border Margin="0,16,0,0" Padding="12,14" BorderBrush="#33000000" BorderThickness="1" CornerRadius="8">
+                <TextBlock x:Name="CapturedShortcutText"
+                           Text="입력 대기 중"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+            </Border>
+            <TextBlock x:Name="HelpText"
+                       Margin="0,10,0,0"
+                       Foreground="#FFB8C5D6"
+                       Text="Esc를 누르면 취소합니다."
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,24,24">
+            <Button Content="취소" Width="100" Click="OnCancel" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

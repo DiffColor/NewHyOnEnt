@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Windows.Input;
 using LiteDB;
 
 namespace StartApps.Models;
@@ -26,6 +27,8 @@ public class AppDefinition
     public int DelayMinutes { get; set; }
     public int DelaySeconds { get; set; }
     public bool RequireNetworkAvailable { get; set; }
+    public ModifierKeys ToggleShortcutModifiers { get; set; } = ModifierKeys.None;
+    public Key ToggleShortcutKey { get; set; } = Key.None;
 
     // FTP-specific settings
     public string FtpUsername { get; set; } = "asdf";
@@ -33,7 +36,7 @@ public class AppDefinition
     public string FtpHomeDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         "Turtle Lab",
-        "NewHyOn Manger",
+        "NewHyOn Manager",
         "Data");
     public bool FtpAllowRead { get; set; } = true;
     public bool FtpAllowWrite { get; set; } = true;

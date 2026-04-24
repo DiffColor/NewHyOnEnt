@@ -7,7 +7,7 @@
     xmlns:converters="clr-namespace:StartApps.Converters"
     WindowStartupLocation="CenterOwner"
     Title="앱 설정"
-    Width="420"
+    Width="460"
     BorderThickness="0"
     ResizeMode="NoResize"
     WindowBackdropType="Mica"
@@ -86,6 +86,18 @@
                         </StackPanel>
                     </StackPanel>
                     <CheckBox Content="네트워크 연결 시에만 실행" IsChecked="{Binding RequireNetworkAvailable}" Margin="0,8,0,0" />
+                    <TextBlock Text="토글 단축키" Margin="0,12,0,0" />
+                    <Border Margin="0,6,0,0" Padding="10,8" BorderBrush="#33000000" BorderThickness="1" CornerRadius="6">
+                        <TextBlock x:Name="ToggleShortcutText" FontSize="14" FontWeight="SemiBold" />
+                    </Border>
+                    <TextBlock Text="Ctrl, Alt, Shift, Win 조합 또는 F1~F24 단독 키를 등록합니다."
+                               Margin="0,6,0,0"
+                               Foreground="#FFB8C5D6"
+                               TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="단축키 등록" Width="120" Click="OnCaptureToggleShortcut" />
+                        <Button Content="삭제" Width="90" Margin="12,0,0,0" Click="OnClearToggleShortcut" />
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel Visibility="{Binding Type, Converter={StaticResource AppTypeVisibilityConverter}, ConverterParameter=Rdb}" Margin="0,16,0,0">

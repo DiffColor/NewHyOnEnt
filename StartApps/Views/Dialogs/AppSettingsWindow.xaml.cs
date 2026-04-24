@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Win32;
 using StartApps.Models;
 using StartApps.Services;
@@ -15,13 +17,21 @@ namespace StartApps.Views.Dialogs;
 public partial class AppSettingsWindow : FluentWindow
 {
     private readonly AppDependencyService _dependencyService;
+    private readonly GlobalHotkeyService _hotkeyService;
+    private readonly IReadOnlyList<AppDefinition> _existingDefinitions;
     private readonly AppDefinition _workingCopy;
     private bool _isUpdatingPathTextBoxes;
 
-    public AppSettingsWindow(AppDefinition definition, AppDependencyService dependencyService)
+    public AppSettingsWindow(
+        AppDefinition definition,
+        AppDependencyService dependencyService,
+        GlobalHotkeyService hotkeyService,
+        IReadOnlyCollection<AppDefinition> existingDefinitions)
     {
         InitializeComponent();
         _dependencyService = dependencyService;
+        _hotkeyService = hotkeyService;
+        _existingDefinitions = existingDefinitions.Select(Clone).ToList();
         _workingCopy = Clone(definition);
 
         if (string.IsNullOrWhiteSpace(_workingCopy.ExecutablePath)
@@ -50,6 +60,7 @@ public partial class AppSettingsWindow : FluentWindow
         UpdateFtpHomeDirectoryDisplay();
         UpdateExecutablePathDisplay();
         UpdateWorkingDirectoryDisplay();
+        UpdateToggleShortcutDisplay();
     }
 
     public AppDefinition? ResultDefinition { get; private set; }
@@ -77,6 +88,8 @@ public partial class AppSettingsWindow : FluentWindow
             DelayMinutes = definition.DelayMinutes,
             DelaySeconds = definition.DelaySeconds,
             RequireNetworkAvailable = definition.RequireNetworkAvailable,
+            ToggleShortcutModifiers = definition.ToggleShortcutModifiers,
+            ToggleShortcutKey = definition.ToggleShortcutKey,
             FtpUsername = definition.FtpUsername,
             FtpPassword = definition.FtpPassword,
             FtpHomeDirectory = definition.FtpHomeDirectory,
@@ -138,10 +151,53 @@ public partial class AppSettingsWindow : FluentWindow
             }
         }
 
+        if (!ValidateToggleShortcut())
+        {
+            return;
+        }
+
         NormalizeDelayInputs();
 
         ResultDefinition = _workingCopy;
         DialogResult = true;
+    }
+
+    private bool ValidateToggleShortcut()
+    {
+        if (_workingCopy.ToggleShortcutKey == System.Windows.Input.Key.None)
+        {
+            return true;
+        }
+
+        if (!AppHotkey.TryCreate(_workingCopy.ToggleShortcutModifiers, _workingCopy.ToggleShortcutKey, out var hotkey, out var errorMessage))
+        {
+            System.Windows.MessageBox.Show(this, errorMessage, "단축키 설정", System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        var duplicatedDefinition = _existingDefinitions
+            .Where(x => x.Id != _workingCopy.Id && x.ToggleShortcutKey != System.Windows.Input.Key.None)
+            .FirstOrDefault(x =>
+                AppHotkey.TryCreate(x.ToggleShortcutModifiers, x.ToggleShortcutKey, out var existingHotkey, out _)
+                && existingHotkey == hotkey);
+
+        if (duplicatedDefinition != null)
+        {
+            var duplicatedName = string.IsNullOrWhiteSpace(duplicatedDefinition.Name)
+                ? duplicatedDefinition.Type.ToString()
+                : duplicatedDefinition.Name;
+            System.Windows.MessageBox.Show(this, $"{duplicatedName} 앱과 동일한 단축키를 사용할 수 없습니다.", "단축키 중복", System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        var availability = _hotkeyService.CanRegister(hotkey, _workingCopy.Id);
+        if (!availability.IsAvailable)
+        {
+            System.Windows.MessageBox.Show(this, availability.ErrorMessage ?? "단축키를 등록할 수 없습니다.", "단축키 등록 실패", System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        return true;
     }
 
     private void NormalizeDelayInputs()
@@ -218,6 +274,23 @@ public partial class AppSettingsWindow : FluentWindow
     private void UpdateWorkingDirectoryDisplay(bool showFullPath = false)
     {
         UpdatePathTextBox(WorkingDirectoryBox, _workingCopy.WorkingDirectory, showFullPath);
+    }
+
+    private void UpdateToggleShortcutDisplay()
+    {
+        if (_workingCopy.ToggleShortcutKey == System.Windows.Input.Key.None)
+        {
+            ToggleShortcutText.Text = "등록 안 됨";
+            return;
+        }
+
+        if (!AppHotkey.TryCreate(_workingCopy.ToggleShortcutModifiers, _workingCopy.ToggleShortcutKey, out var hotkey, out _))
+        {
+            ToggleShortcutText.Text = "잘못된 단축키";
+            return;
+        }
+
+        ToggleShortcutText.Text = hotkey.ToDisplayString();
     }
 
     private void UpdatePathTextBox(TextBox textBox, string? fullPath, bool showFullPath)
@@ -323,6 +396,28 @@ public partial class AppSettingsWindow : FluentWindow
         {
             _workingCopy.FtpPassword = passwordBox.Password;
         }
+    }
+
+    private void OnCaptureToggleShortcut(object sender, RoutedEventArgs e)
+    {
+        var captureWindow = new ShortcutCaptureWindow
+        {
+            Owner = this
+        };
+
+        if (captureWindow.ShowDialog() == true && captureWindow.ResultHotkey is { } hotkey)
+        {
+            _workingCopy.ToggleShortcutModifiers = hotkey.Modifiers;
+            _workingCopy.ToggleShortcutKey = hotkey.PrimaryKey;
+            UpdateToggleShortcutDisplay();
+        }
+    }
+
+    private void OnClearToggleShortcut(object sender, RoutedEventArgs e)
+    {
+        _workingCopy.ToggleShortcutModifiers = ModifierKeys.None;
+        _workingCopy.ToggleShortcutKey = System.Windows.Input.Key.None;
+        UpdateToggleShortcutDisplay();
     }
 
     private void OnLaunchFtpInterface(object sender, RoutedEventArgs e)

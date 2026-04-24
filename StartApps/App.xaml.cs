@@ -41,6 +41,7 @@ namespace StartApps
                 services.AddSingleton<AppDataStore>();
                 services.AddSingleton<AppDependencyService>();
                 services.AddSingleton<FirewallRuleService>();
+                services.AddSingleton<GlobalHotkeyService>();
                 services.AddSingleton<AppManager>();
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MainWindow>();
@@ -72,6 +73,8 @@ namespace StartApps
 
             var mainWindow = Services.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;
+            var globalHotkeyService = Services.GetRequiredService<GlobalHotkeyService>();
+            globalHotkeyService.Initialize(mainWindow);
             var viewModel = Services.GetRequiredService<MainWindowViewModel>();
             await viewModel.InitializeAsync();
             mainWindow.Hide();

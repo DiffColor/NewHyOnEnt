@@ -26,7 +26,7 @@ public class AppDependencyService
     private const string SignalrNet472ExeName = "SignalR_Net472.exe";
     private const string SignalrNet10ExeName = "signalr_net10linux.exe";
     private const string DefaultWorkspaceFolderName = "Turtle Lab";
-    private const string DefaultNewHyOnFolderName = "NewHyOn Manger";
+    private const string DefaultNewHyOnFolderName = "NewHyOn Manager";
     private const string DefaultDataFolderName = "Data";
     private const string DefaultPlayerFolderName = "NewHyOn Player";
     private const string MyDocumentsToken = "{MyDocuments}";

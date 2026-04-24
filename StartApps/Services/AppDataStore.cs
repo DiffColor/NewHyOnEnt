@@ -80,6 +80,8 @@ public class AppDataStore : IDisposable
             DelayMinutes = source.DelayMinutes,
             DelaySeconds = source.DelaySeconds,
             RequireNetworkAvailable = source.RequireNetworkAvailable,
+            ToggleShortcutModifiers = source.ToggleShortcutModifiers,
+            ToggleShortcutKey = source.ToggleShortcutKey,
             FtpUsername = source.FtpUsername,
             FtpPassword = source.FtpPassword,
             FtpHomeDirectory = source.FtpHomeDirectory,
