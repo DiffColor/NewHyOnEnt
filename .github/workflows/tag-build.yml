@@ -420,16 +420,22 @@ jobs:
             player-quber4k-android-v*)
               echo "target=quber4k-player" >> "$GITHUB_OUTPUT"
               echo "artifact_id=player-quber4k-android" >> "$GITHUB_OUTPUT"
+              echo "output_id=player-android" >> "$GITHUB_OUTPUT"
+              echo "tag_suffix=${GITHUB_REF_NAME#player-quber4k-android-}" >> "$GITHUB_OUTPUT"
               echo "display_name=Player Quber4k Android" >> "$GITHUB_OUTPUT"
               ;;
             player-quber4k-notifier-android-v*)
               echo "target=quber4k-notifier" >> "$GITHUB_OUTPUT"
               echo "artifact_id=player-quber4k-notifier-android" >> "$GITHUB_OUTPUT"
+              echo "output_id=player-notifier-android" >> "$GITHUB_OUTPUT"
+              echo "tag_suffix=${GITHUB_REF_NAME#player-quber4k-notifier-android-}" >> "$GITHUB_OUTPUT"
               echo "display_name=Player Quber4k Notifier Android" >> "$GITHUB_OUTPUT"
               ;;
             player-quber4k-usbinstaller-android-v*)
               echo "target=quber4k-usbinstaller" >> "$GITHUB_OUTPUT"
               echo "artifact_id=player-quber4k-usbinstaller-android" >> "$GITHUB_OUTPUT"
+              echo "output_id=player-usbinstaller-android" >> "$GITHUB_OUTPUT"
+              echo "tag_suffix=${GITHUB_REF_NAME#player-quber4k-usbinstaller-android-}" >> "$GITHUB_OUTPUT"
               echo "display_name=Player Quber4k USBInstaller Android" >> "$GITHUB_OUTPUT"
               ;;
           esac
@@ -468,14 +474,14 @@ jobs:
         run: |
           bash ./.github/scripts/build-android-release-assets.sh \
             "${{ steps.quber4k_target.outputs.target }}" \
-            "${{ steps.quber4k_target.outputs.artifact_id }}-${{ github.ref_name }}" \
+            "${{ steps.quber4k_target.outputs.output_id }}-${{ steps.quber4k_target.outputs.tag_suffix }}" \
             "release-assets"
 
       - name: Upload ${{ steps.quber4k_target.outputs.display_name }} artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.quber4k_target.outputs.artifact_id }}-${{ github.ref_name }}
-          path: release-assets/${{ steps.quber4k_target.outputs.artifact_id }}-${{ github.ref_name }}-*.apk
+          path: release-assets/${{ steps.quber4k_target.outputs.output_id }}-${{ steps.quber4k_target.outputs.tag_suffix }}-*.apk
           if-no-files-found: warn
 
       - name: Attach ${{ steps.quber4k_target.outputs.display_name }} APK to GitHub Release
@@ -483,7 +489,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          files: release-assets/${{ steps.quber4k_target.outputs.artifact_id }}-${{ github.ref_name }}-*.apk
+          files: release-assets/${{ steps.quber4k_target.outputs.output_id }}-${{ steps.quber4k_target.outputs.tag_suffix }}-*.apk
           overwrite_files: true
 
   build-player-launcher-android:

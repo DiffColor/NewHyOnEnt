@@ -394,12 +394,15 @@ jobs:
         include:
           - target: quber4k-player
             artifact_id: player-quber4k-android
+            output_id: player-android
             display_name: Player Quber4k Android
           - target: quber4k-notifier
             artifact_id: player-quber4k-notifier-android
+            output_id: player-notifier-android
             display_name: Player Quber4k Notifier Android
           - target: quber4k-usbinstaller
             artifact_id: player-quber4k-usbinstaller-android
+            output_id: player-usbinstaller-android
             display_name: Player Quber4k USBInstaller Android
     steps:
       - name: Checkout
@@ -439,21 +442,21 @@ jobs:
         run: |
           bash ./.github/scripts/build-android-release-assets.sh \
             "${{ matrix.target }}" \
-            "${{ matrix.artifact_id }}-${{ github.ref_name }}" \
+            "${{ matrix.output_id }}-${{ github.ref_name }}" \
             "release-assets"
 
       - name: Upload ${{ matrix.display_name }} artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_id }}-${{ github.ref_name }}
-          path: release-assets/${{ matrix.artifact_id }}-${{ github.ref_name }}-*.apk
+          path: release-assets/${{ matrix.output_id }}-${{ github.ref_name }}-*.apk
           if-no-files-found: warn
 
       - name: Upload ${{ matrix.display_name }} release asset artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-${{ matrix.artifact_id }}-${{ github.ref_name }}
-          path: release-assets/${{ matrix.artifact_id }}-${{ github.ref_name }}-*.apk
+          path: release-assets/${{ matrix.output_id }}-${{ github.ref_name }}-*.apk
           if-no-files-found: error
 
   build-player-launcher-android:
