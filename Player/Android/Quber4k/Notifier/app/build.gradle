@@ -7,8 +7,8 @@ def keyAliasValue = System.getenv("ANDROID_KEY_ALIAS") ?: "quber"
 def keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD") ?: "zbqj2636"
 
 android {
-    compileSdkVersion 30
-    buildToolsVersion "30.0.3"
+    namespace "kr.co.turtlelab.notifier"
+    compileSdk 30
 
     signingConfigs {
         debug {
@@ -27,8 +27,8 @@ android {
 
     defaultConfig {
         applicationId "kr.co.turtlelab.notifier"
-        minSdkVersion 17
-        targetSdkVersion 30
+        minSdk 17
+        targetSdk 30
         versionCode 1
         versionName "1.0"
     }
@@ -45,8 +45,16 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+
+    lint {
+        disable += 'ExpiredTargetSdkVersion'
+    }
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += ['-Xlint:-options']
 }
