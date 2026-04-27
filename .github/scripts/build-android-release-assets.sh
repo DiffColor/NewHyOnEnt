@@ -122,6 +122,22 @@ build_quber_release() {
     "zbqj2636"
 }
 
+build_quber4k_release() {
+  local quber_root="$1"
+  local output_name="$2"
+  local quber_keystore="Player/Android/_shared/platformkeys/quber4k/platform.jks"
+
+  build_gradle_release \
+    "$quber_root" \
+    ":app:assembleRelease" \
+    "app/build/outputs/apk/release/app-release.apk" \
+    "$output_name" \
+    "$quber_keystore" \
+    "zbqj2636" \
+    "quber" \
+    "zbqj2636"
+}
+
 build_player_release_pair() {
   local quber_root="$1"
   local gl_root="$2"
@@ -150,15 +166,30 @@ case "$target" in
       "Player/Android/GL/GL_Player" \
       "$artifact_prefix"
     ;;
+  quber4k-player)
+    build_quber4k_release \
+      "Player/Android/Quber4k/Quber_Player" \
+      "${artifact_prefix}-quber4k.apk"
+    ;;
   notifier)
     build_quber_release \
       "Player/Android/Quber/Notifier" \
       "${artifact_prefix}-quber.apk"
     ;;
+  quber4k-notifier)
+    build_quber4k_release \
+      "Player/Android/Quber4k/Notifier" \
+      "${artifact_prefix}-quber4k.apk"
+    ;;
   usbinstaller)
     build_quber_release \
       "Player/Android/Quber/USBInstaller_4launcher" \
       "${artifact_prefix}-quber.apk"
+    ;;
+  quber4k-usbinstaller)
+    build_quber4k_release \
+      "Player/Android/Quber4k/USBInstaller_4launcher" \
+      "${artifact_prefix}-quber4k.apk"
     ;;
   launcher)
     build_gradle_release_from_find \

@@ -386,6 +386,76 @@ jobs:
           path: release-assets/player-usbinstaller-android-${{ github.ref_name }}-*.apk
           if-no-files-found: error
 
+  build-player-quber4k-android:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: quber4k-player
+            artifact_id: player-quber4k-android
+            display_name: Player Quber4k Android
+          - target: quber4k-notifier
+            artifact_id: player-quber4k-notifier-android
+            display_name: Player Quber4k Notifier Android
+          - target: quber4k-usbinstaller
+            artifact_id: player-quber4k-usbinstaller-android
+            display_name: Player Quber4k USBInstaller Android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17 for sdkmanager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK environment
+        run: |
+          echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk-${{ matrix.artifact_id }}" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk-${{ matrix.artifact_id }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=" >> $GITHUB_ENV
+          echo "NDK_HOME=" >> $GITHUB_ENV
+          echo "NDK_ROOT=" >> $GITHUB_ENV
+          mkdir -p "$RUNNER_TEMP/android-sdk-${{ matrix.artifact_id }}"
+
+      - name: Install Android SDK packages
+        run: |
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --version
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" "platforms;android-22" "platforms;android-30" "build-tools;29.0.2" "build-tools;30.0.3" "ndk;26.1.10909125"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+
+      - name: Setup JDK 17 for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build ${{ matrix.display_name }} release asset
+        run: |
+          bash ./.github/scripts/build-android-release-assets.sh \
+            "${{ matrix.target }}" \
+            "${{ matrix.artifact_id }}-${{ github.ref_name }}" \
+            "release-assets"
+
+      - name: Upload ${{ matrix.display_name }} artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_id }}-${{ github.ref_name }}
+          path: release-assets/${{ matrix.artifact_id }}-${{ github.ref_name }}-*.apk
+          if-no-files-found: warn
+
+      - name: Upload ${{ matrix.display_name }} release asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-${{ matrix.artifact_id }}-${{ github.ref_name }}
+          path: release-assets/${{ matrix.artifact_id }}-${{ github.ref_name }}-*.apk
+          if-no-files-found: error
+
   build-player-launcher-android:
     runs-on: ubuntu-latest
     steps:
@@ -507,6 +577,7 @@ jobs:
       - build-player-android
       - build-player-notifier-android
       - build-player-usbinstaller-android
+      - build-player-quber4k-android
       - build-player-launcher-android
       - build-player-watchdog-android
     runs-on: ubuntu-latest
@@ -541,6 +612,24 @@ jobs:
           name: release-asset-player-usbinstaller-android-${{ github.ref_name }}
           path: release-assets/player-usbinstaller-android
 
+      - name: Download Player Quber4k Android release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset-player-quber4k-android-${{ github.ref_name }}
+          path: release-assets/player-quber4k-android
+
+      - name: Download Player Quber4k Notifier Android release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset-player-quber4k-notifier-android-${{ github.ref_name }}
+          path: release-assets/player-quber4k-notifier-android
+
+      - name: Download Player Quber4k USBInstaller Android release asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset-player-quber4k-usbinstaller-android-${{ github.ref_name }}
+          path: release-assets/player-quber4k-usbinstaller-android
+
       - name: Download TurtleLauncher Android release asset
         uses: actions/download-artifact@v4
         with:
@@ -564,6 +653,9 @@ jobs:
             release-assets/player-android/*.apk
             release-assets/player-notifier-android/*.apk
             release-assets/player-usbinstaller-android/*.apk
+            release-assets/player-quber4k-android/*.apk
+            release-assets/player-quber4k-notifier-android/*.apk
+            release-assets/player-quber4k-usbinstaller-android/*.apk
             release-assets/player-launcher-android/*.apk
             release-assets/player-watchdog-android/*.apk
           overwrite_files: true

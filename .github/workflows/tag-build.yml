@@ -8,6 +8,9 @@ on:
       - 'player-android-v*'
       - 'player-notifier-android-v*'
       - 'player-usbinstaller-android-v*'
+      - 'player-quber4k-android-v*'
+      - 'player-quber4k-notifier-android-v*'
+      - 'player-quber4k-usbinstaller-android-v*'
       - 'player-launcher-android-v*'
       - 'player-watchdog-android-v*'
       - '!v*'
@@ -399,6 +402,88 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           files: release-assets/player-usbinstaller-android-${{ github.ref_name }}-*.apk
+          overwrite_files: true
+
+  build-player-quber4k-android:
+    if: startsWith(github.ref_name, 'player-quber4k-android-v') || startsWith(github.ref_name, 'player-quber4k-notifier-android-v') || startsWith(github.ref_name, 'player-quber4k-usbinstaller-android-v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve Quber4k Android target
+        id: quber4k_target
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ github.ref_name }}" in
+            player-quber4k-android-v*)
+              echo "target=quber4k-player" >> "$GITHUB_OUTPUT"
+              echo "artifact_id=player-quber4k-android" >> "$GITHUB_OUTPUT"
+              echo "display_name=Player Quber4k Android" >> "$GITHUB_OUTPUT"
+              ;;
+            player-quber4k-notifier-android-v*)
+              echo "target=quber4k-notifier" >> "$GITHUB_OUTPUT"
+              echo "artifact_id=player-quber4k-notifier-android" >> "$GITHUB_OUTPUT"
+              echo "display_name=Player Quber4k Notifier Android" >> "$GITHUB_OUTPUT"
+              ;;
+            player-quber4k-usbinstaller-android-v*)
+              echo "target=quber4k-usbinstaller" >> "$GITHUB_OUTPUT"
+              echo "artifact_id=player-quber4k-usbinstaller-android" >> "$GITHUB_OUTPUT"
+              echo "display_name=Player Quber4k USBInstaller Android" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Setup JDK 17 for sdkmanager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK environment
+        run: |
+          echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk-${{ steps.quber4k_target.outputs.artifact_id }}" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk-${{ steps.quber4k_target.outputs.artifact_id }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=" >> $GITHUB_ENV
+          echo "NDK_HOME=" >> $GITHUB_ENV
+          echo "NDK_ROOT=" >> $GITHUB_ENV
+          mkdir -p "$RUNNER_TEMP/android-sdk-${{ steps.quber4k_target.outputs.artifact_id }}"
+
+      - name: Install Android SDK packages
+        run: |
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --version
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" "platforms;android-22" "platforms;android-30" "build-tools;29.0.2" "build-tools;30.0.3" "ndk;26.1.10909125"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+
+      - name: Setup JDK 17 for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build ${{ steps.quber4k_target.outputs.display_name }} release asset
+        run: |
+          bash ./.github/scripts/build-android-release-assets.sh \
+            "${{ steps.quber4k_target.outputs.target }}" \
+            "${{ steps.quber4k_target.outputs.artifact_id }}-${{ github.ref_name }}" \
+            "release-assets"
+
+      - name: Upload ${{ steps.quber4k_target.outputs.display_name }} artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.quber4k_target.outputs.artifact_id }}-${{ github.ref_name }}
+          path: release-assets/${{ steps.quber4k_target.outputs.artifact_id }}-${{ github.ref_name }}-*.apk
+          if-no-files-found: warn
+
+      - name: Attach ${{ steps.quber4k_target.outputs.display_name }} APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: release-assets/${{ steps.quber4k_target.outputs.artifact_id }}-${{ github.ref_name }}-*.apk
           overwrite_files: true
 
   build-player-launcher-android:
