@@ -305,6 +305,45 @@ public class DataSyncManager {
         return enqueuePayloadUpdate(payload, isScheduleQueue, true);
     }
 
+    public boolean applyUsbUpdatePayload(UpdatePayloadModels.UpdatePayload payload) {
+        if (payload == null || payload.PageList == null || payload.Pages == null || payload.Pages.isEmpty()) {
+            return false;
+        }
+
+        UpdateQueueContract.PlaylistPayload contract = buildContractPayload(payload);
+        if (contract == null || TextUtils.isEmpty(contract.playlistName)) {
+            return false;
+        }
+        if (payload.Schedule != null) {
+            if (!TextUtils.isEmpty(payload.Schedule.PlayerId)) {
+                contract.playerId = payload.Schedule.PlayerId;
+            }
+            if (!TextUtils.isEmpty(payload.Schedule.PlayerName)) {
+                contract.playerName = payload.Schedule.PlayerName;
+            }
+        }
+
+        ApplyBackup backup = createApplyBackup();
+        try {
+            writePlaylistPayload(contract, new ArrayList<UpdateQueueContract.DownloadEntry>(), true);
+            invalidateActivityPlaylistCache(contract.playlistName);
+            kr.co.turtlelab.andowsignage.dataproviders.PlayerDataProvider.updateCurrentPListName(contract.playlistName);
+
+            if (payload.Schedule != null) {
+                applySchedulePayloadToLocalDb(payload.Schedule);
+                String weeklyKey = resolveScheduleCacheId(payload.Schedule);
+                if (!TextUtils.isEmpty(weeklyKey) && payload.Schedule.WeeklySchedule != null) {
+                    applyWeeklySchedulePayload(weeklyKey, payload.Schedule.WeeklySchedule);
+                }
+            }
+
+            return true;
+        } catch (Exception ex) {
+            restoreApplyBackup(backup);
+            return false;
+        }
+    }
+
     private long enqueuePayloadUpdate(UpdatePayloadModels.UpdatePayload payload,
                                       boolean isScheduleQueue,
                                       boolean scheduleProcessor) {
