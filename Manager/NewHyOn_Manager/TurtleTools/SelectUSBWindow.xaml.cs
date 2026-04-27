@@ -52,7 +52,7 @@ namespace TurtleTools
                 List<PageInfoClass> pages = ClonePages(DataShop.Instance.g_PageInfoManager.g_PageInfoClassList);
                 NormalizeContentPaths(pages);
                 List<PlayerInfoClass> players = CollectPlayersForPlaylist(g_listName);
-                CopyAuthKeyToUsb(usbname);
+                // CopyAuthKeyToUsb(usbname);
 
                 var playlistSnapshot = new PlaylistExportBundle
                 {
@@ -113,28 +113,28 @@ namespace TurtleTools
             return FNDTools.GetUSBRootPath(usbName);
         }
 
-        private static void CopyAuthKeyToUsb(string usbName)
-        {
-            string target = FNDTools.GetUSBAuthKeyPath(usbName);
-            List<string> authKeys = DataShop.Instance.g_PlayerInfoManager.GetAllAuthKeys();
-
-            if (authKeys == null || authKeys.Count == 0)
-            {
-                if (File.Exists(target))
-                {
-                    File.Delete(target);
-                }
-                return;
-            }
-
-            string directory = Path.GetDirectoryName(target);
-            if (string.IsNullOrEmpty(directory) == false)
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllLines(target, authKeys);
-        }
+        // private static void CopyAuthKeyToUsb(string usbName)
+        // {
+        //     string target = FNDTools.GetUSBAuthKeyPath(usbName);
+        //     List<string> authKeys = DataShop.Instance.g_PlayerInfoManager.GetAllAuthKeys();
+        //
+        //     if (authKeys == null || authKeys.Count == 0)
+        //     {
+        //         if (File.Exists(target))
+        //         {
+        //             File.Delete(target);
+        //         }
+        //         return;
+        //     }
+        //
+        //     string directory = Path.GetDirectoryName(target);
+        //     if (string.IsNullOrEmpty(directory) == false)
+        //     {
+        //         Directory.CreateDirectory(directory);
+        //     }
+        //
+        //     File.WriteAllLines(target, authKeys);
+        // }
 
         private static List<PageInfoClass> ClonePages(IEnumerable<PageInfoClass> pages)
         {

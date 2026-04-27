@@ -24,7 +24,6 @@ namespace NewHyOnPlayer
     {
         private const string UsbPackageDirName = "NewHyOn_USB";
         private const string ContentsDirName = "Contents";
-        private const string AuthKeysFileName = "AuthKeys";
         private const string PlaylistFileName = "playlist.bin";
         private const string WeeklyScheduleFileName = "weekly_schedule.bin";
         private const string SpecialScheduleFileName = "special_schedule.bin";
@@ -129,12 +128,6 @@ namespace NewHyOnPlayer
             try
             {
                 Logger.WriteLog($"UsbUpdateService package detected: {usbRoot}", Logger.GetLogFileName());
-
-                if (!HasValidAuthKey(Path.Combine(usbRoot, AuthKeysFileName)))
-                {
-                    Logger.WriteLog("UsbUpdateService package ignored: auth key mismatch.", Logger.GetLogFileName());
-                    return false;
-                }
 
                 var package = ReadPackage(usbRoot, packageId);
                 if (package == null)
@@ -358,11 +351,6 @@ namespace NewHyOnPlayer
                 if (!string.IsNullOrWhiteSpace(packagePlayer.PIF_PlayerName))
                 {
                     local.PIF_PlayerName = packagePlayer.PIF_PlayerName;
-                }
-
-                if (!string.IsNullOrWhiteSpace(packagePlayer.PIF_AuthKey))
-                {
-                    local.PIF_AuthKey = packagePlayer.PIF_AuthKey;
                 }
 
                 if (!string.IsNullOrWhiteSpace(packagePlayer.PIF_MacAddress))
@@ -677,40 +665,7 @@ namespace NewHyOnPlayer
                 return true;
             }
 
-            if (!string.IsNullOrWhiteSpace(candidate.PIF_AuthKey))
-            {
-                return string.Equals(candidate.PIF_AuthKey.Trim(), GetStoredAuthKey(), StringComparison.OrdinalIgnoreCase);
-            }
-
             return false;
-        }
-
-        private bool HasValidAuthKey(string authFilePath)
-        {
-            if (!File.Exists(authFilePath))
-            {
-                return false;
-            }
-
-            var usbKeys = new HashSet<string>(
-                File.ReadAllLines(authFilePath)
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Select(x => x.Trim()),
-                StringComparer.OrdinalIgnoreCase);
-
-            if (usbKeys.Count == 0)
-            {
-                return false;
-            }
-
-            string storedAuthKey = GetStoredAuthKey();
-            return string.IsNullOrWhiteSpace(storedAuthKey) == false && usbKeys.Contains(storedAuthKey);
-        }
-
-        private string GetStoredAuthKey()
-        {
-            string localKey = owner.g_PlayerInfoManager?.g_PlayerInfo?.PIF_AuthKey;
-            return string.IsNullOrWhiteSpace(localKey) ? string.Empty : localKey.Trim();
         }
 
         private static void NormalizePlaylistContentPaths(PlaylistExportBundle playlist)

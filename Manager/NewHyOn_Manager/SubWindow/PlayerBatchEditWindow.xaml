@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d" x:Class="AndoW_Manager.PlayerBatchEditWindow"
         Loaded="PlayerBatchEditWindow_Loaded" AllowsTransparency="True" Closing="Window_Closing"
-        Width="1020" Height="800" WindowStyle="None" WindowStartupLocation="CenterScreen" ResizeMode="CanResizeWithGrip">
+        Width="860" Height="800" WindowStyle="None" WindowStartupLocation="CenterScreen" ResizeMode="CanResizeWithGrip">
     <Window.Resources>
         <LinearGradientBrush x:Key="Color_Background001" EndPoint="0.507,0.011" StartPoint="0.502,0.011" SpreadMethod="Repeat">
             <LinearGradientBrush.RelativeTransform>
@@ -298,21 +298,21 @@
                     </Grid.RowDefinitions>
                     <Grid Background="#FFB5B8CE">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="26"/>
+                            <ColumnDefinition Width="40"/>
                             <ColumnDefinition Width="260"/>
                             <ColumnDefinition Width="120"/>
                             <ColumnDefinition Width="170"/>
-                            <ColumnDefinition Width="90"/>
-                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="160"/>
+                            <!--<ColumnDefinition Width="70"/>-->
                             <ColumnDefinition Width="70"/>
-                            <ColumnDefinition/>
                         </Grid.ColumnDefinitions>
                         <Label Grid.Column="1" Content="플레이어 이름" FontFamily="Malgun Gothic" FontSize="13" Foreground="#FF454B9A" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
                         <Label Grid.Column="2" Content="기기 주소" FontFamily="Malgun Gothic" FontSize="13"  Foreground="#FF454B9A" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
                         <Label Grid.Column="3" Content="원격 번호" FontFamily="Malgun Gothic" FontSize="13"  Foreground="#FF454B9A" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
                         <Label Grid.Column="4" Content="화면타입" FontFamily="Malgun Gothic" FontSize="13"  Foreground="#FF454B9A" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
                         <Label Grid.Column="5" Content="기기 코드" FontFamily="Malgun Gothic" FontSize="13"  Foreground="#FF454B9A" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
-                        <Label Grid.Column="6" Content="비밀번호" FontFamily="Malgun Gothic" FontSize="13"  Foreground="#FF454B9A" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
+                        <!--<Label Grid.Column="6" Content="비밀번호" FontFamily="Malgun Gothic" FontSize="13"  Foreground="#FF454B9A" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>-->
                     </Grid>
                     <ScrollViewer x:Name="ContentsListScrollViewer1" Style="{StaticResource ModernScrollViewer}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" ScrollViewer.VerticalScrollBarVisibility="Auto" Grid.Row="1">
                         <StackPanel x:Name="ContentsElementsStackPannel1" ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True"/>
@@ -334,12 +334,12 @@
                             <Button x:Name="ClearBtn" Click="ClearBtn_Click" Style="{DynamicResource Btn_defaultSW}" Width="90" Height="30" Margin="0,0,30,0">
                                 <Label Content="모두 지우기" Foreground="Black" VerticalAlignment="Center" HorizontalAlignment="Center" FontFamily="Malgun Gothic" FontSize="13.333"/>
                             </Button>
-                            <Button x:Name="SaveSourceKeyBtn" Click="SaveSourceKeyBtn_Click" Style="{DynamicResource Btn_defaultSW}" Width="120" Height="30" >
+                            <!--<Button x:Name="SaveSourceKeyBtn" Click="SaveSourceKeyBtn_Click" Style="{DynamicResource Btn_defaultSW}" Width="120" Height="30" >
                                 <Label Content="모든 기기 코드 저장" Foreground="Black" VerticalAlignment="Center" HorizontalAlignment="Center" FontFamily="Malgun Gothic" FontSize="13.333"/>
-                            </Button>
-                            <Button x:Name="UploadAuthKeyBtn" Click="UploadAuthKeyBtn_Click" Style="{DynamicResource Btn_defaultSW}" Width="90" Height="30" Margin="6,0,0,0">
+                            </Button>-->
+                            <!--<Button x:Name="UploadAuthKeyBtn" Click="UploadAuthKeyBtn_Click" Style="{DynamicResource Btn_defaultSW}" Width="90" Height="30" Margin="6,0,0,0">
                                 <Label Content="일괄 등록" Foreground="Black" VerticalAlignment="Center" HorizontalAlignment="Center" FontFamily="Malgun Gothic" FontSize="13.333"/>
-                            </Button>
+                            </Button>-->
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,12,0">
                             <Button x:Name="SaveBtn" Click="SaveBtn_Click" Style="{DynamicResource Btn_default3}" Width="120" Height="30">

@@ -216,64 +216,12 @@ namespace AndoW_Manager
 
         private void SaveSourceKeyBtn_Click(object sender, RoutedEventArgs e)
         {
-            string _data = string.Empty;
-
-            foreach (PlayerInfoClass pic in g_PlayerInfoClassList)
-            {
-                string normalizedMac = AuthTools.NormalizeMacAddress(pic.PIF_MacAddress);
-                if (string.IsNullOrEmpty(normalizedMac))
-                    continue;
-
-                if (DataShop.Instance.g_PlayerInfoManager.HasValidAuthKey(pic.PIF_PlayerName))
-                    continue;
-
-                _data += normalizedMac + Environment.NewLine;
-            }
-            
-            if (string.IsNullOrEmpty(_data))
-                MessageTools.ShowMessageBox("등록할 기기가 없습니다.", "확인");
-            else
-            {
-                CommonOpenFileDialog dialog = new CommonOpenFileDialog();
-                dialog.IsFolderPicker = true;
-                if (dialog.ShowDialog() == CommonFileDialogResult.OK)
-                {
-                    FileTools.WriteNewTextFile(Path.Combine(dialog.FileName, "SourceKeys"), _data);
-                    MessageTools.ShowMessageBox("기기 코드 파일을 저장했습니다.", "확인");
-                }
-
-                this.Focus();
-            }
+            // 플레이어 인증은 더이상 매니저에서 처리하지 않는다.
         }
 
         private void UploadAuthKeyBtn_Click(object sender, RoutedEventArgs e)
         {
-            CommonOpenFileDialog dialog = new CommonOpenFileDialog();
-            dialog.Filters.Add(new CommonFileDialogFilter("등록 정보", "*"));
-
-            if (dialog.ShowDialog() == CommonFileDialogResult.OK)
-            {
-                if(Path.GetFileName(dialog.FileName).Equals("AuthKeys", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    string[] _authkeys = File.ReadAllLines(dialog.FileName);
-                    int applied = DataShop.Instance.g_PlayerInfoManager.ApplyAuthKeys(_authkeys);
-
-                    if (applied > 0)
-                    {
-                        RefreshPlayerInfoList();
-                        MessageTools.ShowMessageBox("기기 등록을 완료했습니다.", "확인");
-                    }
-                    else
-                    {
-                        MessageTools.ShowMessageBox("적용 가능한 등록 정보가 없습니다.", "확인");
-                    }
-                } else
-                {
-                    MessageTools.ShowMessageBox("등록 정보 파일이 아닙니다.", "확인");
-                }
-            }
-
-            this.Focus();
+            // 플레이어 인증은 더이상 매니저에서 처리하지 않는다.
         }
 
         private void AddPlayerBtn_Click(object sender, RoutedEventArgs e)

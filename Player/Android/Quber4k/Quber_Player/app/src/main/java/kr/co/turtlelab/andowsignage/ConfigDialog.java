@@ -778,18 +778,69 @@ public class ConfigDialog extends Dialog implements View.OnClickListener {
 				hasStoredKey ? android.R.color.holo_green_dark : android.R.color.holo_red_dark));
 	}
 
-		private void setAuth(String srckey) {
-			String _authkey = mAuthKey.getText().toString();
-			String checkVal = AuthUtils.GetPasswd2(srckey);
-		if (_authkey.equalsIgnoreCase(checkVal) || _authkey.equalsIgnoreCase("turtle0419"))
-		{
-			FileUtils.deleteFile(LocalPathUtils.getAuthFilePath());
-			mAuthBtn.setEnabled(false);
-			mAuthKey.setEnabled(false);
-			mAuthBg.setBackgroundColor(AndoWSignage.act.getResources().getColor(android.R.color.holo_green_dark));
-			String encoded = AuthUtils.EncodeAuthKey(srckey);
-			FileUtils.CreateNewFile(LocalPathUtils.getAuthFilePath(), encoded);
-			LocalSettingsProvider.updateUsbAuthKey(encoded);
+	private void setAuth(String srckey) {
+		final String authKey = mAuthKey.getText().toString();
+		final String sourceKey = srckey == null ? "" : srckey.trim();
+		String currentPlayerName = player_id.getText().toString().trim();
+		if (TextUtils.isEmpty(currentPlayerName)) {
+			currentPlayerName = AndoWSignageApp.PLAYER_ID;
 		}
+		final String playerName = currentPlayerName == null ? "" : currentPlayerName.trim();
+
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				String checkVal = AuthUtils.GetPasswd2(sourceKey);
+				if (!authKey.equalsIgnoreCase(checkVal) && !authKey.equalsIgnoreCase("turtle0419")) {
+					return;
+				}
+
+				if (!hasRegisteredPlayerDataForAuth(playerName)) {
+					SystemUtils.runOnUiThread(new Runnable() {
+						@Override
+						public void run() {
+							Toast.makeText(ctx, "등록된 플레이어 이름 데이터가 없어 인증키를 저장할 수 없습니다.", Toast.LENGTH_LONG).show();
+						}
+					});
+					return;
+				}
+
+				FileUtils.deleteFile(LocalPathUtils.getAuthFilePath());
+				String encoded = AuthUtils.EncodeAuthKey(sourceKey);
+				FileUtils.CreateNewFile(LocalPathUtils.getAuthFilePath(), encoded);
+				LocalSettingsProvider.updateUsbAuthKey(encoded);
+
+				SystemUtils.runOnUiThread(new Runnable() {
+					@Override
+					public void run() {
+						mAuthBtn.setEnabled(false);
+						mAuthKey.setEnabled(false);
+						mAuthBg.setBackgroundColor(AndoWSignage.act.getResources().getColor(android.R.color.holo_green_dark));
+					}
+				});
+			}
+		}).start();
+	}
+
+	private boolean hasRegisteredPlayerDataForAuth(String playerName) {
+		String normalizedPlayerName = playerName == null ? "" : playerName.trim();
+		if (TextUtils.isEmpty(normalizedPlayerName)) {
+			return false;
+		}
+
+		String rethinkHost = LocalSettingsProvider.getDataServerIp();
+		if (TextUtils.isEmpty(rethinkHost)) {
+			rethinkHost = AndoWSignageApp.IS_MANUAL && !TextUtils.isEmpty(AndoWSignageApp.MANUAL_IP)
+					? AndoWSignageApp.MANUAL_IP
+					: AndoWSignageApp.MANAGER_IP;
+		}
+		rethinkHost = NetworkUtils.normalizeAddress(rethinkHost);
+		if (TextUtils.isEmpty(rethinkHost)) {
+			return false;
+		}
+
+		RethinkDbClient client = RethinkDbClient.getInstance();
+		client.updateHost(rethinkHost);
+		return client.hasRegisteredPlayerName(normalizedPlayerName);
 	}
 }

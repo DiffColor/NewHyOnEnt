@@ -270,6 +270,17 @@ public sealed class PlayerConfigurationService
         string checkValue = GetPasswd2(sourceKey);
         if (password == checkValue || password == "turtle0419")
         {
+            string registrationCheckMessage = ValidateRegisteredPlayerForAuth();
+            if (!string.IsNullOrWhiteSpace(registrationCheckMessage))
+            {
+                return new AuthResult
+                {
+                    Success = false,
+                    StatusText = EvaluateAuthState().statusText,
+                    Message = registrationCheckMessage
+                };
+            }
+
             ExecuteAuthLogic();
             return new AuthResult
             {
@@ -679,6 +690,58 @@ public sealed class PlayerConfigurationService
 
             playerInfoManager.PlayerInfo.PIF_AuthKey = encodedKey;
             playerInfoManager.SaveData();
+        }
+    }
+
+    private string ValidateRegisteredPlayerForAuth()
+    {
+        localSettingsManager.LoadData();
+        playerInfoManager.LoadData();
+
+        string rethinkAddress = Normalize(localSettingsManager.Settings.ManagerIP);
+        string playerName = Normalize(playerInfoManager.PlayerInfo.PIF_PlayerName);
+
+        if (string.IsNullOrWhiteSpace(playerName))
+        {
+            return "플레이어 이름 데이터가 없어 인증키를 채울 수 없습니다.";
+        }
+
+        if (!DataServerAddressParser.TryParse(rethinkAddress, out _))
+        {
+            return "데이터 서버 주소가 올바르지 않아 등록된 플레이어 데이터를 확인할 수 없습니다.";
+        }
+
+        try
+        {
+            using TransferServerSettingsClient client = new(rethinkAddress);
+            RemotePlayerQueryResult result = client.QueryPlayerByName(playerName);
+            if (result.IsSuccess && result.Player != null)
+            {
+                return string.Empty;
+            }
+
+            if (result.IsNotFound)
+            {
+                return "데이터 서버에 등록된 플레이어 이름 데이터가 없어 인증키를 채울 수 없습니다.";
+            }
+
+            if (result.IsDatabaseMissing || result.IsTableMissing)
+            {
+                return "데이터 서버에 플레이어 정보 데이터가 없어 인증키를 채울 수 없습니다.";
+            }
+
+            if (result.IsConnectionFailed)
+            {
+                return string.IsNullOrWhiteSpace(result.ErrorMessage)
+                    ? "데이터 서버 연결에 실패하여 등록된 플레이어 데이터를 확인할 수 없습니다."
+                    : $"데이터 서버 연결에 실패하여 등록된 플레이어 데이터를 확인할 수 없습니다. ({result.ErrorMessage})";
+            }
+
+            return "등록된 플레이어 데이터를 확인할 수 없어 인증키를 채울 수 없습니다.";
+        }
+        catch
+        {
+            return "등록된 플레이어 데이터를 확인하는 중 오류가 발생해 인증키를 채울 수 없습니다.";
         }
     }
 

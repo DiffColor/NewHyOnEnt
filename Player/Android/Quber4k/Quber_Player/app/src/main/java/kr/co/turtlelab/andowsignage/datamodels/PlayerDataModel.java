@@ -2,6 +2,7 @@ package kr.co.turtlelab.andowsignage.datamodels;
 
 public class PlayerDataModel {
 
+	String playerId = "";
 	String playerName = "";
 	String playlist = "";
 	String playerIP = "";
@@ -12,6 +13,10 @@ public class PlayerDataModel {
 	/*
 	 * Setter Methods
 	 */
+	public void setPlayerId(String playerId) {
+		this.playerId = playerId == null ? "" : playerId;
+	}
+
 	public void setPlayerName(String playername) {
 		playerName = playername == null ? "" : playername;
 	}
@@ -35,6 +40,10 @@ public class PlayerDataModel {
 	/*
 	 * Getter Methods
 	 */
+	public String getPlayerId() {
+		return playerId == null ? "" : playerId;
+	}
+
 	public String getPlayerName() {
 		return playerName == null ? "" : playerName;
 	}

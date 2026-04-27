@@ -8,9 +8,9 @@
         xmlns:mk ="clr-namespace:AndoW_Manager"
         xmlns:WpfPageTransitions="clr-namespace:WpfPageTransitions"	
 	    x:Class="AndoW_Manager.MainWindow"
-	    x:Name="Window"    
-	    Title="NEW HYON"
+	    x:Name="Window"
         Closed="Window_Closed"
+        Width="1400"
         mc:Ignorable="d" MinWidth="1280" MinHeight="720" AllowsTransparency="True" 
         WindowStartupLocation="CenterScreen" WindowStyle="None" BorderThickness="1" BorderBrush="Black" ResizeMode="CanResizeWithGrip" WindowState="Normal" ShowInTaskbar="True">
     <Window.Resources>

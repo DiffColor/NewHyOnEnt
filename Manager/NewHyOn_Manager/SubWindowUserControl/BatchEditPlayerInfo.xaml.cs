@@ -22,9 +22,7 @@ namespace AndoW_Manager
         // ContentsInfoClass g_ContentsInfoClass = new ContentsInfoClass();
 
         public PlayerInfoClass g_PlayerInfoClass = new PlayerInfoClass();
-        bool isAuth = false;
-        private const string AuthPendingColor = "#FFB95454";
-        private const string AuthDoneColor = "#FF3E8E63";
+        // 플레이어 인증은 더이상 매니저에서 처리하지 않는다.
 
         public BatchEditPlayerInfo(PlayerBatchEditWindow paramPage)
         {
@@ -95,27 +93,27 @@ namespace AndoW_Manager
             if (string.IsNullOrEmpty(normalizedMac))
                 return;
 
-            bool authorized = DataShop.Instance.g_PlayerInfoManager.HasValidAuthKey(this.g_PlayerInfoClass.PIF_PlayerName);
-            SetAuthState(authorized);
+            // bool authorized = DataShop.Instance.g_PlayerInfoManager.HasValidAuthKey(this.g_PlayerInfoClass.PIF_PlayerName);
+            // SetAuthState(authorized);
         }
 
-        private void SetAuthState(bool state)
-        {
-            if (state)
-            {
-                AuthBtn.Content = "등록 완료";
-                AuthBtn.Background = ColorTools.GetSolidBrushByColorString(AuthDoneColor);
-                PWKeyTBox.IsEnabled = false;
-            }
-            else
-            {
-                AuthBtn.Content = "등록 필요";
-                AuthBtn.Background = ColorTools.GetSolidBrushByColorString(AuthPendingColor);
-                PWKeyTBox.IsEnabled = true;
-            }
-
-            isAuth = state;
-        }
+        // private void SetAuthState(bool state)
+        // {
+        //     if (state)
+        //     {
+        //         AuthBtn.Content = "등록 완료";
+        //         AuthBtn.Background = ColorTools.GetSolidBrushByColorString(AuthDoneColor);
+        //         PWKeyTBox.IsEnabled = false;
+        //     }
+        //     else
+        //     {
+        //         AuthBtn.Content = "등록 필요";
+        //         AuthBtn.Background = ColorTools.GetSolidBrushByColorString(AuthPendingColor);
+        //         PWKeyTBox.IsEnabled = true;
+        //     }
+        //
+        //     isAuth = state;
+        // }
 
         public void SavePlayerInfo()
         {
@@ -200,61 +198,62 @@ namespace AndoW_Manager
              
         }
 
-        private void AuthBtn_Click(object sender, System.Windows.RoutedEventArgs e)
-        {
-            if (isAuth)
-                return;
-
-            string passwd = PWKeyTBox.Password;
-
-            if (string.IsNullOrEmpty(passwd))
-            {
-                MessageTools.ShowMessageBox("확인 번호를 입력해주세요.", "확인");
-                return;
-            }
-
-            try
-            {
-                string macStr = AuthTools.NormalizeMacAddress(SourceKeyTBox.Text);
-                if (string.IsNullOrEmpty(macStr))
-                {
-                    MessageTools.ShowMessageBox("기기 코드가 없습니다. 플레이어 정보를 확인해주세요.", "확인");
-                    return;
-                }
-                string checkVal = AuthTools.GetPasswd2(macStr);
-
-                if (passwd.Equals(checkVal, StringComparison.CurrentCultureIgnoreCase) || passwd == "turtle0419")
-                {
-                    SetAndWriteAuth(AuthTools.EncodeAuthKey(macStr));
-                    return;
-                } else
-                {
-                    MessageTools.ShowMessageBox("잘못된 비밀번호입니다.", "확인");
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString());
-            }
-        }
-
-        private void SetAndWriteAuth(string authkey)
-        {
-            string normalizedAuthKey = authkey;
-            SetAuthState(true);
-
-            PersistAuthKey(normalizedAuthKey);
-        }
-
-        private void PersistAuthKey(string authkey)
-        {
-            if (string.IsNullOrWhiteSpace(authkey) || string.IsNullOrWhiteSpace(g_PlayerInfoClass?.PIF_PlayerName))
-            {
-                return;
-            }
-
-            g_PlayerInfoClass.PIF_AuthKey = authkey;
-            DataShop.Instance.g_PlayerInfoManager.SetAuthKeyForPlayer(g_PlayerInfoClass.PIF_PlayerName, authkey);
-        }
+        // private void AuthBtn_Click(object sender, System.Windows.RoutedEventArgs e)
+        // {
+        //     if (isAuth)
+        //         return;
+        //
+        //     string passwd = PWKeyTBox.Password;
+        //
+        //     if (string.IsNullOrEmpty(passwd))
+        //     {
+        //         MessageTools.ShowMessageBox("확인 번호를 입력해주세요.", "확인");
+        //         return;
+        //     }
+        //
+        //     try
+        //     {
+        //         string macStr = AuthTools.NormalizeMacAddress(SourceKeyTBox.Text);
+        //         if (string.IsNullOrEmpty(macStr))
+        //         {
+        //             MessageTools.ShowMessageBox("기기 코드가 없습니다. 플레이어 정보를 확인해주세요.", "확인");
+        //             return;
+        //         }
+        //         string checkVal = AuthTools.GetPasswd2(macStr);
+        //
+        //         if (passwd.Equals(checkVal, StringComparison.CurrentCultureIgnoreCase) || passwd == "turtle0419")
+        //         {
+        //             SetAndWriteAuth(AuthTools.EncodeAuthKey(macStr));
+        //             return;
+        //         }
+        //         else
+        //         {
+        //             MessageTools.ShowMessageBox("잘못된 비밀번호입니다.", "확인");
+        //         }
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         MessageBox.Show(ex.ToString());
+        //     }
+        // }
+        //
+        // private void SetAndWriteAuth(string authkey)
+        // {
+        //     string normalizedAuthKey = authkey;
+        //     SetAuthState(true);
+        //
+        //     PersistAuthKey(normalizedAuthKey);
+        // }
+        //
+        // private void PersistAuthKey(string authkey)
+        // {
+        //     if (string.IsNullOrWhiteSpace(authkey) || string.IsNullOrWhiteSpace(g_PlayerInfoClass?.PIF_PlayerName))
+        //     {
+        //         return;
+        //     }
+        //
+        //     g_PlayerInfoClass.PIF_AuthKey = authkey;
+        //     DataShop.Instance.g_PlayerInfoManager.SetAuthKeyForPlayer(g_PlayerInfoClass.PIF_PlayerName, authkey);
+        // }
     }
 }

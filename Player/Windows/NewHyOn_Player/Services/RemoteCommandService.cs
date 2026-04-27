@@ -641,27 +641,8 @@ namespace NewHyOnPlayer
 
         private bool HandleAuthKeyCommand(PlayerInfoClass playerInfo, string authKey)
         {
-            if (playerInfo == null)
-            {
-                return false;
-            }
-
-            string resolvedKey = authKey?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(resolvedKey))
-            {
-                Logger.WriteLog("authkey command missing payload.", Logger.GetLogFileName());
-                return false;
-            }
-
-            if (string.Equals(playerInfo.PIF_AuthKey, resolvedKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            playerInfo.PIF_AuthKey = resolvedKey;
-            owner?.g_PlayerInfoManager?.SaveData();
-            Logger.WriteLog($"AuthKey updated via command. player={playerInfo.PIF_PlayerName}, guid={playerInfo.PIF_GUID}", Logger.GetLogFileName());
-            return true;
+            Logger.WriteLog("authkey command ignored: player auth is no longer updated by remote command.", Logger.GetLogFileName());
+            return false;
         }
 
         private void EnqueueScheduleDownloads(PlayerInfoClass playerInfo, IEnumerable<SchedulePlaylistPayload> playlists)

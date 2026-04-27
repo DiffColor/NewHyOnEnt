@@ -98,7 +98,7 @@ namespace AndoW_Manager
             BTN0DO_Copy5.Click += BTN0DO_Copy5_Click;      // 플레이리스트 업데이트
 
             //MC_Upgrade.Click += MC_Upgrade_Click;
-            MC_Auth.Click += MC_Auth_Click;
+            // MC_Auth.Click += MC_Auth_Click;
             MC_ClearQueue.Click += MC_ClearQueue_Click;
         }
 
@@ -133,10 +133,7 @@ namespace AndoW_Manager
 
         void MC_Auth_Click(object sender, RoutedEventArgs e)
         {
-            g_PlayerInfoClass.CopyData(DataShop.Instance.g_PlayerInfoManager.GetPlayerInfoByName(g_PlayerInfoClass.PIF_PlayerName));
-
-            GetAuthWindow gaw = new GetAuthWindow(this.g_PlayerInfoClass);
-            gaw.ShowDialog();
+            // 플레이어 인증은 더이상 매니저에서 처리하지 않는다.
         }
 
         async void MC_Upgrade_Click(object sender, RoutedEventArgs e)
@@ -249,13 +246,15 @@ namespace AndoW_Manager
                 return;
             }
 
-            bool authorized = DataShop.Instance.g_PlayerInfoManager
-                .HasValidAuthKey(this.g_PlayerInfoClass.PIF_PlayerName);
+            // bool authorized = DataShop.Instance.g_PlayerInfoManager
+            //     .HasValidAuthKey(this.g_PlayerInfoClass.PIF_PlayerName);
+            //
+            // if (authorized)
+            //     ChangePlayList();
+            // else
+            //     MessageTools.ShowMessageBox("등록되지 않은 플레이어입니다. 등록 후에 전송할 수 있습니다.", "확인");
 
-            if(authorized)
-                ChangePlayList();
-            else
-                MessageTools.ShowMessageBox("등록되지 않은 플레이어입니다. 등록 후에 전송할 수 있습니다.", "확인");
+            ChangePlayList();
         }
 
         void PlayerInfoElement_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)

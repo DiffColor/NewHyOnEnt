@@ -70,10 +70,11 @@ public class SpecialScheduleEvaluator {
                         .equalTo("id", playerId)
                         .findFirst();
             }
-            if (cache == null && !TextUtils.isEmpty(playerName)) {
-                cache = storeDb.where(StoredSpecialScheduleCache.class)
-                        .equalTo("playerName", playerName)
-                        .findFirst();
+            if (cache == null) {
+                cache = findByPlayerNameIgnoreCase(storeDb, playerName);
+            }
+            if (cache == null) {
+                cache = findByPlayerNameIgnoreCase(storeDb, playerId);
             }
             if (cache == null || TextUtils.isEmpty(cache.getSchedulesJson())) {
                 return Collections.emptyList();
@@ -86,6 +87,23 @@ public class SpecialScheduleEvaluator {
         } finally {
             storeDb.close();
         }
+    }
+
+    private StoredSpecialScheduleCache findByPlayerNameIgnoreCase(ObjectBoxDb storeDb, String playerName) {
+        if (storeDb == null || TextUtils.isEmpty(playerName)) {
+            return null;
+        }
+        List<StoredSpecialScheduleCache> caches = storeDb.where(StoredSpecialScheduleCache.class)
+                .findAll();
+        if (caches == null || caches.isEmpty()) {
+            return null;
+        }
+        for (StoredSpecialScheduleCache cache : caches) {
+            if (cache != null && playerName.equalsIgnoreCase(safe(cache.getPlayerName()))) {
+                return cache;
+            }
+        }
+        return null;
     }
 
     private UpdatePayloadModels.SpecialSchedulePayload selectActiveSchedule(

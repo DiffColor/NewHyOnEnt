@@ -878,9 +878,7 @@ public class USBReceiver extends BroadcastReceiver {
             return true;
         }
 
-        String expectedAuthKey = AuthUtils.EncodeAuthKey(normalizeMac(localMac));
-        return !TextUtils.isEmpty(player.PIF_AuthKey)
-                && player.PIF_AuthKey.equalsIgnoreCase(expectedAuthKey);
+        return false;
     }
 
     private UpdatePayloadModels.SpecialSchedulePayload mapSpecialSchedule(SpecialScheduleInfoExport source) {

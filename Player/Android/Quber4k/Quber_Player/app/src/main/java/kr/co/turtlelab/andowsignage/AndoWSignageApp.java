@@ -127,13 +127,9 @@ public class AndoWSignageApp extends Application {
 			safeBaseWidth = fixed_base_width;
 			safeBaseHeight = fixed_base_height;
 		}
-		float scaleXFactor = safeBaseWidth / (fixed_base_width * 1.0f);
-		float scaleYFactor = safeBaseHeight / (fixed_base_height * 1.0f);
-		float scaleFactor = Math.max(scaleXFactor, scaleYFactor);
-		if (scaleFactor <= 0f) {
-			scaleFactor = 1.0f;
-		}
-		return new float[] { scaleFactor, scaleXFactor, scaleYFactor };
+		int targetWidth = sDevice_Width > 0 ? sDevice_Width : fixed_base_width;
+		int targetHeight = sDevice_Height > 0 ? sDevice_Height : fixed_base_height;
+		return CanvasUtils.getScaleFactors(safeBaseWidth, safeBaseHeight, targetWidth, targetHeight);
 	}
 	
 	public static float getScale() {
@@ -221,15 +217,42 @@ public class AndoWSignageApp extends Application {
 		return null;
 	}
 
-	public static void beginShutdown() {
+	private static volatile long shutdownToken = 0L;
+
+	public static synchronized long beginShutdown() {
 		shutdownInProgress = true;
+		shutdownToken++;
+		return shutdownToken;
+	}
+
+	public static void markPlayingState() {
+		state = RP_STATUS.playing.toString();
+	}
+
+	public static void markUpdatingState() {
+		state = RP_STATUS.updating.toString();
+	}
+
+	public static void markStoppedState() {
+		state = RP_STATUS.stopped.toString();
 	}
 
 	public static void clearShutdownInProgress() {
 		shutdownInProgress = false;
+		synchronized (AndoWSignageApp.class) {
+			shutdownToken++;
+		}
 	}
 
 	public static boolean isShutdownInProgress() {
 		return shutdownInProgress;
+	}
+
+	public static synchronized boolean matchesShutdownToken(long token) {
+		return shutdownInProgress && shutdownToken == token;
+	}
+
+	public static boolean shouldReportStoppedState() {
+		return isSlept || shutdownInProgress;
 	}
 }

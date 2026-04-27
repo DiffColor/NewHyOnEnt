@@ -29,6 +29,7 @@ public class PlayerDataProvider {
         try {
             StoredPlayer storedPlayer = storeDb.where(StoredPlayer.class).findFirst();
             if (storedPlayer != null) {
+                playerData.setPlayerId(storedPlayer.getPlayerId());
                 String name = storedPlayer.getPlayerName();
                 if (TextUtils.isEmpty(name)) {
                     name = local.getPlayerId();
@@ -44,6 +45,7 @@ public class PlayerDataProvider {
                 if (TextUtils.isEmpty(playerId)) {
                     playerId = AndoWSignageApp.PLAYER_ID;
                 }
+                playerData.setPlayerId(playerId);
                 playerData.setPlayerName(playerId);
                 playerData.setPlaylist("");
                 playerData.setIsLandscape(String.valueOf(true));

@@ -146,55 +146,27 @@ namespace NewHyOnPlayer
                     manager.g_PlayerInfo.PIF_PlayerName = playerName;
                     manager.SaveData();
                 }
+                if (string.IsNullOrWhiteSpace(playerName))
+                {
+                    return;
+                }
+
                 string localGuid = manager.g_PlayerInfo.PIF_GUID;
-
                 string remoteGuid = null;
-                bool createdRemotePlayer = false;
-                if (!string.IsNullOrWhiteSpace(playerName))
+                bool lookupSucceeded = TryFetchGuidByName(playerName, localGuid, out remoteGuid);
+                if (!lookupSucceeded)
                 {
-                    bool lookupSucceeded = TryFetchGuidByName(playerName, localGuid, out remoteGuid);
-                    if (!lookupSucceeded)
-                    {
-                        NotifySyncFailed();
-                        return;
-                    }
-
-                    syncFailedNotified = false;
-
-                    if (string.IsNullOrWhiteSpace(remoteGuid))
-                    {
-                        string createdGuid = CreateNewGuidNotExists();
-                        if (string.IsNullOrWhiteSpace(createdGuid))
-                        {
-                            NotifySyncFailed();
-                            return;
-                        }
-
-                        remoteGuid = createdGuid;
-                        createdRemotePlayer = true;
-                    }
+                    NotifySyncFailed();
+                    return;
                 }
 
-                if (string.IsNullOrWhiteSpace(remoteGuid) && !string.IsNullOrWhiteSpace(localGuid))
-                {
-                    remoteGuid = FetchPlayerByGuid(localGuid) == null ? null : localGuid;
-                }
-
-                if (string.IsNullOrWhiteSpace(remoteGuid) && !string.IsNullOrWhiteSpace(playerName))
-                {
-                    string createdGuid = CreateNewGuidNotExists();
-                    if (string.IsNullOrWhiteSpace(createdGuid))
-                    {
-                        NotifySyncFailed();
-                        return;
-                    }
-
-                    remoteGuid = createdGuid;
-                    createdRemotePlayer = true;
-                }
+                syncFailedNotified = false;
 
                 if (string.IsNullOrWhiteSpace(remoteGuid))
                 {
+                    Logger.WriteLog(
+                        $"RethinkSyncService skipped player sync: no registered player data for name '{playerName}'.",
+                        Logger.GetLogFileName());
                     return;
                 }
 
@@ -205,18 +177,10 @@ namespace NewHyOnPlayer
                     manager.SaveData();
                 }
 
-                if (createdRemotePlayer)
-                {
-                    UpsertPlayerInfoToRethink();
-                }
-                else
-                {
-                    UpdatePlayerInfoToRethink();
-                }
-
+                UpdatePlayerInfoToRethink();
                 SyncAuthKey(manager.g_PlayerInfo, remoteGuid);
 
-                bool shouldSyncSchedulesForConnection = createdRemotePlayer || guidChanged || !infoSyncedAfterConnect;
+                bool shouldSyncSchedulesForConnection = guidChanged || !infoSyncedAfterConnect;
                 bool shouldNotifyPlayerSynced = shouldSyncSchedulesForConnection;
                 infoSyncedAfterConnect = true;
 
@@ -451,61 +415,6 @@ namespace NewHyOnPlayer
             }
         }
 
-        private void UpsertPlayerInfoToRethink()
-        {
-            try
-            {
-                var player = manager?.g_PlayerInfo;
-                if (player == null || string.IsNullOrWhiteSpace(player.PIF_GUID))
-                {
-                    return;
-                }
-
-                var conn = GetConnection();
-                if (conn == null)
-                {
-                    return;
-                }
-
-                ResolveCurrentNetworkInfo(out string localIp, out string mac, out List<string> allMacs);
-                string authKeyToStore = EnsureAuthKeyForCurrentNic(player, mac, allMacs);
-                string osName = string.IsNullOrWhiteSpace(player.PIF_OSName)
-                    ? Environment.OSVersion.ToString()
-                    : player.PIF_OSName;
-
-                if (!string.IsNullOrWhiteSpace(localIp) || !string.IsNullOrWhiteSpace(mac))
-                {
-                    UpdateLocalNetworkInfo(localIp, mac);
-                }
-
-                var payload = new Dictionary<string, object>
-                {
-                    ["id"] = player.PIF_GUID,
-                    ["PIF_PlayerName"] = player.PIF_PlayerName ?? string.Empty,
-                    ["PIF_CurrentPlayList"] = player.PIF_CurrentPlayList ?? string.Empty,
-                    ["PIF_IPAddress"] = string.IsNullOrWhiteSpace(localIp) ? player.PIF_IPAddress ?? string.Empty : localIp,
-                    ["PIF_OSName"] = osName,
-                    ["PIF_MacAddress"] = string.IsNullOrWhiteSpace(mac) ? player.PIF_MacAddress ?? string.Empty : mac,
-                    ["command"] = player.PendingCommand ?? string.Empty
-                };
-                if (!string.IsNullOrWhiteSpace(authKeyToStore) && IsAuthKeyMatchedAnyNic(authKeyToStore, allMacs))
-                {
-                    payload["PIF_AuthKey"] = authKeyToStore;
-                }
-
-                R.Db(DatabaseName)
-                    .Table(PlayerTable)
-                    .Insert(payload)
-                    .OptArg("conflict", "update")
-                    .RunNoReply(conn);
-            }
-            catch (Exception ex)
-            {
-                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
-                ResetConnection();
-            }
-        }
-
         private void ResetConnection()
         {
             try
@@ -539,10 +448,6 @@ namespace NewHyOnPlayer
             PlayerInfoClass remote = FetchPlayerByGuid(remoteGuid);
             if (remote == null)
             {
-                if (!string.IsNullOrWhiteSpace(localKeyForCurrent) && IsAuthKeyMatchedAnyNic(localKeyForCurrent, allMacs))
-                {
-                    UpsertPlayerInfoToRethink();
-                }
                 return;
             }
 
@@ -586,7 +491,6 @@ namespace NewHyOnPlayer
         private void RefreshLocalNetworkInfo()
         {
             ResolveCurrentNetworkInfo(out string localIp, out string mac, out List<string> allMacs);
-            EnsureAuthKeyForCurrentNic(manager?.g_PlayerInfo, mac, allMacs);
             if (!string.IsNullOrWhiteSpace(localIp) || !string.IsNullOrWhiteSpace(mac))
             {
                 UpdateLocalNetworkInfo(localIp, mac);
@@ -836,31 +740,6 @@ namespace NewHyOnPlayer
             syncFailedNotified = true;
             SyncFailed?.Invoke();
         }
-
-        private string CreateNewGuidNotExists()
-        {
-            var conn = GetConnection();
-            if (conn == null)
-            {
-                return null;
-            }
-
-            for (int attempt = 0; attempt < 5; attempt++)
-            {
-                string candidate = Guid.NewGuid().ToString();
-                var exists = R.Db(DatabaseName)
-                    .Table(PlayerTable)
-                    .Get(candidate)
-                    .RunAtom<Dictionary<string, object>>(conn);
-                if (exists == null)
-                {
-                    return candidate;
-                }
-            }
-
-            return Guid.NewGuid().ToString();
-        }
-
 
         private void SyncSpecialSchedule(string playerId, string playerName)
         {

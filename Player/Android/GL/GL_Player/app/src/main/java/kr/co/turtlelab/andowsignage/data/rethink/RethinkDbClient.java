@@ -229,6 +229,10 @@ public class RethinkDbClient {
         return fetchPlayerInternal(playerName, true);
     }
 
+    public boolean hasRegisteredPlayerName(String playerName) {
+        return fetchPlayerInternal(playerName, false) != null;
+    }
+
     private RethinkModels.PlayerInfoRecord fetchPlayerInternal(String playerName, boolean persistSkeleton) {
         if (playerName == null || playerName.isEmpty()) {
             return null;
