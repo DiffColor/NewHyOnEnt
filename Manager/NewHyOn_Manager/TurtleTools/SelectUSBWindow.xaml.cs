@@ -82,10 +82,15 @@ namespace TurtleTools
                 string targetContentFolder = FNDTools.GetUSBContentPath(usbname);
                 List<CopyFileInfo> copyfilelist = BuildCopyFileList(pages, targetContentFolder);
 
-                SavingFileWindow form = new SavingFileWindow(copyfilelist);
+                SavingFileWindow form = new SavingFileWindow(copyfilelist, enableFtpDownloadMissing: true);
                 form.Owner = this;
-                form.ShowDialog();
+                bool? copyResult = form.ShowDialog();
+                if (copyResult != true)
+                {
+                    return;
+                }
 
+                DialogResult = true;
                 this.Close();
             }
             catch (Exception ex)
@@ -98,6 +103,7 @@ namespace TurtleTools
 
         private void CloseBtn_Click(object sender, System.Windows.RoutedEventArgs e)
         {
+            DialogResult = false;
             this.Close();
         }
 

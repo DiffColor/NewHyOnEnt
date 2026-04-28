@@ -199,6 +199,9 @@ public class HeartbeatService extends Service {
         } else if (expectedRevision > 0L) {
             return;
         }
+        if (!AndoWSignageApp.RP_STATUS.updating.toString().equals(status)) {
+            process = 0;
+        }
         String version = AndoWSignageApp.version;
         String currentPage = AndoWSignage.currentPageName;
         Boolean quberHdmi = PowerApi.queryHdmiCableState();

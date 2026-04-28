@@ -79,8 +79,12 @@ public class USBReceiver extends BroadcastReceiver {
             usbSourceDir = installDir;
             File authFile = new File(installDir, "AuthKeys");
             try {
-                hasKey = AuthUtils.HasEncodedAuthKey(authFile.getAbsolutePath(), LocalSettingsProvider.getUsbAuthKey());
+                hasKey = AuthUtils.HasAuthKey(authFile.getAbsolutePath(), NetworkUtils.getMACAddress());
+                if (hasKey) {
+                    persistUsbAuthKeys(authFile);
+                }
             } catch (Exception e1) {
+                Log.e(TAG, "USB AuthKeys verification failed", e1);
                 hasKey = false;
             }
             if(hasKey) {
@@ -111,6 +115,48 @@ public class USBReceiver extends BroadcastReceiver {
 
         hasKey = false;
         usbSourceDir = null;
+    }
+
+    private void persistUsbAuthKeys(File authFile) throws IOException {
+        if (authFile == null || !authFile.isFile()) {
+            throw new IOException("USB AuthKeys file missing");
+        }
+
+        File targetFile = new File(LocalPathUtils.getAuthFilePath());
+        File parent = targetFile.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IOException("Auth cache directory create failed: " + parent.getAbsolutePath());
+        }
+
+        FileInputStream input = null;
+        FileOutputStream output = null;
+        try {
+            input = new FileInputStream(authFile);
+            output = new FileOutputStream(targetFile, false);
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            output.flush();
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (Exception ignore) {
+                }
+            }
+            if (output != null) {
+                try {
+                    output.close();
+                } catch (Exception ignore) {
+                }
+            }
+        }
+
+        if (!AuthUtils.HasAuthKey(targetFile.getAbsolutePath(), NetworkUtils.getMACAddress())) {
+            throw new IOException("Persisted AuthKeys verification failed");
+        }
     }
 
     private List<File> buildSearchRoots(Context context, Intent intent) {

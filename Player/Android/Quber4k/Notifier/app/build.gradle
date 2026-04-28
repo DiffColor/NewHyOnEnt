@@ -28,7 +28,7 @@ android {
     defaultConfig {
         applicationId "kr.co.turtlelab.notifier"
         minSdk 17
-        targetSdk 30
+        targetSdk 17
         versionCode 1
         versionName "1.0"
     }

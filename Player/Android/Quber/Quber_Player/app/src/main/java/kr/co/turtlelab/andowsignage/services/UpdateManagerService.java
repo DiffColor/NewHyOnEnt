@@ -15,7 +15,6 @@ import java.net.Socket;
 
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
-import kr.co.turtlelab.andowsignage.AndoWSignageApp.RP_STATUS;
 import kr.co.turtlelab.andowsignage.data.CommunicationSettingsSync;
 import kr.co.turtlelab.andowsignage.data.DataSyncManager;
 import kr.co.turtlelab.andowsignage.data.rethink.CommandQueueClient;
@@ -524,9 +523,7 @@ public class UpdateManagerService extends Service implements SignalRClientServic
         if (player == null) {
             return;
         }
-        AndoWSignageApp.markUpdatingState();
         long queueId = syncManager.enqueuePlaylistUpdate(player);
-        AndoWSignageApp.markPlayingState();
         if (queueId <= 0) {
             return;
         }

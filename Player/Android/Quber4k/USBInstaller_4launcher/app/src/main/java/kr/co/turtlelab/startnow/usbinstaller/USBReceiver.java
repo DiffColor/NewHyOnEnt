@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Environment;
 import android.net.Uri;
@@ -35,6 +36,8 @@ public class USBReceiver extends BroadcastReceiver {
     private static final String PACKAGE_WATCHDOG = "kr.co.turtlelab.startnow.watchdog";
     private static final String RECEIVER_NOTIFIER = "kr.co.turtlelab.notifier.NotiReceiver";
     private static final String RECEIVER_WATCHDOG = "kr.co.turtlelab.startnow.watchdog.WatchDogReceiver";
+    private static final String PREFS_NAME = "usb_install_state";
+    private static final String KEY_HANDLED_MOUNT = "handled_mount_key";
     private static final String USB_DIRNAME = "APKs";
     private static final long INSTALL_VERIFY_TIMEOUT_MS = 90000L;
     private static final long INSTALL_VERIFY_INTERVAL_MS = 1500L;
@@ -45,6 +48,9 @@ public class USBReceiver extends BroadcastReceiver {
     private static final String STAGING_DIRNAME = "quber_apk_stage";
     private static final int MIN_COPY_BUFFER_SIZE = 1 * 1024 * 1024;
     private static final int COPY_BUFFER_SIZE = Math.max(MIN_COPY_BUFFER_SIZE, 2 * 1024 * 1024);
+    private static final Object INSTALL_STATE_LOCK = new Object();
+    private static boolean installInProgress = false;
+    private static String handledMountKey = null;
 
     @Override
     public void onReceive(final Context context, Intent intent) {
@@ -52,8 +58,29 @@ public class USBReceiver extends BroadcastReceiver {
             return;
         }
 
-        if (!Intent.ACTION_MEDIA_MOUNTED.equals(intent.getAction())) {
+        String action = intent.getAction();
+        if (isUnmountAction(action)) {
+            clearInstallState(context, intent);
             return;
+        }
+
+        if (!Intent.ACTION_MEDIA_MOUNTED.equals(action)) {
+            return;
+        }
+
+        final String mountKey = buildMountKey(intent);
+        synchronized (INSTALL_STATE_LOCK) {
+            if (installInProgress) {
+                Log.d(TAG, "Ignore duplicated mount event while install is running: " + mountKey);
+                return;
+            }
+
+            if (mountKey.equals(handledMountKey) || mountKey.equals(loadHandledMountKey(context))) {
+                Log.d(TAG, "Ignore already handled mount event: " + mountKey);
+                return;
+            }
+
+            installInProgress = true;
         }
 
         final Intent receivedIntent = new Intent(intent);
@@ -61,29 +88,101 @@ public class USBReceiver extends BroadcastReceiver {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                boolean installStarted = false;
                 try {
-                    handleMounted(context, receivedIntent);
+                    installStarted = handleMounted(context, receivedIntent, mountKey);
                 } finally {
+                    finishMountHandling(mountKey, installStarted);
                     pendingResult.finish();
                 }
             }
         }, "usb-installer").start();
     }
 
-    private void handleMounted(Context context, Intent intent) {
+    private boolean isUnmountAction(String action) {
+        return Intent.ACTION_MEDIA_UNMOUNTED.equals(action)
+                || Intent.ACTION_MEDIA_REMOVED.equals(action)
+                || Intent.ACTION_MEDIA_EJECT.equals(action)
+                || Intent.ACTION_MEDIA_BAD_REMOVAL.equals(action);
+    }
+
+    private void clearInstallState(Context context, Intent intent) {
+        String mountKey = buildMountKey(intent);
+        synchronized (INSTALL_STATE_LOCK) {
+            handledMountKey = null;
+            installInProgress = false;
+            saveHandledMountKey(context, null);
+        }
+        Log.d(TAG, "Clear install state for mount: " + mountKey);
+    }
+
+    private void finishMountHandling(String mountKey, boolean installStarted) {
+        synchronized (INSTALL_STATE_LOCK) {
+            if (installStarted) {
+                handledMountKey = mountKey;
+            }
+            installInProgress = false;
+        }
+    }
+
+    private String buildMountKey(Intent intent) {
+        File mountedDir = resolveMountedDir(intent);
+        File mountedRoot = resolveStorageRoot(mountedDir);
+        String path = normalizePath(mountedRoot == null ? mountedDir : mountedRoot);
+        if (path == null || path.length() < 1) {
+            return "unknown";
+        }
+        return path;
+    }
+
+    private void markMountHandled(Context context, String mountKey) {
+        synchronized (INSTALL_STATE_LOCK) {
+            handledMountKey = mountKey;
+            saveHandledMountKey(context, mountKey);
+        }
+    }
+
+    private String loadHandledMountKey(Context context) {
+        if (context == null) {
+            return null;
+        }
+
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_HANDLED_MOUNT, null);
+    }
+
+    private void saveHandledMountKey(Context context, String mountKey) {
+        if (context == null) {
+            return;
+        }
+
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        if (mountKey == null || mountKey.length() < 1) {
+            editor.remove(KEY_HANDLED_MOUNT);
+        } else {
+            editor.putString(KEY_HANDLED_MOUNT, mountKey);
+        }
+
+        if (!editor.commit()) {
+            Log.w(TAG, "Failed to save handled mount key: " + mountKey);
+        }
+    }
+
+    private boolean handleMounted(Context context, Intent intent, String mountKey) {
         List<File> searchRoots = buildSearchRoots(context, intent);
         File installDir = findInstallDir(searchRoots, USB_DIRNAME);
         if (installDir == null) {
             Log.w(TAG, "APKs directory not found. roots=" + joinPaths(searchRoots));
-            return;
+            return false;
         }
 
         List<File> apkFiles = collectApkFiles(installDir);
         if (apkFiles.isEmpty()) {
             Log.w(TAG, "APKs directory found but apk file not found: " + installDir.getAbsolutePath());
-            return;
+            return false;
         }
 
+        markMountHandled(context, mountKey);
         Log.d(TAG, "Found APKs directory: " + installDir.getAbsolutePath() + ", count=" + apkFiles.size());
         sendMsg(context, WATCHDOG_DISABLE, null);
         sendMsg(context, INTENT_MSG, "앱 설치를 시작합니다.");
@@ -94,6 +193,7 @@ public class USBReceiver extends BroadcastReceiver {
             for (File apkFile : apkFiles) {
                 installSingleApk(context, apkFile);
             }
+            return true;
         } finally {
             ensureNotifierVisibleEnough(notifierShownAt);
             sendMsg(context, INTENT_FINISH, null);

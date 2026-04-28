@@ -14,10 +14,13 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.media.MediaPlayer;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.view.inputmethod.InputMethodManager;
 import android.os.IBinder;
 import android.text.Editable;
@@ -390,10 +393,30 @@ public class AndoWSignage extends Activity {
 	}
 
 	public MediaScanner mScanner;
+
+	private void ensureUsbStorageAccessPermission() {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+			return;
+		}
+		try {
+			if (Environment.isExternalStorageManager()) {
+				return;
+			}
+			Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+			intent.setData(Uri.parse("package:" + getPackageName()));
+			startActivity(intent);
+		} catch (Exception e) {
+			try {
+				startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+			} catch (Exception ignored) {
+			}
+		}
+	}
 	
 	private void initialize() {
 		act = AndoWSignage.this;
 		sCtx = this;
+		ensureUsbStorageAccessPermission();
 		
 		mScanner = new MediaScanner(this);
 		

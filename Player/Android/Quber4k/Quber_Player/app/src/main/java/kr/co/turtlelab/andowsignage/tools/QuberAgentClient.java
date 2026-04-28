@@ -37,7 +37,7 @@ public final class QuberAgentClient {
     private static final String TAG = "QuberAgentClient";
     private static final String ACTION_QUBER_AGENT = "net.quber.qubersignageagent.QUBER_AGENT_SERVICE";
     private static final String PACKAGE_QUBER_AGENT = "net.quber.qubersignageagent";
-    private static final long CONNECT_TIMEOUT_MS = 1200L;
+    private static final long CONNECT_TIMEOUT_MS = 8000L;
     private static final long RESPONSE_TIMEOUT_MS = 6000L;
 
     private static final String CMD_REBOOT = "215001";

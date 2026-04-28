@@ -17,8 +17,10 @@ namespace AndoW_Manager
         private readonly List<CopyFileInfo> g_CopyFileList = new List<CopyFileInfo>();
         private readonly Action g_PostCopyAction;
         private readonly bool g_EnableFtpUpload;
+        private readonly bool g_EnableFtpDownloadMissing;
         private readonly System.Timers.Timer startCopyTimer = new System.Timers.Timer();
         private readonly CancellationTokenSource uploadCancellation = new CancellationTokenSource();
+        private readonly List<string> copyErrors = new List<string>();
 
         private sealed class UploadJob
         {
@@ -33,11 +35,15 @@ namespace AndoW_Manager
             InitializeComponent();
         }
 
-        public SavingFileWindow(List<CopyFileInfo> copyFileList, Action postCopyAction = null, bool enableFtpUpload = false)
+        public SavingFileWindow(List<CopyFileInfo> copyFileList,
+            Action postCopyAction = null,
+            bool enableFtpUpload = false,
+            bool enableFtpDownloadMissing = false)
         {
             InitializeComponent();
             g_PostCopyAction = postCopyAction;
             g_EnableFtpUpload = enableFtpUpload;
+            g_EnableFtpDownloadMissing = enableFtpDownloadMissing;
             InitCopyFileList(copyFileList);
             InitializeUiState();
             InitTimer();
@@ -80,9 +86,19 @@ namespace AndoW_Manager
 
         private async Task RunCopyAndUploadAsync()
         {
+            bool succeeded = false;
             try
             {
-                await Task.Run(() => CopyFilesWithProgress());
+                await CopyFilesWithProgressAsync();
+
+                if (copyErrors.Count > 0)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        MessageTools.ShowMessageBox($"파일 {copyErrors.Count}건을 USB에 저장하지 못했습니다.\r\n로그를 확인해주세요.", "확인");
+                    });
+                    return;
+                }
 
                 Dispatcher.Invoke(() =>
                 {
@@ -97,18 +113,27 @@ namespace AndoW_Manager
                 {
                     await UploadFilesAsync();
                 }
+
+                succeeded = true;
             }
             catch (Exception ex)
             {
                 Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
+                return;
             }
             finally
             {
-                Dispatcher.Invoke(closeThisWindow);
+                Dispatcher.Invoke(() =>
+                {
+                    if (!SetDialogResult(succeeded))
+                    {
+                        closeThisWindow();
+                    }
+                });
             }
         }
 
-        private void CopyFilesWithProgress()
+        private async Task CopyFilesWithProgressAsync()
         {
             var copyItems = g_CopyFileList
                 .Where(item => item != null && item.CFI_RequireCopy)
@@ -121,7 +146,8 @@ namespace AndoW_Manager
                 return;
             }
 
-            SetStage("로컬 복사 중입니다.", "콘텐츠 파일을 매니저에 보존합니다.");
+            SetStage(g_EnableFtpDownloadMissing ? "콘텐츠 확인 중입니다." : "로컬 복사 중입니다.",
+                g_EnableFtpDownloadMissing ? "로컬에 없는 콘텐츠는 서버에서 받은 뒤 저장합니다." : "콘텐츠 파일을 매니저에 보존합니다.");
 
             int completed = 0;
             foreach (CopyFileInfo item in copyItems)
@@ -143,8 +169,15 @@ namespace AndoW_Manager
 
                 try
                 {
-                    string source = item.CFI_FileSourceFullPath;
+                    string source = await ResolveCopySourceAsync(item);
                     string target = item.CFI_TargetFileName;
+
+                    if (string.IsNullOrWhiteSpace(source) || !File.Exists(source))
+                    {
+                        copyErrors.Add(displayName);
+                        Logger.WriteErrorLog($"USB export source missing: {displayName}", Logger.GetLogFileName());
+                        continue;
+                    }
 
                     if (File.Exists(source))
                     {
@@ -157,20 +190,15 @@ namespace AndoW_Manager
                             }
                         }
                     }
-                    else if (File.Exists(FNDTools.GetTargetContentsFilePath(item.CFI_FileName)))
+                    if (!FileTools.CopyFile(source, target))
                     {
-                        source = FNDTools.GetTargetContentsFilePath(item.CFI_FileName);
-                        if (HasSameFileLength(source, target))
-                        {
-                            completed++;
-                            continue;
-                        }
+                        copyErrors.Add(displayName);
+                        Logger.WriteErrorLog($"USB export copy failed: {displayName} / {source} -> {target}", Logger.GetLogFileName());
                     }
-
-                    FileTools.CopyFile(source, target);
                 }
                 catch (Exception ex)
                 {
+                    copyErrors.Add(displayName);
                     Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
                 }
                 finally
@@ -179,6 +207,49 @@ namespace AndoW_Manager
                     UpdateCopyProgress(completed, total, displayName);
                 }
             }
+        }
+
+        private async Task<string> ResolveCopySourceAsync(CopyFileInfo item)
+        {
+            if (item == null)
+            {
+                return string.Empty;
+            }
+
+            string source = item.CFI_FileSourceFullPath;
+            if (!string.IsNullOrWhiteSpace(source) && File.Exists(source))
+            {
+                return source;
+            }
+
+            string localContentPath = string.IsNullOrWhiteSpace(item.CFI_FileName)
+                ? string.Empty
+                : FNDTools.GetTargetContentsFilePath(item.CFI_FileName);
+            if (!string.IsNullOrWhiteSpace(localContentPath) && File.Exists(localContentPath))
+            {
+                return localContentPath;
+            }
+
+            if (!g_EnableFtpDownloadMissing || string.IsNullOrWhiteSpace(item.CFI_FileName))
+            {
+                return source;
+            }
+
+            string remoteRelativePath = FtpTransferTools.BuildContentsRelativePath(item.CFI_FileName);
+            if (string.IsNullOrWhiteSpace(remoteRelativePath) || string.IsNullOrWhiteSpace(localContentPath))
+            {
+                return source;
+            }
+
+            SetStage("콘텐츠 다운로드 중입니다.", item.CFI_FileName);
+            string downloadError = await FtpTransferTools.DownloadFileAsync(remoteRelativePath, localContentPath, uploadCancellation.Token);
+            if (!string.IsNullOrWhiteSpace(downloadError))
+            {
+                Logger.WriteErrorLog($"USB export download failed: {item.CFI_FileName} / {downloadError}", Logger.GetLogFileName());
+                return source;
+            }
+
+            return localContentPath;
         }
 
         private async Task UploadFilesAsync()
@@ -359,6 +430,19 @@ namespace AndoW_Manager
         public void closeThisWindow()
         {
             Close();
+        }
+
+        private bool SetDialogResult(bool result)
+        {
+            try
+            {
+                DialogResult = result;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public void InitCopyFileList(List<CopyFileInfo> copyFileList)

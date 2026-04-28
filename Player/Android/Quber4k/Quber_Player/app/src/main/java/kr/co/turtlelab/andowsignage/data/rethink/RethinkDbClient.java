@@ -613,9 +613,22 @@ public class RethinkDbClient {
         }
 
         // Update player progress/status for parity with Windows player
-        if (!TextUtils.isEmpty(playerId)) {
+        if (!TextUtils.isEmpty(playerId)
+                && shouldUpdatePlayerProgressFields(normalizedStatus, retryCount, nextRetryAt)) {
             updatePlayerUpdateFields(playerId, statusText, progress01, errorMessage, retryCount, nextRetryAt);
         }
+    }
+
+    private boolean shouldUpdatePlayerProgressFields(String normalizedStatus, int retryCount, long nextRetryAt) {
+        if (TextUtils.isEmpty(normalizedStatus)) {
+            return false;
+        }
+
+        if (UpdateQueueContract.Status.QUEUED.equalsIgnoreCase(normalizedStatus)) {
+            return retryCount > 0 || nextRetryAt > 0;
+        }
+
+        return true;
     }
 
     private void ensureHeartbeatTable() {

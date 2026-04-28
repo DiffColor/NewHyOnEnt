@@ -927,7 +927,9 @@ namespace AndoW_Manager
 
             CurrentPlayingPageName.Text = statusText;
             CurrentPlayingPageName.Foreground = statusBrush;
-            double normalized = Math.Min(1.0, Math.Max(0.0, process));
+            double normalized = status == PlayerStatus.Updating
+                ? Math.Min(1.0, Math.Max(0.0, process))
+                : 0;
             UpdatingProgress.Width = this.ActualWidth * normalized;
 
             if (string.IsNullOrEmpty(hdmi_state))

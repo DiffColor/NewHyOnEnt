@@ -102,7 +102,11 @@ namespace AndoW_Manager
             }
 
             SelectUSBWindow usbw = new SelectUSBWindow(usblist, pageListName);
-            usbw.ShowDialog();
+            bool? exportResult = usbw.ShowDialog();
+            if (exportResult == true)
+            {
+                MessageTools.ShowMessageBox("USB 추출이 완료되었습니다.", "확인");
+            }
         }
 
         public void InitEventHandler()
