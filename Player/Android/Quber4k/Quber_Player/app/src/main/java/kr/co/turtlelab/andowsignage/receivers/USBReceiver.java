@@ -94,6 +94,14 @@ public class USBReceiver extends BroadcastReceiver {
             return;
         }
 
+        if (isManagerUsbPackagePath(searchRoots)) {
+            return;
+        }
+
+        if (isEmulatedStorageEvent(intent)) {
+            return;
+        }
+
         File mediaDir = findMediaDirectory(searchRoots);
         if(mediaDir != null)
         {
@@ -417,6 +425,35 @@ public class USBReceiver extends BroadcastReceiver {
             }
         }
         return null;
+    }
+
+    private boolean isManagerUsbPackagePath(List<File> searchRoots) {
+        if (searchRoots == null) {
+            return false;
+        }
+        for (File root : searchRoots) {
+            File current = root;
+            while (current != null) {
+                if (USB_DIRNAME.equalsIgnoreCase(current.getName())
+                        || new File(current, PLAYLIST_FILENAME).exists()) {
+                    return true;
+                }
+                current = current.getParentFile();
+            }
+        }
+        return false;
+    }
+
+    private boolean isEmulatedStorageEvent(Intent intent) {
+        if (intent == null || intent.getData() == null) {
+            return false;
+        }
+        String path = intent.getData().getPath();
+        return path != null
+                && (path.equals("/storage/emulated")
+                || path.startsWith("/storage/emulated/")
+                || path.equals("/sdcard")
+                || path.startsWith("/sdcard/"));
     }
 
     private File findMediaDirectory(File base) {
