@@ -853,58 +853,23 @@ public class RethinkDbClient {
     public String ensurePlayerGuid(String playerName) {
         String normalizedPlayerName = playerName == null ? "" : playerName.trim();
         String storedGuid = getStoredPlayerGuid();
-        String guid = storedGuid;
-        String storedPlayerName = getStoredPlayerName();
         if (TextUtils.isEmpty(normalizedPlayerName)) {
             guidVerified = !TextUtils.isEmpty(storedGuid);
             resetDeviceInfoSyncWhenGuidChanged(storedGuid);
             return storedGuid;
         }
-        boolean isStoredNameMismatched = !TextUtils.isEmpty(normalizedPlayerName)
-                && !TextUtils.isEmpty(storedPlayerName)
-                && !normalizedPlayerName.equalsIgnoreCase(storedPlayerName.trim());
-        if (isStoredNameMismatched) {
-            guid = null;
-            guidVerified = false;
+
+        RethinkModels.PlayerInfoRecord playerRecord = fetchPlayerInternal(normalizedPlayerName, false);
+        lastGuidVerificationEpochMs = System.currentTimeMillis();
+        if (playerRecord == null || TextUtils.isEmpty(playerRecord.getGuid())) {
+            guidVerified = !TextUtils.isEmpty(storedGuid);
+            resetDeviceInfoSyncWhenGuidChanged(storedGuid);
+            return storedGuid;
         }
 
-        RethinkModels.PlayerInfoRecord playerRecord = null;
-        long now = System.currentTimeMillis();
-        boolean shouldVerifyRemotely = isStoredNameMismatched
-                || TextUtils.isEmpty(guid)
-                || !guidVerified
-                || (now - lastGuidVerificationEpochMs) >= GUID_VERIFICATION_INTERVAL_MS;
-
-        if (shouldVerifyRemotely) {
-            playerRecord = fetchPlayerInternal(normalizedPlayerName, false);
-            if (playerRecord != null && !TextUtils.isEmpty(playerRecord.getGuid())) {
-                guid = playerRecord.getGuid();
-                guidVerified = true;
-            } else {
-                guid = null;
-                guidVerified = false;
-            }
-
-            lastGuidVerificationEpochMs = now;
-        }
-
-        if (TextUtils.isEmpty(guid)) {
-            resetDeviceInfoSyncWhenGuidChanged(null);
-            return null;
-        }
-
-        boolean shouldPersistSkeleton = isStoredNameMismatched
-                || TextUtils.isEmpty(storedGuid)
-                || !TextUtils.equals(storedGuid, guid)
-                || !TextUtils.equals(storedPlayerName, normalizedPlayerName);
-        if (!TextUtils.isEmpty(guid) && playerRecord == null && shouldPersistSkeleton) {
-            String playerNameToSave = !TextUtils.isEmpty(normalizedPlayerName)
-                    ? normalizedPlayerName
-                    : storedPlayerName;
-            saveRealmPlayerSkeleton(guid, playerNameToSave);
-        }
-
-        guidVerified = !TextUtils.isEmpty(guid);
+        String guid = playerRecord.getGuid();
+        saveRealmPlayerSkeleton(playerRecord);
+        guidVerified = true;
         resetDeviceInfoSyncWhenGuidChanged(guid);
         return guid;
     }
