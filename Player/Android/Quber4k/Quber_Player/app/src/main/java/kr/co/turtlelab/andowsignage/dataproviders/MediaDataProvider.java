@@ -52,13 +52,13 @@ public class MediaDataProvider {
                 return result;
             }
             for (StoredContent storedContent : target.getContents()) {
-                if (ContentPeriodEvaluator.hasPeriod(storeDb, storedContent.getGuid())) {
+                boolean hasPeriodConstraint = ContentPeriodEvaluator.hasPeriod(storeDb, storedContent.getGuid());
+                if (hasPeriodConstraint) {
                     result.hasContentPeriodConstraint = true;
                 }
-                if (!ContentPeriodEvaluator.isAllowed(storeDb, storedContent.getGuid(), System.currentTimeMillis())) {
-                    continue;
-                }
                 MediaDataModel mdm = new MediaDataModel();
+                mdm.setContentGuid(storedContent.getGuid());
+                mdm.setHasContentPeriodConstraint(hasPeriodConstraint);
                 if (storedContent.getFileFullPath() != null && !storedContent.getFileFullPath().isEmpty()) {
                     String path = storedContent.getFileFullPath();
                     File file = new File(path);
@@ -74,7 +74,9 @@ public class MediaDataProvider {
                 mdm.setValidState(String.valueOf(storedContent.isContentValid()));
                 mdm.setMuted(target.isMuted());
                 result.contentList.add(mdm);
-                result.visibleDurationSec += Math.max(1L, mdm.getPlayTimeSec());
+                if (ContentPeriodEvaluator.isAllowed(storeDb, storedContent.getGuid(), System.currentTimeMillis())) {
+                    result.visibleDurationSec += Math.max(1L, mdm.getPlayTimeSec());
+                }
             }
         } finally {
             storeDb.close();

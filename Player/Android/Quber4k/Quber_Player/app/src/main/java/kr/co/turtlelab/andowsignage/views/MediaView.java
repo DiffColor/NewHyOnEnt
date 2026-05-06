@@ -37,6 +37,7 @@ import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp.CONTENT_TYPE;
 import kr.co.turtlelab.andowsignage.datamodels.MediaDataModel;
+import kr.co.turtlelab.andowsignage.tools.ContentPeriodEvaluator;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 import kr.co.turtlelab.andowsignage.tools.SystemUtils;
 
@@ -143,6 +144,7 @@ public class MediaView extends RelativeLayout {
     private long lastContentBoundaryAtElapsedRealtimeMs = 0L;
     private long layoutContentClockBaseAtElapsedRealtimeMs = 0L;
     private boolean currentContentBlocksLayoutSwitch = false;
+    private int currentDisplayContentIndex = -1;
     private int contentRenderWidth;
     private int contentRenderHeight;
     private int nextAdvanceContentIndex = 0;
@@ -370,8 +372,20 @@ public class MediaView extends RelativeLayout {
         }
         final int configVersion = mediaConfigurationVersion;
 
-        int currentIndex = 0;
-        int nextIndex = cdmList.size() > 1 ? 1 : 0;
+        int currentIndex = findNextPlayableIndex(0);
+        if (currentIndex < 0) {
+            currentDisplayContentIndex = -1;
+            initialPrepared = true;
+            notifyPrepared();
+            return;
+        }
+        int nextIndex = findNextPlayableIndex(currentIndex + 1);
+        if (nextIndex < 0) {
+            nextIndex = currentIndex;
+        }
+        contentIdx = currentIndex;
+        currentDisplayContentIndex = currentIndex;
+        nextAdvanceContentIndex = nextIndex;
         MediaDataModel current = cdmList.get(currentIndex);
         MediaDataModel next = cdmList.get(nextIndex);
         preparedInitialType = safeContentType(current);
@@ -423,6 +437,11 @@ public class MediaView extends RelativeLayout {
             return;
         }
 
+        if (currentDisplayContentIndex < 0) {
+            notifyPlaybackReady();
+            return;
+        }
+
         if (preparedInitialType == CONTENT_TYPE.Video) {
             startPreparedVideoPlayback();
         } else {
@@ -434,17 +453,16 @@ public class MediaView extends RelativeLayout {
             });
         }
 
-        if (cdmList.size() == 1) {
-            contentIdx = 0;
-            nextAdvanceContentIndex = 0;
+        if (getPlayableContentCountNow() <= 1) {
+            contentIdx = currentDisplayContentIndex;
+            nextAdvanceContentIndex = currentDisplayContentIndex;
             if (preparedInitialType == CONTENT_TYPE.Video) {
                 videoView.setLoop(true);
             }
             return;
         }
 
-        contentIdx = 1;
-        nextAdvanceContentIndex = 1;
+        contentIdx = nextAdvanceContentIndex;
         waitingForPreparedAdvance = true;
         mLoopPlay = new LoopPlay();
         mLoopPlay.executeOnExecutor(loopExecutor);
@@ -458,6 +476,10 @@ public class MediaView extends RelativeLayout {
         preparedContentShown = true;
         tick = 0;
         manual = false;
+        if (currentDisplayContentIndex < 0) {
+            setVisibility(View.GONE);
+            return;
+        }
         s_isFirst = false;
         s_usedType = preparedInitialType;
 
@@ -490,6 +512,7 @@ public class MediaView extends RelativeLayout {
             pendingPreparationCallback = null;
             pendingPlaybackReadyCallback = null;
             playbackReadyNotified = false;
+            currentDisplayContentIndex = -1;
         }
     }
 
@@ -505,6 +528,7 @@ public class MediaView extends RelativeLayout {
             waitingForPreparedAdvance = false;
             pendingPlaybackReadyCallback = null;
             playbackReadyNotified = false;
+            currentDisplayContentIndex = -1;
         }
     }
 
@@ -531,6 +555,7 @@ public class MediaView extends RelativeLayout {
     }
 
     public void count() {
+        refreshForContentPeriodUpdate();
         if (currentContentStartedAtElapsedRealtimeMs <= 0L) {
             tick = 0L;
             return;
@@ -576,6 +601,174 @@ public class MediaView extends RelativeLayout {
 
     int contentIdx = 0;
 
+    public boolean hasPlayableContentNow() {
+        return findNextPlayableIndex(0) >= 0;
+    }
+
+    public int getPlayableContentCountNow() {
+        if (cdmList == null || cdmList.isEmpty()) {
+            return 0;
+        }
+        synchronized (cdmList) {
+            int count = 0;
+            for (MediaDataModel model : cdmList) {
+                if (isContentPlayableNow(model)) {
+                    count++;
+                }
+            }
+            return count;
+        }
+    }
+
+    public long getVisibleDurationSecNow() {
+        if (cdmList == null || cdmList.isEmpty()) {
+            return 0L;
+        }
+        synchronized (cdmList) {
+            long durationSec = 0L;
+            for (MediaDataModel model : cdmList) {
+                if (isContentPlayableNow(model)) {
+                    durationSec += Math.max(1L, model.getPlayTimeSec());
+                }
+            }
+            return durationSec;
+        }
+    }
+
+    public boolean hasContentPeriodConstraintNow() {
+        if (cdmList == null || cdmList.isEmpty()) {
+            return false;
+        }
+        synchronized (cdmList) {
+            for (MediaDataModel model : cdmList) {
+                if (model != null && model.hasContentPeriodConstraint()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public void refreshForContentPeriodUpdate() {
+        if (!hasConfiguredContents()) {
+            return;
+        }
+
+        int firstPlayableIndex = findNextPlayableIndex(0);
+        if (firstPlayableIndex < 0) {
+            suspendForNoPlayableContents();
+            return;
+        }
+
+        MediaDataModel currentModel = getCurrentDisplayContentModel();
+        if (currentDisplayContentIndex < 0) {
+            restartPlaybackFromIndex(firstPlayableIndex);
+            return;
+        }
+
+        if (!isContentPlayableNow(currentModel)) {
+            int nextPlayableIndex = findNextPlayableIndex(currentDisplayContentIndex + 1);
+            if (nextPlayableIndex < 0) {
+                nextPlayableIndex = firstPlayableIndex;
+            }
+            restartPlaybackFromIndex(nextPlayableIndex);
+            return;
+        }
+
+        int nextPlayableIndex = findNextPlayableIndex(currentDisplayContentIndex + 1);
+        nextAdvanceContentIndex = nextPlayableIndex >= 0 ? nextPlayableIndex : currentDisplayContentIndex;
+    }
+
+    private void restartPlaybackFromIndex(int startIndex) {
+        if (startIndex < 0) {
+            suspendForNoPlayableContents();
+            return;
+        }
+
+        stopPlaylist();
+        hideAllImageOverlays();
+        if (videoView != null) {
+            videoView.setVisibility(View.GONE);
+            resetViewPosition(videoView);
+        }
+        if (videoView2 != null) {
+            videoView2.setVisibility(View.GONE);
+            resetViewPosition(videoView2);
+        }
+        setVisibility(View.VISIBLE);
+
+        tick = 0L;
+        manual = false;
+        s_isFirst = true;
+        contentIdx = startIndex;
+        currentDisplayContentIndex = startIndex;
+        int nextPlayableIndex = findNextPlayableIndex(startIndex + 1);
+        nextAdvanceContentIndex = nextPlayableIndex >= 0 ? nextPlayableIndex : startIndex;
+
+        mLoopPlay = new LoopPlay();
+        mLoopPlay.executeOnExecutor(loopExecutor);
+    }
+
+    private void suspendForNoPlayableContents() {
+        stopPlaylist();
+        hideAllImageOverlays();
+        if (videoView != null) {
+            videoView.setVisibility(View.GONE);
+            resetViewPosition(videoView);
+        }
+        if (videoView2 != null) {
+            videoView2.setVisibility(View.GONE);
+            resetViewPosition(videoView2);
+        }
+        currentDisplayContentIndex = -1;
+        contentIdx = 0;
+        nextAdvanceContentIndex = 0;
+        setVisibility(View.GONE);
+    }
+
+    private MediaDataModel getCurrentDisplayContentModel() {
+        if (cdmList == null || cdmList.isEmpty()) {
+            return null;
+        }
+        synchronized (cdmList) {
+            if (currentDisplayContentIndex < 0 || currentDisplayContentIndex >= cdmList.size()) {
+                return null;
+            }
+            return cdmList.get(currentDisplayContentIndex);
+        }
+    }
+
+    private int findNextPlayableIndex(int startIndex) {
+        if (cdmList == null || cdmList.isEmpty()) {
+            return -1;
+        }
+        synchronized (cdmList) {
+            int count = cdmList.size();
+            if (count == 0) {
+                return -1;
+            }
+            int safeStartIndex = startIndex < 0 ? 0 : startIndex % count;
+            for (int offset = 0; offset < count; offset++) {
+                int candidateIndex = (safeStartIndex + offset) % count;
+                if (isContentPlayableNow(cdmList.get(candidateIndex))) {
+                    return candidateIndex;
+                }
+            }
+            return -1;
+        }
+    }
+
+    private boolean isContentPlayableNow(MediaDataModel model) {
+        if (model == null) {
+            return false;
+        }
+        String guid = model.getContentGuid();
+        if (TextUtils.isEmpty(guid)) {
+            return true;
+        }
+        return ContentPeriodEvaluator.isAllowedNow(guid);
+    }
+
     class LoopPlay extends AsyncTask<Void, String, Void> {
 
         CONTENT_TYPE usedType = s_usedType;
@@ -598,13 +791,25 @@ public class MediaView extends RelativeLayout {
                     if (cdmList.size() >= 1) {
                         AndoWSignage.act.stopTick();
 
-                        if (contentIdx >= cdmList.size())
-                            contentIdx = 0;
+                        int resolvedIndex = findNextPlayableIndex(contentIdx);
+                        if (resolvedIndex < 0) {
+                            SystemUtils.runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    suspendForNoPlayableContents();
+                                }
+                            });
+                            return null;
+                        }
 
-                        if (contentIdx >= cdmList.size() - 1)
-                            j = 0;
-                        else
-                            j = contentIdx + 1;
+                        contentIdx = resolvedIndex;
+                        currentDisplayContentIndex = resolvedIndex;
+
+                        int nextPlayableIndex = findNextPlayableIndex(contentIdx + 1);
+                        if (nextPlayableIndex < 0) {
+                            nextPlayableIndex = contentIdx;
+                        }
+                        j = nextPlayableIndex;
 
                         if (isCancelled()) {
                             break;
@@ -656,7 +861,7 @@ public class MediaView extends RelativeLayout {
                 }
 
                 synchronized (cdmList) {
-                    contentIdx++;
+                    contentIdx = nextAdvanceContentIndex >= 0 ? nextAdvanceContentIndex : contentIdx;
                 }
             }
 

@@ -22,6 +22,15 @@ public final class ContentPeriodEvaluator {
                 .findFirst() != null;
     }
 
+    public static boolean isAllowedNow(String contentGuid) {
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        try {
+            return isAllowed(storeDb, contentGuid, System.currentTimeMillis());
+        } finally {
+            storeDb.close();
+        }
+    }
+
     public static boolean isAllowed(ObjectBoxDb storeDb, String contentGuid, long nowMillis) {
         if (storeDb == null || TextUtils.isEmpty(contentGuid)) {
             return true;

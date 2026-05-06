@@ -52,13 +52,13 @@ public class MediaDataProvider {
                 return result;
             }
             for (RealmContent realmContent : target.getContents()) {
-                if (ContentPeriodEvaluator.hasPeriod(realm, realmContent.getGuid())) {
+                boolean hasPeriodConstraint = ContentPeriodEvaluator.hasPeriod(realm, realmContent.getGuid());
+                if (hasPeriodConstraint) {
                     result.hasContentPeriodConstraint = true;
                 }
-                if (!ContentPeriodEvaluator.isAllowed(realm, realmContent.getGuid(), System.currentTimeMillis())) {
-                    continue;
-                }
                 MediaDataModel mdm = new MediaDataModel();
+                mdm.setContentGuid(realmContent.getGuid());
+                mdm.setHasContentPeriodConstraint(hasPeriodConstraint);
                 if (realmContent.getFileFullPath() != null && !realmContent.getFileFullPath().isEmpty()) {
                     String path = realmContent.getFileFullPath();
                     File file = new File(path);
@@ -74,7 +74,9 @@ public class MediaDataProvider {
                 mdm.setValidState(String.valueOf(realmContent.isContentValid()));
                 mdm.setMuted(target.isMuted());
                 result.contentList.add(mdm);
-                result.visibleDurationSec += Math.max(1L, mdm.getPlayTimeSec());
+                if (ContentPeriodEvaluator.isAllowed(realm, realmContent.getGuid(), System.currentTimeMillis())) {
+                    result.visibleDurationSec += Math.max(1L, mdm.getPlayTimeSec());
+                }
             }
         } finally {
             realm.close();

@@ -177,12 +177,38 @@ public class PlaybackSlotView extends RelativeLayout {
         return mediaActive && mediaView.hasConfiguredContents();
     }
 
-    public boolean shouldDelayLayoutTransition() {
-        return isMediaSlot() && mediaView.shouldDelayLayoutTransition();
-    }
-
     public int getConfiguredContentCount() {
         return isMediaSlot() ? mediaView.getConfiguredContentCount() : 0;
+    }
+
+    public int getPlayableContentCountNow() {
+        return mediaActive ? mediaView.getPlayableContentCountNow() : 0;
+    }
+
+    public long getVisibleDurationSecNow() {
+        return mediaActive ? mediaView.getVisibleDurationSecNow() : 0L;
+    }
+
+    public boolean hasContentPeriodConstraintNow() {
+        return mediaActive && mediaView.hasContentPeriodConstraintNow();
+    }
+
+    public void refreshForContentPeriodUpdate() {
+        if (!mediaActive) {
+            return;
+        }
+        mediaView.refreshForContentPeriodUpdate();
+        if (mediaView.hasPlayableContentNow()) {
+            mediaView.setVisibility(VISIBLE);
+            setVisibility(VISIBLE);
+        } else {
+            mediaView.setVisibility(GONE);
+            setVisibility(INVISIBLE);
+        }
+    }
+
+    public boolean shouldDelayLayoutTransition() {
+        return isMediaSlot() && mediaView.shouldDelayLayoutTransition();
     }
 
     public boolean isPlaybackActiveForHeartbeat() {

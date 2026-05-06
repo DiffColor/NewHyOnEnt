@@ -13,11 +13,13 @@ public class MediaDataModel {
 	String fileName;
 	String filePath;
 	String remoteSubPath;
+	String contentGuid;
 	//Uri fileUri;
 	String type;
 	long playTime;
 	boolean isValid;
 	boolean isMuted = true;
+	boolean hasContentPeriodConstraint = false;
 	
 	/*
 	 * Setter Methods
@@ -57,6 +59,10 @@ public class MediaDataModel {
 		remoteSubPath = rsubpath;
 	}
 
+	public void setContentGuid(String guid) {
+		contentGuid = guid;
+	}
+
 	public void setType(String type) {
 		this.type = type;
 	}
@@ -77,6 +83,10 @@ public class MediaDataModel {
 	public void setMuted(boolean muted) {
 		isMuted = muted;
 	}
+
+	public void setHasContentPeriodConstraint(boolean hasConstraint) {
+		hasContentPeriodConstraint = hasConstraint;
+	}
 	
 	/*
 	 * Getter Methods
@@ -94,6 +104,10 @@ public class MediaDataModel {
 	
 	public String getRemoteSubPath() {
 		return remoteSubPath;
+	}
+
+	public String getContentGuid() {
+		return contentGuid;
 	}
 	
 //	public Uri getFileUri() {
@@ -114,6 +128,10 @@ public class MediaDataModel {
 
 	public boolean isMuted() {
 		return isMuted;
+	}
+
+	public boolean hasContentPeriodConstraint() {
+		return hasContentPeriodConstraint;
 	}
 
 }

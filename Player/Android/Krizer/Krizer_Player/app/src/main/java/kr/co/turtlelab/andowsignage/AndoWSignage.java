@@ -192,6 +192,7 @@ public class AndoWSignage extends Activity {
 		String pageName = "";
 		String runtimeName = "";
 		PageDataModel pageData;
+		long baseDurationSec = 1L;
 		RelativeLayout container;
 		PageBuildSpec buildSpec;
 		List<ElementDataModel> elements = new ArrayList<>();
@@ -219,6 +220,7 @@ public class AndoWSignage extends Activity {
 		String playlistName = "";
 		String pageName = "";
 		PageDataModel pageData;
+		long baseDurationSec = 1L;
 		List<ElementDataModel> elements = new ArrayList<>();
 		List<ElementBuildSpec> elementSpecs = new ArrayList<>();
 
@@ -1306,6 +1308,7 @@ public class AndoWSignage extends Activity {
 		runtime.runtimeName = String.valueOf(container.getTag());
 		runtime.container = container;
 		runtime.pageData = copyPageData(spec.pageData);
+		runtime.baseDurationSec = Math.max(1L, spec.baseDurationSec);
 		runtime.playlistName = spec.playlistName;
 		runtime.pageName = runtime.pageData.getPageName();
 		runtime.buildSpec = spec;
@@ -1373,6 +1376,7 @@ public class AndoWSignage extends Activity {
 		spec.playlistName = target.playlistName;
 		spec.pageData = copyPageData(target.pageData);
 		spec.pageName = spec.pageData.getPageName();
+		spec.baseDurationSec = Math.max(1L, spec.pageData.getPlayTimeSec());
 		spec.elements = ElementDataProvider.getPageElementList(spec.pageData.getGUID());
 		updateLayoutScales(spec.elements, spec.pageData);
 		for (ElementDataModel edm : spec.elements) {
@@ -2675,11 +2679,18 @@ public class AndoWSignage extends Activity {
 
 	public void requestContentPeriodRefresh() {
 		SystemUtils.runOnUiThread(() -> {
-			if (!shouldForceContentPeriodRefreshNow()) {
+			if (activePageRuntime == null) {
+				contentPeriodRefreshPending = true;
+				popPage();
 				return;
 			}
-			contentPeriodRefreshPending = true;
-			popPage();
+			refreshRuntimeForContentPeriodUpdate(activePageRuntime, true);
+			if (stagedPageRuntime != null) {
+				refreshRuntimeForContentPeriodUpdate(stagedPageRuntime, false);
+			}
+			if (specialPageRuntime != null) {
+				refreshRuntimeForContentPeriodUpdate(specialPageRuntime, false);
+			}
 		});
 	}
 
@@ -2691,6 +2702,41 @@ public class AndoWSignage extends Activity {
 			return true;
 		}
 		return countRuntimeConfiguredContents(activePageRuntime) <= 1;
+	}
+
+	private void refreshRuntimeForContentPeriodUpdate(PageRuntime runtime, boolean activeRuntime) {
+		if (runtime == null || runtime.slots == null || runtime.slots.isEmpty()) {
+			return;
+		}
+
+		for (PlaybackSlotView slotView : runtime.slots) {
+			if (slotView != null) {
+				slotView.refreshForContentPeriodUpdate();
+			}
+		}
+
+		long durationSec = runtime.baseDurationSec;
+		boolean hasContentPeriodConstraint = false;
+		long visibleDurationSec = 0L;
+		for (PlaybackSlotView slotView : runtime.slots) {
+			if (slotView == null) {
+				continue;
+			}
+			if (slotView.hasContentPeriodConstraintNow()) {
+				hasContentPeriodConstraint = true;
+			}
+			if (visibleDurationSec < slotView.getVisibleDurationSecNow()) {
+				visibleDurationSec = slotView.getVisibleDurationSecNow();
+			}
+		}
+
+		if (hasContentPeriodConstraint) {
+			durationSec = Math.max(1L, visibleDurationSec);
+		}
+		setPagePlayTimeSeconds(runtime.pageData, durationSec);
+		if (activeRuntime) {
+			configurePageTimers(runtime.pageData);
+		}
 	}
 
 	private int countRuntimeConfiguredContents(PageRuntime runtime) {

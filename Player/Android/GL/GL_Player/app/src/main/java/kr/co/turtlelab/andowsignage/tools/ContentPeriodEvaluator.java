@@ -22,6 +22,15 @@ public final class ContentPeriodEvaluator {
                 .findFirst() != null;
     }
 
+    public static boolean isAllowedNow(String contentGuid) {
+        Realm realm = Realm.getDefaultInstance();
+        try {
+            return isAllowed(realm, contentGuid, System.currentTimeMillis());
+        } finally {
+            realm.close();
+        }
+    }
+
     public static boolean isAllowed(Realm realm, String contentGuid, long nowMillis) {
         if (realm == null || TextUtils.isEmpty(contentGuid)) {
             return true;
