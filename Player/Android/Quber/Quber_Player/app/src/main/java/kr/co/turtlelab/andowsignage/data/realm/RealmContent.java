@@ -8,6 +8,7 @@ public class RealmContent extends RealmObject {
     @PrimaryKey
     private String uid;
     private String elementId;
+    private String guid;
     private String fileName;
     private String fileFullPath;
     private String contentType;
@@ -31,6 +32,14 @@ public class RealmContent extends RealmObject {
 
     public void setElementId(String elementId) {
         this.elementId = elementId;
+    }
+
+    public String getGuid() {
+        return guid;
+    }
+
+    public void setGuid(String guid) {
+        this.guid = guid;
     }
 
     public String getFileName() {

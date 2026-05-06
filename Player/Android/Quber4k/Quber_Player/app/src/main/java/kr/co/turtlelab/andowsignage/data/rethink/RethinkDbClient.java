@@ -56,6 +56,7 @@ public class RethinkDbClient {
     private static final String TABLE_TEXT_INFO = "TextInfoManager";
     private static final String TABLE_WEEKLY = "WeeklyInfoManagerClass";
     private static final String TABLE_SPECIAL_SCHEDULE = "SpecialScheduleInfoManager";
+    private static final String TABLE_PERIOD = "ContentPeriodManager";
     private static final String TABLE_HEARTBEAT = "ClientHeartbeat";
     private static final String TABLE_UPDATE_QUEUE = "UpdateQueue";
     private static final String TABLE_COMMAND_HISTORY = "CommandHistory";
@@ -390,6 +391,25 @@ public class RethinkDbClient {
             return null;
         }
         return convert(map, RethinkModels.WeeklyScheduleRecord.class);
+    }
+
+    public List<RethinkModels.ContentPeriodRecord> fetchContentPeriods(List<String> contentGuids) {
+        List<RethinkModels.ContentPeriodRecord> result = new ArrayList<>();
+        if (contentGuids == null || contentGuids.isEmpty()) {
+            return result;
+        }
+
+        ReqlExpr query = R.db(DATABASE)
+                .table(TABLE_PERIOD)
+                .filter(row -> R.expr(contentGuids).contains(row.g("ContentGuid")));
+        List<Map> rows = runList(query);
+        for (Map row : rows) {
+            RethinkModels.ContentPeriodRecord record = convert(row, RethinkModels.ContentPeriodRecord.class);
+            if (record != null) {
+                result.add(record);
+            }
+        }
+        return result;
     }
 
     public RethinkModels.ServerSettingsRecord fetchServerSettings() {

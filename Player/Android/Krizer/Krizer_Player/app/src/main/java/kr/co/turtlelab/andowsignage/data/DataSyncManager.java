@@ -25,6 +25,7 @@ import io.realm.RealmList;
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.realm.RealmContent;
+import kr.co.turtlelab.andowsignage.data.realm.RealmContentPeriod;
 import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPlayer;
@@ -92,6 +93,7 @@ public class DataSyncManager {
         }
         List<RethinkModels.PageInfoRecord> pages = rethinkClient.fetchPagesByIds(pageList.getPages());
         writeToRealm(player, pageList, pages);
+        syncAllKnownContentPeriods(false);
         rethinkClient.clearCommand(player.getGuid());
         return true;
     }
@@ -405,6 +407,7 @@ public class DataSyncManager {
                                         realmContent.setPlaySecond(contentRecord.getPlaySecond());
                                         realmContent.setValid(contentRecord.isValidTime());
                                         realmContent.setFileExist(contentRecord.isFileExist());
+                                        realmContent.setGuid(contentRecord.getGuid());
                                 realmContent.setScrollSpeedSec(contentRecord.getScrollSpeedSec());
                                 contents.add(realmContent);
                             }
@@ -1040,6 +1043,7 @@ public class DataSyncManager {
                     } else {
                         playerGUID = payload.playerId;
                         writePlaylistPayload(payload, downloads, !isScheduleQueue);
+                        syncAllKnownContentPeriods(false);
                         if (!isScheduleQueue && !TextUtils.isEmpty(payload.playerId)) {
                             clearCommandAsync(payload.playerId);
                         }
@@ -1276,11 +1280,12 @@ public class DataSyncManager {
                         String absolutePath = toLocalAbsolutePath(relativePath);
                         realmContent.setFileFullPath(absolutePath);
                         usedContentPaths.add(new File(absolutePath).getAbsolutePath());
-                        realmContent.setContentType(content.contentType);
-                        realmContent.setPlayMinute(content.playMinute);
-                        realmContent.setPlaySecond(content.playSecond);
+                                realmContent.setContentType(content.contentType);
+                                realmContent.setPlayMinute(content.playMinute);
+                                realmContent.setPlaySecond(content.playSecond);
                                 realmContent.setValid(content.valid);
                                 realmContent.setFileExist(content.fileExist);
+                                realmContent.setGuid(content.contentGuid);
                                 realmContent.setScrollSpeedSec(content.scrollSpeedSec);
                                 contents.add(realmContent);
                             }
@@ -1294,6 +1299,98 @@ public class DataSyncManager {
         });
         realm.close();
         cleanupUnusedContents(usedContentPaths);
+    }
+
+    private void requestContentPeriodRefresh() {
+        SystemUtils.runOnUiThread(() -> {
+            if (AndoWSignage.act != null) {
+                AndoWSignage.act.requestContentPeriodRefresh();
+            }
+        });
+    }
+
+    public void syncAllKnownContentPeriods(boolean requestUiRefresh) {
+        syncContentPeriodsByGuid(collectStoredContentGuids(), requestUiRefresh);
+    }
+
+    public void syncContentPeriodsByGuid(List<String> contentGuids, boolean requestUiRefresh) {
+        if (contentGuids == null || contentGuids.isEmpty()) {
+            return;
+        }
+
+        List<String> requested = new ArrayList<>();
+        for (String guid : contentGuids) {
+            if (TextUtils.isEmpty(guid) || requested.contains(guid)) {
+                continue;
+            }
+            requested.add(guid);
+        }
+        if (requested.isEmpty()) {
+            return;
+        }
+
+        List<RethinkModels.ContentPeriodRecord> periods = rethinkClient.fetchContentPeriods(requested);
+        storeContentPeriods(requested, periods);
+        if (requestUiRefresh) {
+            requestContentPeriodRefresh();
+        }
+    }
+
+    private List<String> collectStoredContentGuids() {
+        List<String> result = new ArrayList<>();
+        Realm realm = Realm.getDefaultInstance();
+        try {
+            List<RealmContent> contents = realm.copyFromRealm(realm.where(RealmContent.class).findAll());
+            for (RealmContent content : contents) {
+                if (content == null || TextUtils.isEmpty(content.getGuid()) || result.contains(content.getGuid())) {
+                    continue;
+                }
+                result.add(content.getGuid());
+            }
+        } finally {
+            realm.close();
+        }
+        return result;
+    }
+
+    private void storeContentPeriods(List<String> requestedIds, List<RethinkModels.ContentPeriodRecord> periods) {
+        Realm realm = Realm.getDefaultInstance();
+        try {
+            realm.executeTransaction(r -> {
+                for (String contentGuid : requestedIds) {
+                    RealmContentPeriod existing = r.where(RealmContentPeriod.class)
+                            .equalTo("contentGuid", contentGuid)
+                            .findFirst();
+                    RethinkModels.ContentPeriodRecord matched = null;
+                    if (periods != null) {
+                        for (RethinkModels.ContentPeriodRecord period : periods) {
+                            if (period != null && contentGuid.equalsIgnoreCase(period.getContentGuid())) {
+                                matched = period;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (matched == null) {
+                        if (existing != null) {
+                            existing.deleteFromRealm();
+                        }
+                        continue;
+                    }
+
+                    if (existing == null) {
+                        existing = r.createObject(RealmContentPeriod.class, contentGuid);
+                    }
+                    existing.setFileName(matched.getFileName());
+                    existing.setStartDate(matched.getStartDate());
+                    existing.setEndDate(matched.getEndDate());
+                    existing.setStartTime(matched.getStartTime());
+                    existing.setEndTime(matched.getEndTime());
+                }
+            });
+        } finally {
+            realm.close();
+        }
     }
 
     private void cleanupUnusedContents(Set<String> usedPaths) {

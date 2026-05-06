@@ -12,16 +12,18 @@ namespace NewHyOnPlayer.PlaybackModes
     {
         Index,
         IndexWithPosition,
-        Request
+        Request,
+        PresentationState
     }
 
     internal sealed class SeamlessSyncMessage
     {
-        public SeamlessSyncMessage(SeamlessSyncMessageType type, int playlistIndex, TimeSpan position, IPEndPoint remoteEndPoint, string raw)
+        public SeamlessSyncMessage(SeamlessSyncMessageType type, int playlistIndex, TimeSpan position, bool isVisible, IPEndPoint remoteEndPoint, string raw)
         {
             Type = type;
             PlaylistIndex = playlistIndex;
             Position = position;
+            IsVisible = isVisible;
             RemoteEndPoint = remoteEndPoint;
             Raw = raw;
         }
@@ -29,6 +31,7 @@ namespace NewHyOnPlayer.PlaybackModes
         public SeamlessSyncMessageType Type { get; }
         public int PlaylistIndex { get; }
         public TimeSpan Position { get; }
+        public bool IsVisible { get; }
         public IPEndPoint RemoteEndPoint { get; }
         public string Raw { get; }
     }
@@ -39,9 +42,11 @@ namespace NewHyOnPlayer.PlaybackModes
         private const byte BinaryIndexMessageType = (byte)'I';
         private const byte BinaryIndexWithPositionMessageType = (byte)'P';
         private const byte BinaryRequestMessageType = (byte)'R';
+        private const byte BinaryPresentationStateMessageType = (byte)'S';
         private const int BinaryIndexMessageLength = 6;
         private const int BinaryIndexWithPositionMessageLength = 14;
         private const int BinaryRequestMessageLength = 2;
+        private const int BinaryPresentationStateMessageLength = 15;
         private static readonly Encoding MessageEncoding = new UTF8Encoding(false);
         private static readonly byte[] EmptyPayload = Array.Empty<byte>();
 
@@ -193,6 +198,23 @@ namespace NewHyOnPlayer.PlaybackModes
             SendPayload(payload, BuildDirectedBroadcastTargets());
         }
 
+        public void SendPresentationState(IEnumerable<IPEndPoint> targets, bool isVisible, int playlistIndex, TimeSpan position)
+        {
+            if (targets == null)
+            {
+                return;
+            }
+
+            long safePositionMilliseconds = Math.Max(0L, (long)position.TotalMilliseconds);
+            byte[] payload = new byte[BinaryPresentationStateMessageLength];
+            payload[0] = BinaryMessagePrefix;
+            payload[1] = BinaryPresentationStateMessageType;
+            payload[2] = isVisible ? (byte)1 : (byte)0;
+            Buffer.BlockCopy(BitConverter.GetBytes(playlistIndex), 0, payload, 3, sizeof(int));
+            Buffer.BlockCopy(BitConverter.GetBytes(safePositionMilliseconds), 0, payload, 7, sizeof(long));
+            SendPayload(payload, targets);
+        }
+
         public void Dispose()
         {
             Stop();
@@ -320,6 +342,7 @@ namespace NewHyOnPlayer.PlaybackModes
                     SeamlessSyncMessageType.Index,
                     Math.Max(0, playlistIndex),
                     TimeSpan.Zero,
+                    true,
                     remote,
                     string.Empty);
                 return true;
@@ -335,6 +358,7 @@ namespace NewHyOnPlayer.PlaybackModes
                     SeamlessSyncMessageType.IndexWithPosition,
                     Math.Max(0, playlistIndex),
                     TimeSpan.FromMilliseconds(Math.Max(0L, positionMilliseconds)),
+                    true,
                     remote,
                     string.Empty);
                 return true;
@@ -348,6 +372,24 @@ namespace NewHyOnPlayer.PlaybackModes
                     SeamlessSyncMessageType.Request,
                     -1,
                     TimeSpan.Zero,
+                    false,
+                    remote,
+                    string.Empty);
+                return true;
+            }
+
+            if (length >= BinaryPresentationStateMessageLength
+                && payload[0] == BinaryMessagePrefix
+                && payload[1] == BinaryPresentationStateMessageType)
+            {
+                bool isVisible = payload[2] != 0;
+                int playlistIndex = BitConverter.ToInt32(payload, 3);
+                long positionMilliseconds = BitConverter.ToInt64(payload, 7);
+                parsed = new SeamlessSyncMessage(
+                    SeamlessSyncMessageType.PresentationState,
+                    playlistIndex,
+                    TimeSpan.FromMilliseconds(Math.Max(0L, positionMilliseconds)),
+                    isVisible,
                     remote,
                     string.Empty);
                 return true;
@@ -368,7 +410,7 @@ namespace NewHyOnPlayer.PlaybackModes
             string typeToken = parts[0].Trim();
             if (string.Equals(typeToken, "R", StringComparison.OrdinalIgnoreCase))
             {
-                parsed = new SeamlessSyncMessage(SeamlessSyncMessageType.Request, -1, TimeSpan.Zero, remote, message);
+                parsed = new SeamlessSyncMessage(SeamlessSyncMessageType.Request, -1, TimeSpan.Zero, false, remote, message);
                 return true;
             }
 
@@ -391,6 +433,35 @@ namespace NewHyOnPlayer.PlaybackModes
                     SeamlessSyncMessageType.IndexWithPosition,
                     Math.Max(0, parsedPositionPlaylistIndex),
                     TimeSpan.FromMilliseconds(Math.Max(0L, parsedPositionMilliseconds)),
+                    true,
+                    remote,
+                    message);
+                return true;
+            }
+
+            if (string.Equals(typeToken, "S", StringComparison.OrdinalIgnoreCase))
+            {
+                if (parts.Length < 4)
+                {
+                    return false;
+                }
+
+                string visibleToken = parts[1].Trim();
+                string stateIndexToken = parts[2].Trim();
+                string statePositionToken = parts[3].Trim();
+                bool isVisible = string.Equals(visibleToken, "1", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(visibleToken, "true", StringComparison.OrdinalIgnoreCase);
+                if (!int.TryParse(stateIndexToken, out int parsedStateIndex)
+                    || !long.TryParse(statePositionToken, out long parsedStateMilliseconds))
+                {
+                    return false;
+                }
+
+                parsed = new SeamlessSyncMessage(
+                    SeamlessSyncMessageType.PresentationState,
+                    parsedStateIndex,
+                    TimeSpan.FromMilliseconds(Math.Max(0L, parsedStateMilliseconds)),
+                    isVisible,
                     remote,
                     message);
                 return true;
@@ -407,7 +478,7 @@ namespace NewHyOnPlayer.PlaybackModes
                 return false;
             }
 
-            parsed = new SeamlessSyncMessage(SeamlessSyncMessageType.Index, parsedPlaylistIndex, TimeSpan.Zero, remote, message);
+            parsed = new SeamlessSyncMessage(SeamlessSyncMessageType.Index, parsedPlaylistIndex, TimeSpan.Zero, true, remote, message);
             return true;
         }
     }

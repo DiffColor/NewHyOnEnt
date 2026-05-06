@@ -19,6 +19,7 @@ public final class UpdatePayloadModels {
         public List<PageInfoClass> Pages;
         public ContractPlaylistPayload Contract;
         public ScheduleUpdatePayload Schedule;
+        public List<String> ContentPeriodUpdateGuids = new ArrayList<>();
     }
 
     public static final class ScheduleUpdatePayload {

@@ -287,6 +287,45 @@ public final class RethinkModels {
         }
     }
 
+    public static class ContentPeriodRecord {
+        @SerializedName("ContentGuid")
+        private String contentGuid;
+        @SerializedName("FileName")
+        private String fileName;
+        @SerializedName("StartDate")
+        private String startDate;
+        @SerializedName("EndDate")
+        private String endDate;
+        @SerializedName("StartTime")
+        private String startTime;
+        @SerializedName("EndTime")
+        private String endTime;
+
+        public String getContentGuid() {
+            return contentGuid;
+        }
+
+        public String getFileName() {
+            return fileName;
+        }
+
+        public String getStartDate() {
+            return startDate;
+        }
+
+        public String getEndDate() {
+            return endDate;
+        }
+
+        public String getStartTime() {
+            return startTime;
+        }
+
+        public String getEndTime() {
+            return endTime;
+        }
+    }
+
     public static class TextInfoRecord {
         @SerializedName("CIF_PageName")
         private String pageName;
@@ -356,6 +395,136 @@ public final class RethinkModels {
 
         public String getFtpRootPath() {
             return ftpRootPath;
+        }
+    }
+
+
+    public static class SpecialScheduleRecord {
+        @SerializedName("id")
+        private String id;
+        @SerializedName("PlayerNames")
+        private List<String> playerNames = new ArrayList<>();
+        @SerializedName("PageListName")
+        private String pageListName;
+        @SerializedName("DayOfWeek1")
+        private boolean dayOfWeek1;
+        @SerializedName("DayOfWeek2")
+        private boolean dayOfWeek2;
+        @SerializedName("DayOfWeek3")
+        private boolean dayOfWeek3;
+        @SerializedName("DayOfWeek4")
+        private boolean dayOfWeek4;
+        @SerializedName("DayOfWeek5")
+        private boolean dayOfWeek5;
+        @SerializedName("DayOfWeek6")
+        private boolean dayOfWeek6;
+        @SerializedName("DayOfWeek7")
+        private boolean dayOfWeek7;
+        @SerializedName("IsPeriodEnable")
+        private boolean periodEnable;
+        @SerializedName("DisplayStartH")
+        private int displayStartH;
+        @SerializedName("DisplayStartM")
+        private int displayStartM;
+        @SerializedName("DisplayEndH")
+        private int displayEndH;
+        @SerializedName("DisplayEndM")
+        private int displayEndM;
+        @SerializedName("PeriodStartYear")
+        private int periodStartYear;
+        @SerializedName("PeriodStartMonth")
+        private int periodStartMonth;
+        @SerializedName("PeriodStartDay")
+        private int periodStartDay;
+        @SerializedName("PeriodEndYear")
+        private int periodEndYear;
+        @SerializedName("PeriodEndMonth")
+        private int periodEndMonth;
+        @SerializedName("PeriodEndDay")
+        private int periodEndDay;
+
+        public String getId() {
+            return id;
+        }
+
+        public List<String> getPlayerNames() {
+            return playerNames;
+        }
+
+        public String getPageListName() {
+            return pageListName;
+        }
+
+        public boolean isDayOfWeek1() {
+            return dayOfWeek1;
+        }
+
+        public boolean isDayOfWeek2() {
+            return dayOfWeek2;
+        }
+
+        public boolean isDayOfWeek3() {
+            return dayOfWeek3;
+        }
+
+        public boolean isDayOfWeek4() {
+            return dayOfWeek4;
+        }
+
+        public boolean isDayOfWeek5() {
+            return dayOfWeek5;
+        }
+
+        public boolean isDayOfWeek6() {
+            return dayOfWeek6;
+        }
+
+        public boolean isDayOfWeek7() {
+            return dayOfWeek7;
+        }
+
+        public boolean isPeriodEnable() {
+            return periodEnable;
+        }
+
+        public int getDisplayStartH() {
+            return displayStartH;
+        }
+
+        public int getDisplayStartM() {
+            return displayStartM;
+        }
+
+        public int getDisplayEndH() {
+            return displayEndH;
+        }
+
+        public int getDisplayEndM() {
+            return displayEndM;
+        }
+
+        public int getPeriodStartYear() {
+            return periodStartYear;
+        }
+
+        public int getPeriodStartMonth() {
+            return periodStartMonth;
+        }
+
+        public int getPeriodStartDay() {
+            return periodStartDay;
+        }
+
+        public int getPeriodEndYear() {
+            return periodEndYear;
+        }
+
+        public int getPeriodEndMonth() {
+            return periodEndMonth;
+        }
+
+        public int getPeriodEndDay() {
+            return periodEndDay;
         }
     }
 

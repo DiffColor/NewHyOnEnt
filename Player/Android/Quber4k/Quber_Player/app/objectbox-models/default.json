@@ -5,7 +5,7 @@
   "entities": [
     {
       "id": "1:5155209631937005484",
-      "lastPropertyId": "11:7691171582117675004",
+      "lastPropertyId": "12:7257616867910794018",
       "name": "StoredContent",
       "properties": [
         {
@@ -65,6 +65,11 @@
           "id": "11:7691171582117675004",
           "name": "scrollSpeedSec",
           "type": 5
+        },
+        {
+          "id": "12:7257616867910794018",
+          "name": "guid",
+          "type": 9
         }
       ],
       "relations": []
@@ -721,10 +726,56 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "10:8543233096211858179",
+      "lastPropertyId": "7:8696137600536738030",
+      "name": "StoredContentPeriod",
+      "properties": [
+        {
+          "id": "1:2591862963730490632",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7210061916529013756",
+          "name": "contentGuid",
+          "indexId": "10:7955498993934767878",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:7041708341824775100",
+          "name": "fileName",
+          "type": 9
+        },
+        {
+          "id": "4:6438391377046669945",
+          "name": "startDate",
+          "type": 9
+        },
+        {
+          "id": "5:5986367016065400322",
+          "name": "endDate",
+          "type": 9
+        },
+        {
+          "id": "6:2018264902389594782",
+          "name": "startTime",
+          "type": 9
+        },
+        {
+          "id": "7:8696137600536738030",
+          "name": "endTime",
+          "type": 9
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "9:1847596208877636982",
-  "lastIndexId": "9:4742159180448037014",
+  "lastEntityId": "10:8543233096211858179",
+  "lastIndexId": "10:7955498993934767878",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

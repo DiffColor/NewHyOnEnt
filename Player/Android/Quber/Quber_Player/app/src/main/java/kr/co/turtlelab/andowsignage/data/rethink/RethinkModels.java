@@ -287,6 +287,45 @@ public final class RethinkModels {
         }
     }
 
+    public static class ContentPeriodRecord {
+        @SerializedName("ContentGuid")
+        private String contentGuid;
+        @SerializedName("FileName")
+        private String fileName;
+        @SerializedName("StartDate")
+        private String startDate;
+        @SerializedName("EndDate")
+        private String endDate;
+        @SerializedName("StartTime")
+        private String startTime;
+        @SerializedName("EndTime")
+        private String endTime;
+
+        public String getContentGuid() {
+            return contentGuid;
+        }
+
+        public String getFileName() {
+            return fileName;
+        }
+
+        public String getStartDate() {
+            return startDate;
+        }
+
+        public String getEndDate() {
+            return endDate;
+        }
+
+        public String getStartTime() {
+            return startTime;
+        }
+
+        public String getEndTime() {
+            return endTime;
+        }
+    }
+
     public static class TextInfoRecord {
         @SerializedName("CIF_PageName")
         private String pageName;

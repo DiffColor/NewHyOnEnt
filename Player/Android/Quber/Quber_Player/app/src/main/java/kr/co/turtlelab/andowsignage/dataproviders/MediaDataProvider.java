@@ -9,17 +9,28 @@ import kr.co.turtlelab.andowsignage.data.realm.RealmContent;
 import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
 import kr.co.turtlelab.andowsignage.datamodels.MediaDataModel;
+import kr.co.turtlelab.andowsignage.tools.ContentPeriodEvaluator;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 
 public class MediaDataProvider {
+
+    public static class ContentLoadResult {
+        public final List<MediaDataModel> contentList = new ArrayList<>();
+        public boolean hasContentPeriodConstraint = false;
+        public long visibleDurationSec = 0L;
+    }
 
     private MediaDataProvider() {
     }
 
     public static List<MediaDataModel> getContentList(String pageId, String elementName) {
-        List<MediaDataModel> contentList = new ArrayList<>();
+        return getContentLoadResult(pageId, elementName).contentList;
+    }
+
+    public static ContentLoadResult getContentLoadResult(String pageId, String elementName) {
+        ContentLoadResult result = new ContentLoadResult();
         if (pageId == null || elementName == null) {
-            return contentList;
+            return result;
         }
         Realm realm = Realm.getDefaultInstance();
         try {
@@ -27,7 +38,7 @@ public class MediaDataProvider {
                     .equalTo("pageId", pageId)
                     .findFirst();
             if (page == null || page.getElements() == null) {
-                return contentList;
+                return result;
             }
             RealmPage detached = realm.copyFromRealm(page);
             RealmElement target = null;
@@ -38,9 +49,15 @@ public class MediaDataProvider {
                 }
             }
             if (target == null || target.getContents() == null) {
-                return contentList;
+                return result;
             }
             for (RealmContent realmContent : target.getContents()) {
+                if (ContentPeriodEvaluator.hasPeriod(realm, realmContent.getGuid())) {
+                    result.hasContentPeriodConstraint = true;
+                }
+                if (!ContentPeriodEvaluator.isAllowed(realm, realmContent.getGuid(), System.currentTimeMillis())) {
+                    continue;
+                }
                 MediaDataModel mdm = new MediaDataModel();
                 if (realmContent.getFileFullPath() != null && !realmContent.getFileFullPath().isEmpty()) {
                     String path = realmContent.getFileFullPath();
@@ -56,11 +73,12 @@ public class MediaDataProvider {
                 mdm.setPlayTime(realmContent.getPlayMinute(), realmContent.getPlaySecond());
                 mdm.setValidState(String.valueOf(realmContent.isContentValid()));
                 mdm.setMuted(target.isMuted());
-                contentList.add(mdm);
+                result.contentList.add(mdm);
+                result.visibleDurationSec += Math.max(1L, mdm.getPlayTimeSec());
             }
         } finally {
             realm.close();
         }
-        return contentList;
+        return result;
     }
 }

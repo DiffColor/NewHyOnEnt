@@ -37,6 +37,7 @@ namespace NewHyOnPlayer.PlaybackModes
             {
                 playbackContainer.PlaylistIndexChangeRequested -= PlaybackContainer_PlaylistIndexChangeRequested;
                 playbackContainer.SyncIndexRequestNeeded -= PlaybackContainer_SyncIndexRequestNeeded;
+                playbackContainer.PresentationVisibilityChanged -= PlaybackContainer_PresentationVisibilityChanged;
             }
 
             playbackContainer = container;
@@ -45,6 +46,7 @@ namespace NewHyOnPlayer.PlaybackModes
             {
                 playbackContainer.PlaylistIndexChangeRequested += PlaybackContainer_PlaylistIndexChangeRequested;
                 playbackContainer.SyncIndexRequestNeeded += PlaybackContainer_SyncIndexRequestNeeded;
+                playbackContainer.PresentationVisibilityChanged += PlaybackContainer_PresentationVisibilityChanged;
             }
         }
 
@@ -99,9 +101,9 @@ namespace NewHyOnPlayer.PlaybackModes
             }
 
             if (playbackContainer != null
-                && playbackContainer.TryGetLeaderSyncPosition(out int playlistIndex, out TimeSpan position))
+                && playbackContainer.TryGetPresentationState(out bool isVisible, out int playlistIndex, out TimeSpan position))
             {
-                syncService.SendIndexWithPosition(syncTargets, playlistIndex, position);
+                syncService.SendPresentationState(syncTargets, isVisible, playlistIndex, position);
                 return true;
             }
 
@@ -116,8 +118,24 @@ namespace NewHyOnPlayer.PlaybackModes
             {
                 playbackContainer.PlaylistIndexChangeRequested -= PlaybackContainer_PlaylistIndexChangeRequested;
                 playbackContainer.SyncIndexRequestNeeded -= PlaybackContainer_SyncIndexRequestNeeded;
+                playbackContainer.PresentationVisibilityChanged -= PlaybackContainer_PresentationVisibilityChanged;
                 playbackContainer = null;
             }
+        }
+
+        private void PlaybackContainer_PresentationVisibilityChanged(bool isVisible)
+        {
+            if (!started || !IsSyncLeader || syncService == null || playbackContainer == null)
+            {
+                return;
+            }
+
+            if (!playbackContainer.TryGetPresentationState(out bool currentVisible, out int playlistIndex, out TimeSpan position))
+            {
+                return;
+            }
+
+            syncService.SendPresentationState(syncTargets, currentVisible, playlistIndex, position);
         }
 
         private void PlaybackContainer_PlaylistIndexChangeRequested(int playlistIndex)
@@ -164,9 +182,9 @@ namespace NewHyOnPlayer.PlaybackModes
 
                     if (playbackContainer != null
                         && syncService != null
-                        && playbackContainer.TryGetLeaderSyncPosition(out int playlistIndex, out TimeSpan position))
+                        && playbackContainer.TryGetPresentationState(out bool isVisible, out int playlistIndex, out TimeSpan position))
                     {
-                        syncService.SendIndexWithPosition(syncTargets, playlistIndex, position);
+                        syncService.SendPresentationState(syncTargets, isVisible, playlistIndex, position);
                         return;
                     }
 
@@ -182,6 +200,21 @@ namespace NewHyOnPlayer.PlaybackModes
                 if (message.Type == SeamlessSyncMessageType.IndexWithPosition)
                 {
                     playbackContainer?.TryApplySyncPlaylistIndexWithPosition(message.PlaylistIndex, message.Position);
+                    return;
+                }
+
+                if (message.Type == SeamlessSyncMessageType.PresentationState)
+                {
+                    if (!message.IsVisible)
+                    {
+                        playbackContainer?.HideAll();
+                        return;
+                    }
+
+                    if (message.PlaylistIndex >= 0)
+                    {
+                        playbackContainer?.TryApplySyncPlaylistIndexWithPosition(message.PlaylistIndex, message.Position);
+                    }
                     return;
                 }
 

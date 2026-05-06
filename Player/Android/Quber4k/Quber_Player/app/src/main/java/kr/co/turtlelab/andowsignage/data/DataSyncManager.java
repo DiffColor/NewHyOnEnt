@@ -24,6 +24,7 @@ import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.objectbox.ObjectBoxDb;
 import kr.co.turtlelab.andowsignage.data.store.StoredContent;
+import kr.co.turtlelab.andowsignage.data.store.StoredContentPeriod;
 import kr.co.turtlelab.andowsignage.data.store.StoredElement;
 import kr.co.turtlelab.andowsignage.data.store.StoredPage;
 import kr.co.turtlelab.andowsignage.data.store.StoredPlayer;
@@ -91,6 +92,7 @@ public class DataSyncManager {
         }
         List<RethinkModels.PageInfoRecord> pages = rethinkClient.fetchPagesByIds(pageList.getPages());
         writeToStorage(player, pageList, pages);
+        syncAllKnownContentPeriods(false);
         rethinkClient.clearCommand(player.getGuid());
         return true;
     }
@@ -326,6 +328,7 @@ public class DataSyncManager {
         ApplyBackup backup = createApplyBackup();
         try {
             writePlaylistPayload(contract, new ArrayList<UpdateQueueContract.DownloadEntry>(), true);
+            syncAllKnownContentPeriods(false);
             invalidateActivityPlaylistCache(contract.playlistName);
             kr.co.turtlelab.andowsignage.dataproviders.PlayerDataProvider.updateCurrentPListName(contract.playlistName);
 
@@ -744,9 +747,10 @@ public class DataSyncManager {
                                         storedContent.setPlaySecond(contentRecord.getPlaySecond());
                                         storedContent.setValid(contentRecord.isValidTime());
                                         storedContent.setFileExist(contentRecord.isFileExist());
-                                storedContent.setScrollSpeedSec(contentRecord.getScrollSpeedSec());
-                                contents.add(storedContent);
-                            }
+                                        storedContent.setGuid(contentRecord.getGuid());
+                                        storedContent.setScrollSpeedSec(contentRecord.getScrollSpeedSec());
+                                        contents.add(storedContent);
+                                    }
                         }
                             storedElement.setContents(contents);
                             storedElements.add(storedElement);
@@ -1114,6 +1118,7 @@ public class DataSyncManager {
                             contentEntry.playMinute = content.CIF_PlayMinute;
                             contentEntry.playSecond = content.CIF_PlaySec;
                             contentEntry.valid = content.CIF_ValidTime;
+                            contentEntry.contentGuid = content.CIF_StrGUID;
                             contentEntry.scrollSpeedSec = content.CIF_ScrollTextSpeedSec;
                             contentEntry.remoteChecksum = TextUtils.isEmpty(content.CIF_FileHash)
                                     ? content.CIF_StrGUID
@@ -1379,6 +1384,7 @@ public class DataSyncManager {
                     } else {
                         playerGUID = payload.playerId;
                         writePlaylistPayload(payload, downloads, !isScheduleQueue);
+                        syncAllKnownContentPeriods(false);
                         invalidateActivityPlaylistCache(payload.playlistName);
                         if (!isScheduleQueue && !TextUtils.isEmpty(payload.playerId)) {
                             clearCommandAsync(payload.playerId);
@@ -1695,12 +1701,13 @@ public class DataSyncManager {
                         storedContent.setContentType(content.contentType);
                         storedContent.setPlayMinute(content.playMinute);
                         storedContent.setPlaySecond(content.playSecond);
-                                storedContent.setValid(content.valid);
-                                storedContent.setFileExist(content.fileExist);
-                                storedContent.setScrollSpeedSec(content.scrollSpeedSec);
-                                contents.add(storedContent);
+                        storedContent.setValid(content.valid);
+                        storedContent.setFileExist(content.fileExist);
+                        storedContent.setGuid(content.contentGuid);
+                        storedContent.setScrollSpeedSec(content.scrollSpeedSec);
+                        contents.add(storedContent);
+                                }
                             }
-                        }
                         storedElement.setContents(contents);
                         storedElements.add(storedElement);
                     }
@@ -1710,6 +1717,98 @@ public class DataSyncManager {
         });
         storeDb.close();
         cleanupUnusedContents(usedContentPaths);
+    }
+
+    private void requestContentPeriodRefresh() {
+        SystemUtils.runOnUiThread(() -> {
+            if (AndoWSignage.act != null) {
+                AndoWSignage.act.requestContentPeriodRefresh();
+            }
+        });
+    }
+
+    public void syncAllKnownContentPeriods(boolean requestUiRefresh) {
+        syncContentPeriodsByGuid(collectStoredContentGuids(), requestUiRefresh);
+    }
+
+    public void syncContentPeriodsByGuid(List<String> contentGuids, boolean requestUiRefresh) {
+        if (contentGuids == null || contentGuids.isEmpty()) {
+            return;
+        }
+
+        List<String> requested = new ArrayList<>();
+        for (String guid : contentGuids) {
+            if (TextUtils.isEmpty(guid) || requested.contains(guid)) {
+                continue;
+            }
+            requested.add(guid);
+        }
+        if (requested.isEmpty()) {
+            return;
+        }
+
+        List<RethinkModels.ContentPeriodRecord> periods = rethinkClient.fetchContentPeriods(requested);
+        storeContentPeriods(requested, periods);
+        if (requestUiRefresh) {
+            requestContentPeriodRefresh();
+        }
+    }
+
+    private List<String> collectStoredContentGuids() {
+        List<String> result = new ArrayList<>();
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        try {
+            List<StoredContent> contents = storeDb.copyEntity(storeDb.where(StoredContent.class).findAll());
+            for (StoredContent content : contents) {
+                if (content == null || TextUtils.isEmpty(content.getGuid()) || result.contains(content.getGuid())) {
+                    continue;
+                }
+                result.add(content.getGuid());
+            }
+        } finally {
+            storeDb.close();
+        }
+        return result;
+    }
+
+    private void storeContentPeriods(List<String> requestedIds, List<RethinkModels.ContentPeriodRecord> periods) {
+        ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
+        try {
+            storeDb.executeTransaction(r -> {
+                for (String contentGuid : requestedIds) {
+                    StoredContentPeriod existing = r.where(StoredContentPeriod.class)
+                            .equalTo("contentGuid", contentGuid)
+                            .findFirst();
+                    RethinkModels.ContentPeriodRecord matched = null;
+                    if (periods != null) {
+                        for (RethinkModels.ContentPeriodRecord period : periods) {
+                            if (period != null && contentGuid.equalsIgnoreCase(period.getContentGuid())) {
+                                matched = period;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (matched == null) {
+                        if (existing != null) {
+                            r.delete(existing);
+                        }
+                        continue;
+                    }
+
+                    if (existing == null) {
+                        existing = r.createObject(StoredContentPeriod.class, contentGuid);
+                    }
+                    existing.setFileName(matched.getFileName());
+                    existing.setStartDate(matched.getStartDate());
+                    existing.setEndDate(matched.getEndDate());
+                    existing.setStartTime(matched.getStartTime());
+                    existing.setEndTime(matched.getEndTime());
+                }
+            });
+        } finally {
+            storeDb.close();
+        }
     }
 
     private String buildLocalPageId(String playlistName, String pageId, int orderIndex) {

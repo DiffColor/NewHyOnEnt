@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using System.Globalization;
 using TurtleTools;
 using NewHyOnPlayer.Services;
 using NewHyOnPlayer.DataManager;
@@ -525,10 +526,12 @@ namespace NewHyOnPlayer
                 };
                 rethinkSyncService.WeeklyScheduleSynced += () =>
                 {
+                    SyncReferencedContentPeriodsNow(refreshPlayback: true);
                     HandleWeeklyScheduleUpdated();
                 };
                 rethinkSyncService.SpecialScheduleSynced += () =>
                 {
+                    SyncReferencedContentPeriodsNow(refreshPlayback: true);
                     HandleWeeklyScheduleUpdated();
                 };
             }
@@ -645,6 +648,27 @@ namespace NewHyOnPlayer
             }
         }
 
+        public void RemoveContentPeriodCache(IEnumerable<string> contentGuids)
+        {
+            var ids = (contentGuids ?? Enumerable.Empty<string>())
+                .Where(x => string.IsNullOrWhiteSpace(x) == false)
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (ids.Count == 0)
+            {
+                return;
+            }
+
+            lock (periodLock)
+            {
+                foreach (string id in ids)
+                {
+                    contentPeriodMap.Remove(id);
+                }
+            }
+        }
+
         public bool TryGetContentPeriod(string contentGuid, out ContentPeriodPayload period)
         {
             period = null;
@@ -666,23 +690,282 @@ namespace NewHyOnPlayer
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(period.StartDate))
+            period.StartDate = NormalizeDateValue(period.StartDate);
+            period.EndDate = NormalizeDateValue(period.EndDate);
+            period.StartTime = NormalizeTimeValue(period.StartTime);
+            period.EndTime = NormalizeTimeValue(period.EndTime);
+
+            if (!string.IsNullOrWhiteSpace(period.StartDate)
+                && !string.IsNullOrWhiteSpace(period.EndDate)
+                && DateTime.TryParse(period.StartDate, out var start)
+                && DateTime.TryParse(period.EndDate, out var end)
+                && end.Date < start.Date)
             {
-                period.StartDate = DateTime.Today.ToString("yyyy-MM-dd");
+                period.EndDate = start.ToString("yyyy-MM-dd");
+            }
+        }
+
+        public bool IsContentPeriodAllowed(string contentGuid, DateTime now)
+        {
+            if (!TryGetContentPeriod(contentGuid, out var period) || period == null)
+            {
+                return true;
             }
 
-            if (string.IsNullOrWhiteSpace(period.EndDate))
+            return IsContentPeriodAllowed(period, now);
+        }
+
+        public bool IsContentPeriodAllowed(ContentPeriodPayload period, DateTime now)
+        {
+            if (period == null)
             {
-                period.EndDate = "2099-12-31";
+                return true;
             }
 
-            if (DateTime.TryParse(period.StartDate, out var start) && DateTime.TryParse(period.EndDate, out var end))
+            DateTime date = now.Date;
+            if (!string.IsNullOrWhiteSpace(period.StartDate)
+                && DateTime.TryParse(period.StartDate, out var startDate)
+                && date < startDate.Date)
             {
-                if (end.Date < start.Date)
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(period.EndDate)
+                && DateTime.TryParse(period.EndDate, out var endDate)
+                && date > endDate.Date)
+            {
+                return false;
+            }
+
+            bool hasStartTime = TimeSpan.TryParseExact(period.StartTime ?? string.Empty, @"hh\:mm", CultureInfo.InvariantCulture, out var startTime);
+            bool hasEndTime = TimeSpan.TryParseExact(period.EndTime ?? string.Empty, @"hh\:mm", CultureInfo.InvariantCulture, out var endTime);
+            if (!hasStartTime || !hasEndTime)
+            {
+                return true;
+            }
+
+            TimeSpan currentTime = now.TimeOfDay;
+            if (endTime < startTime)
+            {
+                return currentTime >= startTime || currentTime < endTime;
+            }
+
+            return currentTime >= startTime && currentTime < endTime;
+        }
+
+        internal void SyncReferencedContentPeriodsNow(bool refreshPlayback)
+        {
+            SyncContentPeriodsNow(CollectReferencedContentGuids(), refreshPlayback);
+        }
+
+        internal void SyncSpecificContentPeriodsNow(IEnumerable<string> contentGuids, bool refreshPlayback)
+        {
+            SyncContentPeriodsNow(contentGuids, refreshPlayback);
+        }
+
+        private void SyncContentPeriodsNow(IEnumerable<string> contentGuids, bool refreshPlayback)
+        {
+            var ids = (contentGuids ?? Enumerable.Empty<string>())
+                .Where(x => string.IsNullOrWhiteSpace(x) == false)
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (rethinkSyncService == null)
+            {
+                return;
+            }
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                var snapshot = rethinkSyncService.FetchContentPeriodsByGuids(ids);
+                Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    period.EndDate = start.ToString("yyyy-MM-dd");
+                    ApplyContentPeriodSnapshot(ids, snapshot);
+                    if (refreshPlayback)
+                    {
+                        playbackContainer?.HandleContentPeriodUpdated(ids);
+                    }
+                }));
+            });
+        }
+
+        private void ApplyContentPeriodSnapshot(IReadOnlyCollection<string> requestedIds, IReadOnlyCollection<ContentPeriodPayload> snapshot)
+        {
+            var requested = (requestedIds ?? Array.Empty<string>())
+                .Where(x => string.IsNullOrWhiteSpace(x) == false)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var periods = (snapshot ?? Array.Empty<ContentPeriodPayload>())
+                .Where(x => x != null && string.IsNullOrWhiteSpace(x.ContentGuid) == false)
+                .GroupBy(x => x.ContentGuid, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.Last())
+                .ToList();
+
+            foreach (var period in periods)
+            {
+                NormalizePeriod(period);
+            }
+
+            using (var repo = new ContentPeriodRepository())
+            {
+                if (requested.Count > 0)
+                {
+                    var incoming = periods.ToDictionary(x => x.ContentGuid, x => x, StringComparer.OrdinalIgnoreCase);
+                    var missingIds = requested.Where(id => !incoming.ContainsKey(id)).ToList();
+
+                    repo.DeleteByContentGuids(missingIds);
+                    RemoveContentPeriodCache(missingIds);
+                }
+
+                repo.UpsertPeriods(periods);
+            }
+
+            RefreshContentPeriodCache(periods);
+        }
+
+        private List<string> CollectReferencedContentGuids()
+        {
+            var playlistNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var player = g_PlayerInfoManager?.g_PlayerInfo;
+            if (!string.IsNullOrWhiteSpace(player?.PIF_CurrentPlayList))
+            {
+                playlistNames.Add(player.PIF_CurrentPlayList);
+            }
+
+            if (!string.IsNullOrWhiteSpace(player?.PIF_DefaultPlayList))
+            {
+                playlistNames.Add(player.PIF_DefaultPlayList);
+            }
+
+            try
+            {
+                string cacheId = string.IsNullOrWhiteSpace(player?.PIF_GUID)
+                    ? player?.PIF_PlayerName
+                    : player.PIF_GUID;
+                if (!string.IsNullOrWhiteSpace(cacheId))
+                {
+                    using (var cacheRepo = new SpecialScheduleCacheRepository())
+                    {
+                        var cache = cacheRepo.FindById(cacheId);
+                        foreach (var playlist in cache?.Playlists ?? new List<SchedulePlaylistPayload>())
+                        {
+                            string playlistName = string.IsNullOrWhiteSpace(playlist?.PlaylistName)
+                                ? playlist?.PageList?.PLI_PageListName
+                                : playlist.PlaylistName;
+                            if (!string.IsNullOrWhiteSpace(playlistName))
+                            {
+                                playlistNames.Add(playlistName);
+                            }
+                        }
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"CollectReferencedContentGuids schedule cache error: {ex}", Logger.GetLogFileName());
+            }
+
+            var contentGuids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using (var pageListRepo = new PageListRepository())
+                using (var pageRepo = new PageRepository())
+                {
+                    foreach (string playlistName in playlistNames)
+                    {
+                        var pageList = pageListRepo.FindOne(x => string.Equals(x.PLI_PageListName, playlistName, StringComparison.OrdinalIgnoreCase));
+                        if (pageList?.PLI_Pages == null || pageList.PLI_Pages.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        var pages = pageRepo.Find(x => pageList.PLI_Pages.Contains(x.PIC_GUID));
+                        if (pages == null)
+                        {
+                            continue;
+                        }
+
+                        foreach (var page in pages)
+                        {
+                            if (page == null || page.PIC_Elements == null)
+                            {
+                                continue;
+                            }
+
+                            foreach (var element in page.PIC_Elements)
+                            {
+                                if (element == null || element.EIF_ContentsInfoClassList == null)
+                                {
+                                    continue;
+                                }
+
+                                foreach (var content in element.EIF_ContentsInfoClassList)
+                                {
+                                    if (content == null
+                                        || string.IsNullOrWhiteSpace(content.CIF_StrGUID)
+                                        || !IsFileBasedContent(content))
+                                    {
+                                        continue;
+                                    }
+
+                                    contentGuids.Add(content.CIF_StrGUID);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog($"CollectReferencedContentGuids error: {ex}", Logger.GetLogFileName());
+            }
+
+            return contentGuids.ToList();
+        }
+
+        private static bool IsFileBasedContent(AndoW.Shared.ContentsInfoClass content)
+        {
+            if (content == null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(content.CIF_ContentType))
+            {
+                return true;
+            }
+
+            return !content.CIF_ContentType.Equals("WebSiteURL", StringComparison.OrdinalIgnoreCase)
+                && !content.CIF_ContentType.Equals("Browser", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeDateValue(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Empty;
+            }
+
+            return DateTime.TryParse(raw, out var parsed)
+                ? parsed.ToString("yyyy-MM-dd")
+                : raw.Trim();
+        }
+
+        private static string NormalizeTimeValue(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Empty;
+            }
+
+            if (TimeSpan.TryParseExact(raw.Trim(), @"hh\:mm", CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed.ToString(@"hh\:mm");
+            }
+
+            return DateTime.TryParse(raw, out var dateTime)
+                ? dateTime.ToString("HH:mm")
+                : string.Empty;
         }
 
         private void EnsurePlaybackContainer()

@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using AndoW.Shared;
+using Newtonsoft.Json;
 using TurtleTools;
 using SharedDaySchedule = AndoW.Shared.DaySchedule;
 using SharedWeeklyPlayScheduleInfo = AndoW.Shared.WeeklyPlayScheduleInfo;
@@ -352,6 +353,60 @@ namespace AndoW_Manager
             return SignalRClientTools.TrySendCommandToClient(player.PIF_GUID, envelope);
         }
 
+        public void NotifyContentPeriodChanged(IEnumerable<string> contentGuids)
+        {
+            var distinctGuids = (contentGuids ?? Enumerable.Empty<string>())
+                .Where(x => string.IsNullOrWhiteSpace(x) == false)
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (distinctGuids.Count == 0 || !SignalRClientTools.IsConnected())
+            {
+                return;
+            }
+
+            var onlinePlayers = new HashSet<string>(onlineList ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            if (onlinePlayers.Count == 0)
+            {
+                return;
+            }
+
+            var playerManager = DataShop.Instance.g_PlayerInfoManager;
+            playerManager.ReloadFromDatabase();
+
+            string payloadJson = UpdatePayloadCodec.Encode(new UpdatePayload
+            {
+                ContentPeriodUpdateGuids = distinctGuids
+            });
+            if (string.IsNullOrWhiteSpace(payloadJson))
+            {
+                return;
+            }
+
+            foreach (var player in playerManager.g_PlayerInfoClassList ?? new List<PlayerInfoClass>())
+            {
+                if (player == null
+                    || string.IsNullOrWhiteSpace(player.PIF_GUID)
+                    || string.IsNullOrWhiteSpace(player.PIF_PlayerName)
+                    || !onlinePlayers.Contains(player.PIF_PlayerName))
+                {
+                    continue;
+                }
+
+                var envelope = new SignalRCommandEnvelope
+                {
+                    CommandId = Guid.NewGuid().ToString(),
+                    Command = "updatecontentperiod",
+                    PlayerId = player.PIF_GUID,
+                    PayloadJson = payloadJson,
+                    CreatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                    IsUrgent = true
+                };
+
+                SignalRClientTools.TrySendCommandToClient(player.PIF_GUID, envelope);
+            }
+        }
+
         private static string BuildSchedulePayloadBase64(PlayerInfoClass player)
         {
             if (player == null)
@@ -411,15 +466,12 @@ namespace AndoW_Manager
                     pageManager.LoadPagesForList(pageList.PLI_PageListName);
                     var pages = pageManager.g_PageInfoClassList?.ToList() ?? new List<PageInfoClass>();
                     var contract = builder.BuildContractPayload(player, pageList, pages);
-                    var contentPeriods = builder.BuildContentPeriodsForPages(pages);
-
                     playlistPayloads.Add(new SchedulePlaylistPayload
                     {
                         PlaylistName = pageList.PLI_PageListName,
                         PageList = pageList,
                         Pages = pages,
-                        Contract = contract,
-                        ContentPeriods = contentPeriods
+                        Contract = contract
                     });
                 }
             }
@@ -439,8 +491,7 @@ namespace AndoW_Manager
 
             var payload = new UpdatePayload
             {
-                Schedule = schedulePayload,
-                ContentPeriods = MergeContentPeriods(playlistPayloads)
+                Schedule = schedulePayload
             };
 
             return UpdatePayloadCodec.Encode(payload);
@@ -472,25 +523,6 @@ namespace AndoW_Manager
             };
 
             return UpdatePayloadCodec.Encode(payload);
-        }
-
-        private static List<ContentPeriodPayload> MergeContentPeriods(IEnumerable<SchedulePlaylistPayload> playlists)
-        {
-            var map = new Dictionary<string, ContentPeriodPayload>(StringComparer.OrdinalIgnoreCase);
-            foreach (var playlist in playlists ?? Enumerable.Empty<SchedulePlaylistPayload>())
-            {
-                foreach (var period in playlist.ContentPeriods ?? Enumerable.Empty<ContentPeriodPayload>())
-                {
-                    if (period == null || string.IsNullOrWhiteSpace(period.ContentGuid))
-                    {
-                        continue;
-                    }
-
-                    map[period.ContentGuid] = period;
-                }
-            }
-
-            return map.Values.ToList();
         }
 
         private static SharedWeeklyPlayScheduleInfo LoadWeeklyScheduleSnapshot(string playerId, string playerName)

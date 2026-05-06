@@ -114,6 +114,9 @@ namespace AndoW.LiteDb
 
             BsonMapper.Global.Entity<PlayerInfoClass>().Id(x => x.Id, false);
             BsonMapper.Global.Entity<WeeklyPlayScheduleInfo>().Id(x => x.Id, false);
+#if !PLAYER_SETTINGS_USE_APP_CONTEXT_BASE_DIRECTORY
+            BsonMapper.Global.Entity<ContentPeriodPayload>().Id(x => x.ContentGuid, false);
+#endif
 
             _mapperConfigured = true;
         }

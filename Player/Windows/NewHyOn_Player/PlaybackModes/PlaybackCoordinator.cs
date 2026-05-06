@@ -38,6 +38,8 @@ namespace NewHyOnPlayer.PlaybackModes
             plan.CanvasWidth = page.PIC_CanvasWidth > 0 ? page.PIC_CanvasWidth : 1920;
             plan.CanvasHeight = page.PIC_CanvasHeight > 0 ? page.PIC_CanvasHeight : 1080;
             plan.DurationSeconds = Math.Max(1, (page.PIC_PlaytimeHour * 3600) + (page.PIC_PlaytimeMinute * 60) + page.PIC_PlaytimeSecond);
+            bool hasContentPeriod = false;
+            int dynamicDurationSeconds = 0;
 
             List<SharedElementInfoClass> playableElements = new List<SharedElementInfoClass>();
             if (page.PIC_Elements != null)
@@ -72,6 +74,7 @@ namespace NewHyOnPlayer.PlaybackModes
                 slotPlan.Left = element.EIF_PosLeft;
                 slotPlan.Top = element.EIF_PosTop;
                 slotPlan.ZIndex = element.EIF_ZIndex;
+                int slotDurationSeconds = 0;
 
                 if (element.EIF_ContentsInfoClassList != null)
                 {
@@ -81,12 +84,33 @@ namespace NewHyOnPlayer.PlaybackModes
                         if (item != null)
                         {
                             slotPlan.Items.Add(item);
+
+                            if (owner != null && !string.IsNullOrWhiteSpace(content.CIF_StrGUID))
+                            {
+                                SharedContentPeriodPayload period;
+                                if (owner.TryGetContentPeriod(content.CIF_StrGUID, out period) && period != null)
+                                {
+                                    hasContentPeriod = true;
+                                    if (owner.IsContentPeriodAllowed(content.CIF_StrGUID, DateTime.Now))
+                                    {
+                                        slotDurationSeconds += Math.Max(1, item.DurationSeconds);
+                                    }
+
+                                    continue;
+                                }
+                            }
+
+                            slotDurationSeconds += Math.Max(1, item.DurationSeconds);
                         }
                     }
                 }
 
                 ConfigureSingleVideoSlotLoop(slotPlan);
                 plan.Slots.Add(slotPlan);
+                if (dynamicDurationSeconds < slotDurationSeconds)
+                {
+                    dynamicDurationSeconds = slotDurationSeconds;
+                }
             }
 
             while (plan.Slots.Count < 6)
@@ -97,6 +121,11 @@ namespace NewHyOnPlayer.PlaybackModes
             if (page.PIC_Elements != null && page.PIC_Elements.Count > 6)
             {
                 Logger.WriteLog($"페이지({page.PIC_PageName})의 Media 요소가 6개를 초과하여 앞 6개만 사용합니다.", Logger.GetLogFileName());
+            }
+
+            if (hasContentPeriod)
+            {
+                plan.DurationSeconds = Math.Max(1, dynamicDurationSeconds);
             }
 
             return plan;
@@ -131,30 +160,6 @@ namespace NewHyOnPlayer.PlaybackModes
             if (content.CIF_PlayMinute == "00" && content.CIF_PlaySec == "00")
             {
                 return null;
-            }
-
-            if (owner != null && !string.IsNullOrWhiteSpace(content.CIF_StrGUID))
-            {
-                SharedContentPeriodPayload period;
-                if (owner.TryGetContentPeriod(content.CIF_StrGUID, out period) && period != null)
-                {
-                    DateTime start;
-                    DateTime end;
-                    if (!DateTime.TryParse(period.StartDate, out start))
-                    {
-                        start = DateTime.MinValue;
-                    }
-                    if (!DateTime.TryParse(period.EndDate, out end))
-                    {
-                        end = DateTime.MaxValue;
-                    }
-
-                    DateTime today = DateTime.Today;
-                    if (today < start.Date || today > end.Date)
-                    {
-                        return null;
-                    }
-                }
             }
 
             NewHyOnPlayer.ContentType contentType;

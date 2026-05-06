@@ -19,6 +19,7 @@ namespace NewHyOnPlayer.PlaybackModes
         void UpdateCurrentPageListName(string pageListName);
         void RequestScheduleEvaluation(bool force = false);
         void HandleWeeklyScheduleUpdated();
+        void HandleContentPeriodUpdated(IReadOnlyCollection<string> contentGuids);
         void RequestPlaylistReload(string playlistName, string reason);
         void StartPlaybackFromOffAir();
         void PlayNextPage();

@@ -162,6 +162,7 @@ public class AndoWSignage extends Activity {
 	private PageRuntime stagedPageRuntime;
 	private PageRuntime specialPageRuntime;
 	private PageRuntime pendingActivationRuntime;
+	private boolean contentPeriodRefreshPending = false;
 	private PageBuildSpec stagedPageSpec;
 	private PageBuildSpec specialPageSpec;
 	private static final long NEXT_LAYOUT_STAGE_DELAY_MS = 3000L;
@@ -238,6 +239,8 @@ public class AndoWSignage extends Activity {
 		List<MediaDataModel> mediaContents = new ArrayList<>();
 		List<ScrolltextDataModel> scrolltextContents = new ArrayList<>();
 		WelcomeDataModel welcomeData;
+		boolean hasContentPeriodConstraint = false;
+		long visibleDurationSec = 0L;
 	}
 
 	private static final class PageBuildSpec {
@@ -1547,6 +1550,7 @@ public class AndoWSignage extends Activity {
 				spec.elementSpecs.add(elementSpec);
 			}
 		}
+		applyDynamicPageDuration(spec);
 		return spec;
 	}
 
@@ -1564,7 +1568,10 @@ public class AndoWSignage extends Activity {
 		switch (spec.type) {
 			case Media:
 			case TemplateBoard:
-				spec.mediaContents = MediaDataProvider.getContentList(pageId, edm.getName());
+				MediaDataProvider.ContentLoadResult mediaLoadResult = MediaDataProvider.getContentLoadResult(pageId, edm.getName());
+				spec.mediaContents = mediaLoadResult.contentList;
+				spec.hasContentPeriodConstraint = mediaLoadResult.hasContentPeriodConstraint;
+				spec.visibleDurationSec = mediaLoadResult.visibleDurationSec;
 				break;
 			case ScrollText:
 				spec.scrolltextContents = ScrolltextDataProvider.getContentList(pageId, edm.getName());
@@ -1591,6 +1598,51 @@ public class AndoWSignage extends Activity {
 		copy.setLandscape(source.isLandscape());
 		copy.setCanvasSize(source.getCanvasWidth(), source.getCanvasHeight());
 		return copy;
+	}
+
+	private void applyDynamicPageDuration(PageBuildSpec spec) {
+		if (spec == null || spec.pageData == null || spec.elementSpecs == null) {
+			return;
+		}
+
+		boolean hasContentPeriodConstraint = false;
+		long dynamicDurationSec = 0L;
+		for (ElementBuildSpec elementSpec : spec.elementSpecs) {
+			if (elementSpec == null) {
+				continue;
+			}
+
+			if (elementSpec.type != AndoWSignageApp.ELEMENT_TYPE.Media
+					&& elementSpec.type != AndoWSignageApp.ELEMENT_TYPE.TemplateBoard) {
+				continue;
+			}
+
+			if (elementSpec.hasContentPeriodConstraint) {
+				hasContentPeriodConstraint = true;
+			}
+
+			if (dynamicDurationSec < elementSpec.visibleDurationSec) {
+				dynamicDurationSec = elementSpec.visibleDurationSec;
+			}
+		}
+
+		if (!hasContentPeriodConstraint) {
+			return;
+		}
+
+		setPagePlayTimeSeconds(spec.pageData, Math.max(1L, dynamicDurationSec));
+	}
+
+	private static void setPagePlayTimeSeconds(PageDataModel pageData, long durationSec) {
+		if (pageData == null) {
+			return;
+		}
+
+		long safeDurationSec = Math.max(1L, durationSec);
+		long hour = safeDurationSec / 3600L;
+		long minute = (safeDurationSec % 3600L) / 60L;
+		long second = safeDurationSec % 60L;
+		pageData.setPlayTime(String.valueOf(hour), String.valueOf(minute), String.valueOf(second));
 	}
 
 	private PlaybackTarget copyPlaybackTarget(PlaybackTarget source) {
@@ -2717,6 +2769,8 @@ public class AndoWSignage extends Activity {
 	void popPage() {
 
 		try {
+			boolean forceContentPeriodRefresh = contentPeriodRefreshPending;
+			contentPeriodRefreshPending = false;
 			if (playlistSwitchPending) {
 				return;
 			}
@@ -2748,7 +2802,7 @@ public class AndoWSignage extends Activity {
 				stopAnim();
 			}
 
-			if(pageDataList.size() == 1 && pageIdx == 1 && activePageRuntime != null) {
+			if(pageDataList.size() == 1 && pageIdx == 1 && activePageRuntime != null && !forceContentPeriodRefresh) {
 				if (!stageNextDeferredPending && System.currentTimeMillis() >= nextStageAllowedAtMillis) {
 					stageNextPlaybackTarget();
 				}
@@ -3224,6 +3278,40 @@ public class AndoWSignage extends Activity {
 				switchToUpdatedPlaylist(false);
 			}
 		});
+	}
+
+	public void requestContentPeriodRefresh() {
+		SystemUtils.runOnUiThread(() -> {
+			if (!shouldForceContentPeriodRefreshNow()) {
+				return;
+			}
+			contentPeriodRefreshPending = true;
+			popPage();
+		});
+	}
+
+	private boolean shouldForceContentPeriodRefreshNow() {
+		if (usbPlaybackActive || playlistSwitchPending || pendingActivationRuntime != null) {
+			return false;
+		}
+		if (activePageRuntime == null) {
+			return true;
+		}
+		return countRuntimeConfiguredContents(activePageRuntime) <= 1;
+	}
+
+	private int countRuntimeConfiguredContents(PageRuntime runtime) {
+		if (runtime == null || runtime.slots == null || runtime.slots.isEmpty()) {
+			return 0;
+		}
+		int count = 0;
+		for (PlaybackSlotView slot : runtime.slots) {
+			if (slot == null) {
+				continue;
+			}
+			count += Math.max(0, slot.getConfiguredContentCount());
+		}
+		return count;
 	}
 
 	private String formatTimestamp(long millis) {

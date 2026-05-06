@@ -1013,7 +1013,6 @@ namespace Mpv.NET.Player
 					break;
 				case pausedForCacheUserData:
 					var pausedForCacheYesNoString = eventProperty.DataString;
-
 					var pausedForCache = MpvPlayerHelper.YesNoToBool(pausedForCacheYesNoString);
 					if (pausedForCache)
 						MediaStartedBuffering?.Invoke(this, EventArgs.Empty);

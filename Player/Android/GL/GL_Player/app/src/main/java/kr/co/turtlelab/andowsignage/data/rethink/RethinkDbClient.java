@@ -55,6 +55,7 @@ public class RethinkDbClient {
     private static final String TABLE_TEXT_INFO = "TextInfoManager";
     private static final String TABLE_WEEKLY = "WeeklyInfoManagerClass";
     private static final String TABLE_SPECIAL_SCHEDULE = "SpecialScheduleInfoManager";
+    private static final String TABLE_PERIOD = "PeriodData";
     private static final String TABLE_HEARTBEAT = "ClientHeartbeat";
     private static final String TABLE_UPDATE_QUEUE = "UpdateQueue";
     private static final String TABLE_COMMAND_HISTORY = "CommandHistory";
@@ -339,6 +340,34 @@ public class RethinkDbClient {
             }
         }
         return pages;
+    }
+
+    public List<RethinkModels.ContentPeriodRecord> fetchContentPeriods(List<String> contentGuids) {
+        List<RethinkModels.ContentPeriodRecord> periods = new ArrayList<>();
+        if (contentGuids == null || contentGuids.isEmpty()) {
+            return periods;
+        }
+
+        ReqlExpr query = R.db(DATABASE)
+                .table(TABLE_PERIOD)
+                .getAll(R.args(contentGuids));
+        List<Map> rows = runList(query);
+        Map<String, Map> temp = new HashMap<>();
+        for (Map row : rows) {
+            Object contentGuid = row.get("ContentGuid");
+            if (contentGuid != null) {
+                temp.put(String.valueOf(contentGuid), row);
+            }
+        }
+
+        for (String contentGuid : contentGuids) {
+            Map row = temp.get(contentGuid);
+            if (row != null) {
+                periods.add(convert(row, RethinkModels.ContentPeriodRecord.class));
+            }
+        }
+
+        return periods;
     }
 
     public RethinkModels.TextInfoRecord fetchTextInfo(String pageName, String elementName) {

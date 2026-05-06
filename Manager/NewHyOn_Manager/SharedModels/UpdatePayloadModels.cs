@@ -18,6 +18,8 @@ namespace AndoW.Shared
         public ScheduleUpdatePayload Schedule { get; set; }
 
         public List<ContentPeriodPayload> ContentPeriods { get; set; } = new List<ContentPeriodPayload>();
+
+        public List<string> ContentPeriodUpdateGuids { get; set; } = new List<string>();
     }
 
     public sealed class ScheduleUpdatePayload
@@ -57,6 +59,10 @@ namespace AndoW.Shared
         public string StartDate { get; set; } = string.Empty;
 
         public string EndDate { get; set; } = string.Empty;
+
+        public string StartTime { get; set; } = string.Empty;
+
+        public string EndTime { get; set; } = string.Empty;
     }
 
     public sealed class SpecialSchedulePayload

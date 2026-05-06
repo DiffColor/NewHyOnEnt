@@ -4,7 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         mc:Ignorable="d"
-        Height="220"
+        Height="210"
         Width="450"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -25,7 +25,7 @@
                 <RowDefinition Height="38"/>
             </Grid.RowDefinitions>
             <Rectangle Fill="#FF4A4A9A" PreviewMouseLeftButtonDown="TitleBar_Drag"/>
-            <TextBlock Text="기간/재생시간 편집" Foreground="White" FontFamily="Malgun Gothic" FontSize="13.333" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0"/>
+            <TextBlock Text="표출 기간 / 재생 시간 편집" Foreground="White" FontFamily="Malgun Gothic" FontSize="13.333" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0"/>
             <Button x:Name="BtnWin_close" Grid.Row="0" Height="20" Width="28" HorizontalAlignment="Right" Margin="0,4,6,0" Style="{DynamicResource BtnWin_1}" Click="BtnWin_close_Click">
                 <Path Data="M8.2080002,0 L11.875,0 11.875,8.2080001 20.083,8.2080001 20.083,11.875 11.875,11.875 11.875,20.083 8.2080002,20.083 8.2080002,11.875 0,11.875 0,8.2080001 8.2080002,8.2080001 z"
                       Fill="White" Stretch="Fill" Width="12" Height="12" RenderTransformOrigin="0.5,0.5">
@@ -39,16 +39,16 @@
 
             <Grid Grid.Row="1" Margin="14">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="32"/>
+                    <RowDefinition Height="32"/>
+                    <RowDefinition Height="42"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="90"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Text="기간" FontFamily="Malgun Gothic" FontSize="12.667" Foreground="#FF1B1B1D" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                <TextBlock Text="표출 기간" FontFamily="Malgun Gothic" FontSize="12.667" Foreground="#FF1B1B1D" VerticalAlignment="Center" Margin="0,0,0,8"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
                     <DatePicker x:Name="StartDatePicker" Width="120" SelectedDateChanged="StartDatePicker_SelectedDateChanged" CalendarOpened="StartDatePicker_CalendarOpened"/>
                     <TextBlock Text="~" Margin="6,0,6,0" VerticalAlignment="Center" FontFamily="Malgun Gothic" Foreground="#FF1B1B1D"/>
@@ -56,10 +56,22 @@
                     <Button x:Name="ClearDateBtn" Content="초기화" Width="60" Height="24" Margin="8,0,0,0" Click="ClearDateBtn_Click"/>
                 </StackPanel>
 
-                <TextBlock Grid.Row="1" Text="재생시간" FontFamily="Malgun Gothic" FontSize="12.667" Foreground="#FF1B1B1D" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                <TextBlock Grid.Row="1" Text="표출 시간" FontFamily="Malgun Gothic" FontSize="12.667" Foreground="#FF1B1B1D" VerticalAlignment="Center" Margin="0,4,0,0"/>
                 <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,4,0,0">
-                    <ComboBox x:Name="MinCombo" Width="60" Height="24" Margin="0,0,6,0"/>
-                    <ComboBox x:Name="SecCombo" Width="60" Height="24"/>
+                    <ComboBox x:Name="StartHourCombo" Width="54" Height="24" Margin="0,0,4,0" SelectionChanged="StartHourCombo_SelectionChanged"/>
+                    <TextBlock Text=":" Margin="0,0,4,0" VerticalAlignment="Center" FontFamily="Malgun Gothic" Foreground="#FF1B1B1D"/>
+                    <ComboBox x:Name="StartMinuteCombo" Width="54" Height="24" Margin="0,0,7,0"/>
+                    <TextBlock Text="~" Margin="0,0,7,0" VerticalAlignment="Center" FontFamily="Malgun Gothic" Foreground="#FF1B1B1D"/>
+                    <ComboBox x:Name="EndHourCombo" Width="54" Height="24" Margin="0,0,4,0" SelectionChanged="EndHourCombo_SelectionChanged"/>
+                    <TextBlock Text=":" Margin="0,0,4,0" VerticalAlignment="Center" FontFamily="Malgun Gothic" Foreground="#FF1B1B1D"/>
+                    <ComboBox x:Name="EndMinuteCombo" Width="54" Height="24"/>
+                </StackPanel>
+
+                <TextBlock Grid.Row="2" Text="재생 시간" FontFamily="Malgun Gothic" FontSize="12.667" Foreground="#FF1B1B1D" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,4,0,0">
+                    <ComboBox x:Name="MinCombo" Width="54" Height="24" Margin="0,0,4,0"/>
+                    <TextBlock Text=":" Margin="0,0,4,0" VerticalAlignment="Center" FontFamily="Malgun Gothic" Foreground="#FF1B1B1D"/>
+                    <ComboBox x:Name="SecCombo" Width="54" Height="24"/>
                 </StackPanel>
             </Grid>
 

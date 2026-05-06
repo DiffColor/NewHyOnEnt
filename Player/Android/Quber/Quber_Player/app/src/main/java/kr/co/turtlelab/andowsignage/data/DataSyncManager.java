@@ -25,6 +25,7 @@ import io.realm.RealmList;
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
 import kr.co.turtlelab.andowsignage.data.realm.RealmContent;
+import kr.co.turtlelab.andowsignage.data.realm.RealmContentPeriod;
 import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPlayer;
@@ -328,6 +329,7 @@ public class DataSyncManager {
         ApplyBackup backup = createApplyBackup();
         try {
             writePlaylistPayload(contract, new ArrayList<UpdateQueueContract.DownloadEntry>(), true);
+            syncAllKnownContentPeriods(false);
             invalidateActivityPlaylistCache(contract.playlistName);
             kr.co.turtlelab.andowsignage.dataproviders.PlayerDataProvider.updateCurrentPListName(contract.playlistName);
 
@@ -406,6 +408,7 @@ public class DataSyncManager {
         if (!applySchedulePayloadToLocalDb(schedule)) {
             return false;
         }
+        syncAllKnownContentPeriods(false);
         enqueueScheduleDownloads(schedule);
         requestSchedulePlaybackRefresh();
         return true;
@@ -437,7 +440,6 @@ public class DataSyncManager {
                 payload.PageList = playlist.PageList;
                 payload.Pages = playlist.Pages;
                 payload.Contract = playlist.Contract;
-                payload.ContentPeriods = playlist.ContentPeriods;
                 long queueId = enqueuePayloadUpdate(payload, true, false);
                 if (queueId > 0) {
                     queuedAny = true;
@@ -1145,6 +1147,7 @@ public class DataSyncManager {
                             UpdateQueueContract.ContentPayload contentEntry = new UpdateQueueContract.ContentPayload();
                             contentEntry.uid = elementId + "_" + idx;
                             contentEntry.elementId = elementId;
+                            contentEntry.contentGuid = content.CIF_StrGUID;
                             contentEntry.fileName = content.CIF_FileName;
                             contentEntry.fileFullPath = content.CIF_FileFullPath;
                             contentEntry.contentType = content.CIF_ContentType;
@@ -1469,6 +1472,7 @@ public class DataSyncManager {
                     } else {
                         playerGUID = payload.playerId;
                         writePlaylistPayload(payload, downloads, !isScheduleQueue);
+                        syncAllKnownContentPeriods(false);
                         invalidateActivityPlaylistCache(payload.playlistName);
                         if (!isScheduleQueue && !TextUtils.isEmpty(payload.playerId)) {
                             clearCommandAsync(payload.playerId);
@@ -1589,6 +1593,108 @@ public class DataSyncManager {
                 AndoWSignage.act.requestSchedulePlaybackRefresh();
             }
         });
+    }
+
+    private void requestContentPeriodRefresh() {
+        SystemUtils.runOnUiThread(() -> {
+            if (AndoWSignage.act != null) {
+                AndoWSignage.act.requestContentPeriodRefresh();
+            }
+        });
+    }
+
+    public void syncAllKnownContentPeriods(boolean requestUiRefresh) {
+        syncContentPeriodsByGuid(collectStoredContentGuids(), requestUiRefresh);
+    }
+
+    public void syncContentPeriodsByGuid(List<String> contentGuids, boolean requestUiRefresh) {
+        if (contentGuids == null || contentGuids.isEmpty()) {
+            return;
+        }
+
+        List<String> requested = new ArrayList<>();
+        for (String guid : contentGuids) {
+            if (TextUtils.isEmpty(guid) || requested.contains(guid)) {
+                continue;
+            }
+            requested.add(guid);
+        }
+        if (requested.isEmpty()) {
+            return;
+        }
+
+        List<RethinkModels.ContentPeriodRecord> periods = rethinkClient.fetchContentPeriods(requested);
+        storeContentPeriods(requested, periods);
+        if (requestUiRefresh) {
+            requestContentPeriodRefresh();
+        }
+    }
+
+    private List<String> collectStoredContentGuids() {
+        List<String> result = new ArrayList<>();
+        Realm realm = Realm.getDefaultInstance();
+        try {
+            List<RealmContent> contents = realm.copyFromRealm(realm.where(RealmContent.class).findAll());
+            for (RealmContent content : contents) {
+                if (content == null || TextUtils.isEmpty(content.getGuid()) || result.contains(content.getGuid())) {
+                    continue;
+                }
+                result.add(content.getGuid());
+            }
+        } finally {
+            realm.close();
+        }
+        return result;
+    }
+
+    private void storeContentPeriods(List<String> requestedIds, List<RethinkModels.ContentPeriodRecord> periods) {
+        Realm realm = Realm.getDefaultInstance();
+        try {
+            realm.executeTransaction(r -> {
+                for (String contentGuid : requestedIds) {
+                    RealmContentPeriod existing = r.where(RealmContentPeriod.class)
+                            .equalTo("contentGuid", contentGuid)
+                            .findFirst();
+                    boolean found = false;
+                    if (periods != null) {
+                        for (RethinkModels.ContentPeriodRecord period : periods) {
+                            if (period != null && contentGuid.equalsIgnoreCase(period.getContentGuid())) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found && existing != null) {
+                        existing.deleteFromRealm();
+                    }
+                }
+
+                if (periods == null) {
+                    return;
+                }
+
+                for (RethinkModels.ContentPeriodRecord period : periods) {
+                    if (period == null || TextUtils.isEmpty(period.getContentGuid())) {
+                        continue;
+                    }
+
+                    RealmContentPeriod stored = r.where(RealmContentPeriod.class)
+                            .equalTo("contentGuid", period.getContentGuid())
+                            .findFirst();
+                    if (stored == null) {
+                        stored = r.createObject(RealmContentPeriod.class, period.getContentGuid());
+                    }
+
+                    stored.setFileName(period.getFileName());
+                    stored.setStartDate(period.getStartDate());
+                    stored.setEndDate(period.getEndDate());
+                    stored.setStartTime(period.getStartTime());
+                    stored.setEndTime(period.getEndTime());
+                }
+            });
+        } finally {
+            realm.close();
+        }
     }
 
     public boolean applyNextReadyQueue() {
@@ -1778,6 +1884,7 @@ public class DataSyncManager {
                         String localContentId = buildLocalContentId(localElementId, content.uid, contentIndex);
                         RealmContent realmContent = r.createObject(RealmContent.class, localContentId);
                         realmContent.setElementId(localElementId);
+                        realmContent.setGuid(content.contentGuid);
                         realmContent.setFileName(content.fileName);
                         String relativePath = resolveRelativePathFromPayload(content);
                         String absolutePath = toLocalAbsolutePath(relativePath);

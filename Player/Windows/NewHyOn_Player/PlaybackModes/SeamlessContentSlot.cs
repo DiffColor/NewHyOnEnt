@@ -15,19 +15,23 @@ namespace NewHyOnPlayer.PlaybackModes
         private readonly string layoutName;
         private readonly int slotIndex;
         private readonly SeamlessMpvSurface surface;
+        private readonly Func<SeamlessContentItem, bool> isContentPlayable;
         private SeamlessSlotPlan currentPlan;
         private int currentItemIndex;
         private long currentItemElapsedMilliseconds;
         private long currentItemDurationMilliseconds;
+        private long lastLayoutElapsedMilliseconds;
         private bool isActive;
         private bool playlistPrepared;
         private bool? appliedLoopState;
+        private int suspendedItemIndex;
         private TaskCompletionSource<bool> prepareSource;
 
-        public SeamlessContentSlot(string layoutName, int slotIndex)
+        public SeamlessContentSlot(string layoutName, int slotIndex, Func<SeamlessContentItem, bool> isContentPlayable)
         {
             this.layoutName = layoutName;
             this.slotIndex = slotIndex;
+            this.isContentPlayable = isContentPlayable;
             surface = new SeamlessMpvSurface();
             surface.MediaLoaded += Surface_MediaLoaded;
             State = SeamlessSlotState.Idle;
@@ -47,7 +51,12 @@ namespace NewHyOnPlayer.PlaybackModes
 
         public bool HasPlayableItems
         {
-            get { return currentPlan != null && currentPlan.HasPlayableItems; }
+            get { return HasAnyPlayableItems(); }
+        }
+
+        public bool NeedsActivationRecovery
+        {
+            get { return !isActive && currentItemIndex < 0 && HasPlayableItems; }
         }
 
         public async Task PrepareAsync(SeamlessSlotPlan plan, bool preserveAspectRatio)
@@ -56,14 +65,24 @@ namespace NewHyOnPlayer.PlaybackModes
             currentItemIndex = 0;
             currentItemElapsedMilliseconds = 0;
             currentItemDurationMilliseconds = 0;
+            lastLayoutElapsedMilliseconds = -1;
             isActive = false;
             playlistPrepared = false;
             appliedLoopState = null;
+            suspendedItemIndex = -1;
             ApplyLayoutPlan(preserveAspectRatio);
 
-            if (!currentPlan.HasPlayableItems)
+            if (!HasPlayableItems)
             {
-                Stop();
+                SuspendForNoPlayableItems();
+                State = SeamlessSlotState.Ready;
+                return;
+            }
+
+            currentItemIndex = FindNextPlayableIndex(0);
+            if (currentItemIndex < 0)
+            {
+                SuspendForNoPlayableItems();
                 State = SeamlessSlotState.Ready;
                 return;
             }
@@ -110,12 +129,35 @@ namespace NewHyOnPlayer.PlaybackModes
                 return;
             }
 
+            if (currentItemIndex < 0 || !IsContentPlayable(GetCurrentItem()))
+            {
+                int startIndex = currentItemIndex >= 0
+                    ? currentItemIndex + 1
+                    : 0;
+                int nextPlayableIndex = FindNextPlayableIndex(startIndex);
+                if (nextPlayableIndex < 0)
+                {
+                    RunOnUiThread(() =>
+                    {
+                        surface.HideSurface();
+                    });
+                    State = SeamlessSlotState.Active;
+                    return;
+                }
+
+                currentItemIndex = nextPlayableIndex;
+                currentItemElapsedMilliseconds = 0;
+                currentItemDurationMilliseconds = GetItemDurationMilliseconds(currentItemIndex);
+                lastLayoutElapsedMilliseconds = -1;
+                appliedLoopState = null;
+            }
+
             isActive = true;
             State = SeamlessSlotState.Active;
 
             RunOnUiThread(() =>
             {
-                surface.ShowSurface();
+                surface.HideSurface();
                 if (!playlistPrepared)
                 {
                     SwitchToCurrentItem(true);
@@ -139,10 +181,7 @@ namespace NewHyOnPlayer.PlaybackModes
             RunOnUiThread(() =>
             {
                 surface.HideSurface();
-                if (surface.IsPlaying)
-                {
-                    surface.Pause();
-                }
+                surface.PauseIfActive();
             });
 
             if (State != SeamlessSlotState.Error)
@@ -154,11 +193,13 @@ namespace NewHyOnPlayer.PlaybackModes
         public void Stop()
         {
             isActive = false;
-            currentItemIndex = 0;
+            currentItemIndex = -1;
             currentItemElapsedMilliseconds = 0;
             currentItemDurationMilliseconds = 0;
+            lastLayoutElapsedMilliseconds = -1;
             playlistPrepared = false;
             appliedLoopState = null;
+            suspendedItemIndex = -1;
 
             RunOnUiThread(() =>
             {
@@ -168,29 +209,170 @@ namespace NewHyOnPlayer.PlaybackModes
             State = SeamlessSlotState.Idle;
         }
 
+        private void SuspendForNoPlayableItems()
+        {
+            isActive = false;
+            if (currentItemIndex >= 0)
+            {
+                suspendedItemIndex = currentItemIndex;
+            }
+            currentItemIndex = -1;
+            currentItemElapsedMilliseconds = 0;
+            currentItemDurationMilliseconds = 0;
+            lastLayoutElapsedMilliseconds = -1;
+            appliedLoopState = null;
+
+            RunOnUiThread(() =>
+            {
+                surface.HideSurface();
+                surface.PauseIfActive();
+            });
+        }
+
+        public void RefreshForContentPeriodUpdate(long layoutElapsedMilliseconds)
+        {
+            if (!HasPlayableItems)
+            {
+                SuspendForNoPlayableItems();
+                State = SeamlessSlotState.Ready;
+                return;
+            }
+
+            if (isActive && currentItemIndex >= 0)
+            {
+                ApplyPlaybackPosition(layoutElapsedMilliseconds);
+                return;
+            }
+
+            int startIndex = suspendedItemIndex >= 0
+                ? suspendedItemIndex + 1
+                : 0;
+            int nextPlayableIndex = FindNextPlayableIndex(startIndex);
+            if (nextPlayableIndex < 0)
+            {
+                SuspendForNoPlayableItems();
+                State = SeamlessSlotState.Ready;
+                return;
+            }
+
+            currentItemIndex = nextPlayableIndex;
+            currentItemElapsedMilliseconds = 0;
+            currentItemDurationMilliseconds = GetItemDurationMilliseconds(currentItemIndex);
+            lastLayoutElapsedMilliseconds = layoutElapsedMilliseconds;
+            appliedLoopState = null;
+            isActive = true;
+            suspendedItemIndex = -1;
+
+            bool applied = true;
+                RunOnUiThread(() =>
+                {
+                    if (!SwitchToCurrentItem(true))
+                    {
+                        applied = false;
+                        return;
+                    }
+                });
+
+            if (applied)
+            {
+                State = SeamlessSlotState.Active;
+                return;
+            }
+
+            isActive = false;
+            State = SeamlessSlotState.Error;
+        }
+
         public void ApplyPlaybackPosition(long layoutElapsedMilliseconds)
         {
-            if (!HasPlayableItems || !isActive)
+            if (!isActive || currentItemIndex < 0)
             {
                 return;
             }
 
-            int targetIndex;
-            long itemElapsedMilliseconds;
-            ResolvePlaybackPosition(layoutElapsedMilliseconds, out targetIndex, out itemElapsedMilliseconds);
+            if (!HasPlayableItems)
+            {
+                SuspendForNoPlayableItems();
+                State = SeamlessSlotState.Ready;
+                return;
+            }
 
-            currentItemElapsedMilliseconds = itemElapsedMilliseconds;
-            currentItemDurationMilliseconds = GetItemDurationMilliseconds(targetIndex);
+            SeamlessContentItem currentItem = GetCurrentItem();
+            if (!IsContentPlayable(currentItem))
+            {
+                int nextPlayableIndex = FindNextPlayableIndex(currentItemIndex + 1);
+                if (nextPlayableIndex < 0)
+                {
+                    SuspendForNoPlayableItems();
+                    State = SeamlessSlotState.Ready;
+                    return;
+                }
 
-            if (targetIndex == currentItemIndex)
+                currentItemIndex = nextPlayableIndex;
+                currentItemElapsedMilliseconds = 0;
+                currentItemDurationMilliseconds = GetItemDurationMilliseconds(currentItemIndex);
+                lastLayoutElapsedMilliseconds = layoutElapsedMilliseconds;
+                appliedLoopState = null;
+
+                bool switchedApplied = true;
+                RunOnUiThread(() =>
+                {
+                    if (!SwitchToCurrentItem(true))
+                    {
+                        switchedApplied = false;
+                        return;
+                    }
+                });
+
+                if (switchedApplied)
+                {
+                    State = SeamlessSlotState.Active;
+                }
+
+                return;
+            }
+
+            if (lastLayoutElapsedMilliseconds < 0 || layoutElapsedMilliseconds < lastLayoutElapsedMilliseconds)
+            {
+                lastLayoutElapsedMilliseconds = layoutElapsedMilliseconds;
+            }
+
+            long elapsedDeltaMilliseconds = Math.Max(0, layoutElapsedMilliseconds - lastLayoutElapsedMilliseconds);
+            lastLayoutElapsedMilliseconds = layoutElapsedMilliseconds;
+
+            if (currentItemDurationMilliseconds <= 0)
+            {
+                currentItemDurationMilliseconds = GetItemDurationMilliseconds(currentItemIndex);
+            }
+
+            currentItemElapsedMilliseconds += elapsedDeltaMilliseconds;
+            bool switched = false;
+            while (currentItemElapsedMilliseconds >= currentItemDurationMilliseconds)
+            {
+                currentItemElapsedMilliseconds -= currentItemDurationMilliseconds;
+
+                int nextPlayableIndex = FindNextPlayableIndex(currentItemIndex + 1);
+                if (nextPlayableIndex < 0)
+                {
+                    SuspendForNoPlayableItems();
+                    State = SeamlessSlotState.Ready;
+                    return;
+                }
+
+                currentItemIndex = nextPlayableIndex;
+                currentItemDurationMilliseconds = GetItemDurationMilliseconds(currentItemIndex);
+                appliedLoopState = null;
+                switched = true;
+            }
+
+            if (!switched)
             {
                 UpdateCurrentItemLoopState();
                 return;
             }
 
-            currentItemIndex = targetIndex;
-            appliedLoopState = null;
             bool applied = true;
+            long seekMilliseconds = currentItemElapsedMilliseconds;
             RunOnUiThread(() =>
             {
                 if (!SwitchToCurrentItem(true))
@@ -199,7 +381,10 @@ namespace NewHyOnPlayer.PlaybackModes
                     return;
                 }
 
-                surface.ShowSurface();
+                if (seekMilliseconds > 0)
+                {
+                    surface.TrySeekToPosition(TimeSpan.FromMilliseconds(seekMilliseconds));
+                }
             });
 
             if (applied)
@@ -215,9 +400,17 @@ namespace NewHyOnPlayer.PlaybackModes
                 return;
             }
 
-            currentItemIndex = 0;
+            currentItemIndex = FindNextPlayableIndex(0);
+            if (currentItemIndex < 0)
+            {
+                SuspendForNoPlayableItems();
+                State = SeamlessSlotState.Ready;
+                return;
+            }
+
             currentItemElapsedMilliseconds = 0;
             currentItemDurationMilliseconds = GetItemDurationMilliseconds(currentItemIndex);
+            lastLayoutElapsedMilliseconds = -1;
             appliedLoopState = null;
 
             if (!isActive)
@@ -227,10 +420,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
             RunOnUiThread(() =>
             {
-                if (SwitchToCurrentItem(true))
-                {
-                    surface.ShowSurface();
-                }
+                SwitchToCurrentItem(true);
             });
         }
 
@@ -337,18 +527,7 @@ namespace NewHyOnPlayer.PlaybackModes
                 return -1;
             }
 
-            if (currentPlan.Items.Count == 1)
-            {
-                return 0;
-            }
-
-            int next = currentItemIndex + 1;
-            if (next >= currentPlan.Items.Count)
-            {
-                next = 0;
-            }
-
-            return next;
+            return FindNextPlayableIndex(currentItemIndex + 1);
         }
 
         private SeamlessContentItem GetCurrentItem()
@@ -418,6 +597,80 @@ namespace NewHyOnPlayer.PlaybackModes
             return Math.Max(1, item.ActualDurationSeconds) * 1000L;
         }
 
+        private int FindNextPlayableIndex(int startIndex)
+        {
+            if (currentPlan?.Items == null)
+            {
+                return -1;
+            }
+
+            int count = currentPlan.Items.Count;
+            if (count == 0)
+            {
+                return -1;
+            }
+
+            int safeStartIndex = startIndex;
+            if (safeStartIndex < 0)
+            {
+                safeStartIndex = 0;
+            }
+
+            safeStartIndex %= count;
+
+            for (int offset = 0; offset < count; offset++)
+            {
+                int candidateIndex = (safeStartIndex + offset) % count;
+                SeamlessContentItem candidate = currentPlan.Items[candidateIndex];
+                if (IsContentPlayable(candidate))
+                {
+                    return candidateIndex;
+                }
+            }
+
+            return -1;
+        }
+
+        private bool HasAnyPlayableItems()
+        {
+            if (currentPlan?.Items == null || currentPlan.Items.Count == 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < currentPlan.Items.Count; i++)
+            {
+                if (IsContentPlayable(currentPlan.Items[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsContentPlayable(SeamlessContentItem item)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+
+            if (isContentPlayable == null)
+            {
+                return true;
+            }
+
+            try
+            {
+                return isContentPlayable(item);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private void UpdateCurrentItemLoopState(bool force = false)
         {
             SeamlessContentItem item = GetCurrentItem();
@@ -478,11 +731,7 @@ namespace NewHyOnPlayer.PlaybackModes
                 return;
             }
 
-            if (autoPlay)
-            {
-                surface.ShowSurface();
-            }
-            else
+            if (!autoPlay)
             {
                 surface.HideSurface();
             }
@@ -508,6 +757,31 @@ namespace NewHyOnPlayer.PlaybackModes
                 return State != SeamlessSlotState.Error;
             }
 
+            if (surface.PlaylistIndex == currentItemIndex)
+            {
+                UpdateCurrentItemLoopState(force: true);
+
+                if (!surface.SeekToStart())
+                {
+                    Logger.WriteErrorLog($"플레이리스트 시작 위치 재설정 실패: Layout={layoutName}, Slot={slotIndex}, Element={ElementName}, Index={currentItemIndex}", Logger.GetLogFileName());
+                    State = SeamlessSlotState.Error;
+                    return false;
+                }
+
+                if (autoPlay)
+                {
+                    surface.ShowSurface();
+                    surface.Play();
+                }
+                else
+                {
+                    surface.Pause();
+                    surface.HideSurface();
+                }
+
+                return true;
+            }
+
             bool switched = surface.SwitchToIndex(currentPlan.Items.ToArray(), currentItemIndex, autoPlay);
             if (!switched)
             {
@@ -518,7 +792,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
             if (autoPlay)
             {
-                surface.ShowSurface();
+                surface.HideSurface();
             }
             else
             {

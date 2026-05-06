@@ -701,7 +701,6 @@ namespace NewHyOnPlayer
             try
             {
                 ApplyToLiteDb(localPageList, localPages);
-                SaveContentPeriods(payload.ContentPeriods);
                 weeklyScheduleUpdated = SyncSchedulePayloadToLocalDb(payload.Schedule);
             }
             catch (Exception ex)
@@ -741,12 +740,14 @@ namespace NewHyOnPlayer
                         playerInfoManager.g_PlayerInfo.PIF_CurrentPlayList = payload.PageList.PLI_PageListName;
                         playerInfoManager.g_PlayerInfo.PIF_DefaultPlayList = payload.PageList.PLI_PageListName;
                         playerInfoManager.SaveData();
+                        owner?.SyncReferencedContentPeriodsNow(refreshPlayback: false);
                         owner?.RequestPlaylistReload(payload.PageList.PLI_PageListName, "schedule-update");
                     }
                     else
                     {
                         // 스케줄 큐는 데이터만 반영하고 전환은 PageEnd/ContentEnd에서 처리한다.
                         playerInfoManager.SaveData();
+                        owner?.SyncReferencedContentPeriodsNow(refreshPlayback: false);
                     }
                 }
 
@@ -768,55 +769,6 @@ namespace NewHyOnPlayer
             Logger.WriteLog("UpdateService: update applied successfully.", Logger.GetLogFileName());
             LogStatus(queue, "Apply succeeded");
             queueRepository.DeleteById(queue.Id);
-        }
-
-        private void SaveContentPeriods(IEnumerable<ContentPeriodPayload> periods)
-        {
-            if (periods == null)
-            {
-                return;
-            }
-
-            var list = new List<ContentPeriodPayload>();
-            foreach (var period in periods)
-            {
-                if (period == null || string.IsNullOrWhiteSpace(period.ContentGuid))
-                {
-                    continue;
-                }
-
-                if (string.IsNullOrWhiteSpace(period.StartDate))
-                {
-                    period.StartDate = DateTime.Today.ToString("yyyy-MM-dd");
-                }
-
-                if (string.IsNullOrWhiteSpace(period.EndDate))
-                {
-                    period.EndDate = "2099-12-31";
-                }
-
-                if (DateTime.TryParse(period.StartDate, out var start) && DateTime.TryParse(period.EndDate, out var end))
-                {
-                    if (end.Date < start.Date)
-                    {
-                        period.EndDate = start.ToString("yyyy-MM-dd");
-                    }
-                }
-
-                list.Add(period);
-            }
-
-            if (list.Count == 0)
-            {
-                return;
-            }
-
-            using (var repo = new ContentPeriodRepository())
-            {
-                repo.UpsertMany(list);
-            }
-
-            owner?.RefreshContentPeriodCache(list);
         }
 
         private bool SyncSchedulePayloadToLocalDb(ScheduleUpdatePayload schedule)

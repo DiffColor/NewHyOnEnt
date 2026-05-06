@@ -8,6 +8,7 @@ import kr.co.turtlelab.andowsignage.data.realm.RealmContent;
 import kr.co.turtlelab.andowsignage.data.realm.RealmElement;
 import kr.co.turtlelab.andowsignage.data.realm.RealmPage;
 import kr.co.turtlelab.andowsignage.datamodels.ScrolltextDataModel;
+import kr.co.turtlelab.andowsignage.tools.ContentPeriodEvaluator;
 
 public class ScrolltextDataProvider {
 
@@ -39,6 +40,9 @@ public class ScrolltextDataProvider {
                 return contentList;
             }
             for (RealmContent realmContent : target.getContents()) {
+                if (!ContentPeriodEvaluator.isAllowed(realm, realmContent.getGuid(), System.currentTimeMillis())) {
+                    continue;
+                }
                 ScrolltextDataModel sdm = new ScrolltextDataModel();
                 sdm.setText(realmContent.getFileName());
                 sdm.setFont(realmContent.getContentType());

@@ -4,6 +4,7 @@ using System;
 using System.Windows.Input;
 using System.Linq;
 using System.Threading;
+using TurtleTools;
 
 namespace AndoW_Manager
 {
@@ -31,15 +32,36 @@ namespace AndoW_Manager
         {
             MinCombo.Items.Clear();
             SecCombo.Items.Clear();
+            StartHourCombo.Items.Clear();
+            StartMinuteCombo.Items.Clear();
+            EndHourCombo.Items.Clear();
+            EndMinuteCombo.Items.Clear();
+
+            StartHourCombo.Items.Add(string.Empty);
+            StartMinuteCombo.Items.Add(string.Empty);
+            EndHourCombo.Items.Add(string.Empty);
+            EndMinuteCombo.Items.Add(string.Empty);
 
             for (int i = 0; i < 60; i++)
             {
                 MinCombo.Items.Add(string.Format("{0:D2}", i));
                 SecCombo.Items.Add(string.Format("{0:D2}", i));
+                StartMinuteCombo.Items.Add(string.Format("{0:D2}", i));
+                EndMinuteCombo.Items.Add(string.Format("{0:D2}", i));
+            }
+
+            for (int i = 0; i < 24; i++)
+            {
+                StartHourCombo.Items.Add(string.Format("{0:D2}", i));
+                EndHourCombo.Items.Add(string.Format("{0:D2}", i));
             }
 
             MinCombo.SelectedIndex = 0;
             SecCombo.SelectedIndex = 10;
+            StartHourCombo.SelectedIndex = 0;
+            StartMinuteCombo.SelectedIndex = 0;
+            EndHourCombo.SelectedIndex = 0;
+            EndMinuteCombo.SelectedIndex = 0;
 
             if (PlayTimeChangeCheckBox.IsChecked == true)
             {
@@ -140,6 +162,10 @@ namespace AndoW_Manager
             EndDatePicker.SelectedDate = null;
             StartDatePicker.Text = string.Empty;
             EndDatePicker.Text = string.Empty;
+            StartHourCombo.SelectedIndex = 0;
+            StartMinuteCombo.SelectedIndex = 0;
+            EndHourCombo.SelectedIndex = 0;
+            EndMinuteCombo.SelectedIndex = 0;
             PlayTimeChangeCheckBox.IsChecked = false;
             this.Hide();  
         }
@@ -177,6 +203,8 @@ namespace AndoW_Manager
                         tmpElement.TextBlockOrderingNumber.Text = string.Format("{0:D2}", idx);
                         tmpElement.Margin = new Thickness(2);
                         tmpElement.EditColumn.Width = new GridLength(0, GridUnitType.Star);
+                        tmpElement.ShowPeriodInfo = true;
+                        tmpElement.DisplayThisElementInfo();
                         ContentListBox.Items.Add(tmpElement);
                         idx++;
                     }
@@ -232,6 +260,10 @@ namespace AndoW_Manager
             EndDatePicker.SelectedDate = null;
             StartDatePicker.Text = string.Empty;
             EndDatePicker.Text = string.Empty;
+            StartHourCombo.SelectedIndex = 0;
+            StartMinuteCombo.SelectedIndex = 0;
+            EndHourCombo.SelectedIndex = 0;
+            EndMinuteCombo.SelectedIndex = 0;
         }
 
         private void ChangeBtn_Click(object sender, RoutedEventArgs e)
@@ -243,7 +275,35 @@ namespace AndoW_Manager
 
             string startDate = StartDatePicker.Text;
             string endDate = EndDatePicker.Text;
-            bool hasPeriodInput = !string.IsNullOrWhiteSpace(startDate) || !string.IsNullOrWhiteSpace(endDate);
+            string startTime = GetSelectedTime(StartHourCombo, StartMinuteCombo);
+            string endTime = GetSelectedTime(EndHourCombo, EndMinuteCombo);
+            string validationError = ValidatePeriodInputs();
+            if (!string.IsNullOrWhiteSpace(validationError))
+            {
+                MessageTools.ShowMessageBox(validationError, "확인");
+                return;
+            }
+
+            if (Page1.Instance != null
+                && !Page1.Instance.TryNormalizePeriodDataInputs(
+                    startDate,
+                    endDate,
+                    startTime,
+                    endTime,
+                    out startDate,
+                    out endDate,
+                    out startTime,
+                    out endTime,
+                    out validationError))
+            {
+                MessageTools.ShowMessageBox(validationError, "확인");
+                return;
+            }
+
+            bool hasPeriodInput = !string.IsNullOrWhiteSpace(startDate)
+                || !string.IsNullOrWhiteSpace(endDate)
+                || !string.IsNullOrWhiteSpace(startTime)
+                || !string.IsNullOrWhiteSpace(endTime);
 
             foreach (ContentInfoElement item in ContentListBox.Items)
             {
@@ -257,7 +317,7 @@ namespace AndoW_Manager
 
                     if (hasPeriodInput)
                     {
-                        Page1.Instance.SetPeriodData(item.g_ContentsInfoClass, startDate, endDate);
+                        Page1.Instance.SetPeriodData(item.g_ContentsInfoClass, startDate, endDate, startTime, endTime);
                     }
                     item.DisplayThisElementInfo();
                 }
@@ -268,34 +328,42 @@ namespace AndoW_Manager
             Page1.Instance.UpdateContentsListByEditWindow(datalist);
         }
 
+        private string ValidatePeriodInputs()
+        {
+            bool hasStartHour = string.IsNullOrWhiteSpace(StartHourCombo?.SelectedItem?.ToString()) == false;
+            bool hasStartMinute = string.IsNullOrWhiteSpace(StartMinuteCombo?.SelectedItem?.ToString()) == false;
+            bool hasEndHour = string.IsNullOrWhiteSpace(EndHourCombo?.SelectedItem?.ToString()) == false;
+            bool hasEndMinute = string.IsNullOrWhiteSpace(EndMinuteCombo?.SelectedItem?.ToString()) == false;
+
+            if (hasStartHour != hasStartMinute)
+            {
+                return "표출 시작 시간은 시와 분을 모두 입력해주세요.";
+            }
+
+            if (hasEndHour != hasEndMinute)
+            {
+                return "표출 종료 시간은 시와 분을 모두 입력해주세요.";
+            }
+
+            return string.Empty;
+        }
+
         private void StartDatePicker_SelectedDateChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (EndDatePicker.SelectedDate == null || StartDatePicker.SelectedDate == null)
+            if (StartDatePicker.SelectedDate == null)
             {
                 return;
             }
 
-            DateTime start = StartDatePicker.SelectedDate.Value.Date;
-            DateTime end = EndDatePicker.SelectedDate.Value.Date;
-            if (start > end)
+            if (EndDatePicker.SelectedDate == null && string.IsNullOrWhiteSpace(EndDatePicker.Text))
             {
-                EndDatePicker.SelectedDate = start;
+                EndDatePicker.SelectedDate = StartDatePicker.SelectedDate.Value.Date;
             }
         }
 
         private void EndDatePicker_SelectedDateChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (StartDatePicker.SelectedDate == null || EndDatePicker.SelectedDate == null)
-            {
-                return;
-            }
-
-            DateTime start = StartDatePicker.SelectedDate.Value.Date;
-            DateTime end = EndDatePicker.SelectedDate.Value.Date;
-            if (end < start)
-            {
-                StartDatePicker.SelectedDate = end;
-            }
+            return;
         }
 
         private void StartDate_CalendarOpened(object sender, RoutedEventArgs e)
@@ -395,6 +463,9 @@ namespace AndoW_Manager
             {
                 EndDatePicker.Text = pd.EndDate ?? string.Empty;
             }
+
+            ApplyTimeToInputs(pd.StartTime, StartHourCombo, StartMinuteCombo);
+            ApplyTimeToInputs(pd.EndTime, EndHourCombo, EndMinuteCombo);
         }
 
         private void ClearPeriodInputs()
@@ -403,6 +474,36 @@ namespace AndoW_Manager
             EndDatePicker.SelectedDate = null;
             StartDatePicker.Text = string.Empty;
             EndDatePicker.Text = string.Empty;
+            StartHourCombo.SelectedIndex = 0;
+            StartMinuteCombo.SelectedIndex = 0;
+            EndHourCombo.SelectedIndex = 0;
+            EndMinuteCombo.SelectedIndex = 0;
+        }
+
+        private static void ApplyTimeToInputs(string value, System.Windows.Controls.ComboBox hourCombo, System.Windows.Controls.ComboBox minuteCombo)
+        {
+            if (hourCombo == null || minuteCombo == null || string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            if (TimeSpan.TryParse(value, out var parsed))
+            {
+                hourCombo.SelectedItem = parsed.Hours.ToString("D2");
+                minuteCombo.SelectedItem = parsed.Minutes.ToString("D2");
+            }
+        }
+
+        private static string GetSelectedTime(System.Windows.Controls.ComboBox hourCombo, System.Windows.Controls.ComboBox minuteCombo)
+        {
+            string hour = hourCombo?.SelectedItem?.ToString();
+            string minute = minuteCombo?.SelectedItem?.ToString();
+            if (string.IsNullOrWhiteSpace(hour) || string.IsNullOrWhiteSpace(minute))
+            {
+                return string.Empty;
+            }
+
+            return string.Format("{0}:{1}", hour.PadLeft(2, '0'), minute.PadLeft(2, '0'));
         }
     }
 }

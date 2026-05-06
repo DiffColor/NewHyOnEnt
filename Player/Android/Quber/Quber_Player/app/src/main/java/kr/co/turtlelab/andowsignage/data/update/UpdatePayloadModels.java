@@ -20,6 +20,7 @@ public final class UpdatePayloadModels {
         public ContractPlaylistPayload Contract;
         public ScheduleUpdatePayload Schedule;
         public List<ContentPeriodPayload> ContentPeriods = new ArrayList<>();
+        public List<String> ContentPeriodUpdateGuids = new ArrayList<>();
     }
 
     public static final class ScheduleUpdatePayload {
@@ -44,6 +45,8 @@ public final class UpdatePayloadModels {
         public String FileName = "";
         public String StartDate = "";
         public String EndDate = "";
+        public String StartTime = "";
+        public String EndTime = "";
     }
 
     public static final class SpecialSchedulePayload {

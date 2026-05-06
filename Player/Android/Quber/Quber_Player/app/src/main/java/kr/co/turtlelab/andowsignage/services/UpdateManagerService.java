@@ -9,9 +9,12 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.List;
 
 import kr.co.turtlelab.andowsignage.AndoWSignage;
 import kr.co.turtlelab.andowsignage.AndoWSignageApp;
@@ -445,6 +448,10 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                     handled = false;
                 }
                 break;
+            case "updatecontentperiod":
+                syncManager.syncContentPeriodsByGuid(parseContentPeriodIds(payload), true);
+                client.updateCommandHistory(historyId, "done", null, null, null);
+                break;
             case "reboot":
                 client.updateCommandHistory(historyId, "in_progress", null, null, null);
                 PowerApi.requestReboot(this);
@@ -502,6 +509,26 @@ public class UpdateManagerService extends Service implements SignalRClientServic
                 && payload.PageList != null
                 && payload.Pages != null
                 && !payload.Pages.isEmpty();
+    }
+
+    private List<String> parseContentPeriodIds(UpdatePayloadModels.UpdatePayload payload) {
+        List<String> result = new java.util.ArrayList<>();
+        if (payload == null || payload.ContentPeriodUpdateGuids == null || payload.ContentPeriodUpdateGuids.isEmpty()) {
+            return result;
+        }
+
+        for (String item : payload.ContentPeriodUpdateGuids) {
+            if (TextUtils.isEmpty(item)) {
+                continue;
+            }
+
+            String value = item.trim();
+            if (!TextUtils.isEmpty(value) && !result.contains(value)) {
+                result.add(value);
+            }
+        }
+
+        return result;
     }
 
     @Override
@@ -588,6 +615,7 @@ public class UpdateManagerService extends Service implements SignalRClientServic
         if (isFirstSync || guidChanged) {
             client.fetchInitialWeeklySchedule();
         }
+        syncManager.syncAllKnownContentPeriods(true);
 
         if (guidChanged) {
             syncManager.releasePlayerLease(previousGuid);

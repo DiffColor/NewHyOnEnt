@@ -52,12 +52,24 @@
                         <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
                     <Rectangle Fill="#FFB5B8CE" Grid.ColumnSpan="2"/>
-                    <StackPanel Orientation="Horizontal" Grid.Column="0" HorizontalAlignment="Left" Margin="12,0,0,0">
+                    <StackPanel Orientation="Vertical" Grid.Column="0" HorizontalAlignment="Left" Margin="12,2,0,2">
+                        <StackPanel Orientation="Horizontal">
                         <TextBlock TextWrapping="Wrap" Text="기간 :" Foreground="Black" VerticalAlignment="Center" FontFamily="Malgun Gothic" FontSize="13.333" Margin="0,0,6,0"/>
                         <DatePicker x:Name="StartDatePicker" Width="120" VerticalAlignment="Center" SelectedDateChanged="StartDatePicker_SelectedDateChanged" CalendarOpened="StartDate_CalendarOpened"/>
                         <TextBlock Text="~" VerticalAlignment="Center" Margin="6,0,6,0" FontFamily="Malgun Gothic" Foreground="Black"/>
                         <DatePicker x:Name="EndDatePicker" Width="120" VerticalAlignment="Center" SelectedDateChanged="EndDatePicker_SelectedDateChanged" CalendarOpened="EndDate_CalendarOpened"/>
                         <Button x:Name="ClearDateBtn" Content="초기화" Width="60" Height="24" Margin="8,0,0,0" Click="ClearDateBtn_Click"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="40,4,0,0">
+                            <TextBlock TextWrapping="Wrap" Text="시간 :" Foreground="Black" VerticalAlignment="Center" FontFamily="Malgun Gothic" FontSize="13.333" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="StartHourCombo" Width="52" Height="24" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text=":" VerticalAlignment="Center" Margin="0,0,4,0" FontFamily="Malgun Gothic" Foreground="Black"/>
+                            <ComboBox x:Name="StartMinuteCombo" Width="52" Height="24" VerticalAlignment="Center"/>
+                            <TextBlock Text="~" VerticalAlignment="Center" Margin="8,0,8,0" FontFamily="Malgun Gothic" Foreground="Black"/>
+                            <ComboBox x:Name="EndHourCombo" Width="52" Height="24" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text=":" VerticalAlignment="Center" Margin="0,0,4,0" FontFamily="Malgun Gothic" Foreground="Black"/>
+                            <ComboBox x:Name="EndMinuteCombo" Width="52" Height="24" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,15,0">
                         <CheckBox x:Name="PlayTimeChangeCheckBox" Content="재생시간 변경" VerticalAlignment="Center" Margin="0,0,8,0"/>

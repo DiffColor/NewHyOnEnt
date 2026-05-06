@@ -89,6 +89,23 @@ namespace NewHyOnPlayer
             ResetConnection();
         }
 
+        public List<ContentPeriodPayload> FetchContentPeriodsByGuids(IEnumerable<string> contentGuids)
+        {
+            var periodMap = FetchContentPeriods(contentGuids);
+            return periodMap.Values
+                .Where(x => x != null && string.IsNullOrWhiteSpace(x.ContentGuid) == false)
+                .Select(x => new ContentPeriodPayload
+                {
+                    ContentGuid = x.ContentGuid ?? string.Empty,
+                    FileName = x.FileName ?? string.Empty,
+                    StartDate = x.StartDate ?? string.Empty,
+                    EndDate = x.EndDate ?? string.Empty,
+                    StartTime = x.StartTime ?? string.Empty,
+                    EndTime = x.EndTime ?? string.Empty
+                })
+                .ToList();
+        }
+
         private void OnElapsed(object sender, EventArgs e)
         {
             TrySync(scheduleNext: true);
@@ -846,8 +863,7 @@ namespace NewHyOnPlayer
                 PlaylistName = pageList.PLI_PageListName ?? playlistName,
                 PageList = pageList,
                 Pages = pages,
-                Contract = BuildContractPayload(playerId, playerName, pageList, pages),
-                ContentPeriods = BuildContentPeriodsForPages(pages)
+                Contract = BuildContractPayload(playerId, playerName, pageList, pages)
             };
         }
 
@@ -997,87 +1013,6 @@ namespace NewHyOnPlayer
             return payload;
         }
 
-        private List<ContentPeriodPayload> BuildContentPeriodsForPages(List<AndoW.Shared.PageInfoClass> pages)
-        {
-            var results = new List<ContentPeriodPayload>();
-            if (pages == null || pages.Count == 0)
-            {
-                return results;
-            }
-
-            var contentMap = new Dictionary<string, AndoW.Shared.ContentsInfoClass>(StringComparer.OrdinalIgnoreCase);
-            foreach (var page in pages)
-            {
-                if (page?.PIC_Elements == null)
-                {
-                    continue;
-                }
-
-                foreach (var element in page.PIC_Elements)
-                {
-                    if (element?.EIF_ContentsInfoClassList == null)
-                    {
-                        continue;
-                    }
-
-                    foreach (var content in element.EIF_ContentsInfoClassList)
-                    {
-                        if (content == null || string.IsNullOrWhiteSpace(content.CIF_StrGUID))
-                        {
-                            continue;
-                        }
-
-                        if (!IsFileBasedContent(content))
-                        {
-                            continue;
-                        }
-
-                        if (!contentMap.ContainsKey(content.CIF_StrGUID))
-                        {
-                            contentMap[content.CIF_StrGUID] = content;
-                        }
-                    }
-                }
-            }
-
-            if (contentMap.Count == 0)
-            {
-                return results;
-            }
-
-            var periodMap = FetchContentPeriods(contentMap.Keys);
-            string defaultStart = DateTime.Today.ToString("yyyy-MM-dd");
-
-            foreach (var kv in contentMap)
-            {
-                string guid = kv.Key;
-                var content = kv.Value;
-                if (content == null)
-                {
-                    continue;
-                }
-
-                RethinkContentPeriod period = null;
-                periodMap.TryGetValue(guid, out period);
-
-                results.Add(new ContentPeriodPayload
-                {
-                    ContentGuid = guid,
-                    FileName = string.IsNullOrWhiteSpace(period?.FileName)
-                        ? content.CIF_FileName ?? string.Empty
-                        : period.FileName,
-                    StartDate = string.IsNullOrWhiteSpace(period?.StartDate)
-                        ? defaultStart
-                        : period.StartDate,
-                    EndDate = string.IsNullOrWhiteSpace(period?.EndDate)
-                        ? "2099-12-31"
-                        : period.EndDate
-                });
-            }
-
-            return results;
-        }
-
         private Dictionary<string, RethinkContentPeriod> FetchContentPeriods(IEnumerable<string> contentGuids)
         {
             var result = new Dictionary<string, RethinkContentPeriod>(StringComparer.OrdinalIgnoreCase);
@@ -1117,22 +1052,6 @@ namespace NewHyOnPlayer
             }
 
             return result;
-        }
-
-        private static bool IsFileBasedContent(AndoW.Shared.ContentsInfoClass content)
-        {
-            if (content == null)
-            {
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(content.CIF_ContentType))
-            {
-                return true;
-            }
-
-            return !content.CIF_ContentType.Equals("WebSiteURL", StringComparison.OrdinalIgnoreCase)
-                && !content.CIF_ContentType.Equals("Browser", StringComparison.OrdinalIgnoreCase);
         }
 
         private static SpecialSchedulePayload MapSpecialSchedule(RethinkSpecialSchedule schedule)
@@ -1298,6 +1217,8 @@ namespace NewHyOnPlayer
             public string FileName { get; set; }
             public string StartDate { get; set; }
             public string EndDate { get; set; }
+            public string StartTime { get; set; }
+            public string EndTime { get; set; }
         }
 
         private sealed class RethinkWeeklySchedule

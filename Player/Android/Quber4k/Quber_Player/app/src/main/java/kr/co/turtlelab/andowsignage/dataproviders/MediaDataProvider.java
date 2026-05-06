@@ -9,17 +9,28 @@ import kr.co.turtlelab.andowsignage.data.store.StoredContent;
 import kr.co.turtlelab.andowsignage.data.store.StoredElement;
 import kr.co.turtlelab.andowsignage.data.store.StoredPage;
 import kr.co.turtlelab.andowsignage.datamodels.MediaDataModel;
+import kr.co.turtlelab.andowsignage.tools.ContentPeriodEvaluator;
 import kr.co.turtlelab.andowsignage.tools.LocalPathUtils;
 
 public class MediaDataProvider {
+
+    public static class ContentLoadResult {
+        public final List<MediaDataModel> contentList = new ArrayList<>();
+        public boolean hasContentPeriodConstraint = false;
+        public long visibleDurationSec = 0L;
+    }
 
     private MediaDataProvider() {
     }
 
     public static List<MediaDataModel> getContentList(String pageId, String elementName) {
-        List<MediaDataModel> contentList = new ArrayList<>();
+        return getContentLoadResult(pageId, elementName).contentList;
+    }
+
+    public static ContentLoadResult getContentLoadResult(String pageId, String elementName) {
+        ContentLoadResult result = new ContentLoadResult();
         if (pageId == null || elementName == null) {
-            return contentList;
+            return result;
         }
         ObjectBoxDb storeDb = ObjectBoxDb.getDefaultInstance();
         try {
@@ -27,7 +38,7 @@ public class MediaDataProvider {
                     .equalTo("pageId", pageId)
                     .findFirst();
             if (page == null || page.getElements() == null) {
-                return contentList;
+                return result;
             }
             StoredPage detached = storeDb.copyEntity(page);
             StoredElement target = null;
@@ -38,9 +49,15 @@ public class MediaDataProvider {
                 }
             }
             if (target == null || target.getContents() == null) {
-                return contentList;
+                return result;
             }
             for (StoredContent storedContent : target.getContents()) {
+                if (ContentPeriodEvaluator.hasPeriod(storeDb, storedContent.getGuid())) {
+                    result.hasContentPeriodConstraint = true;
+                }
+                if (!ContentPeriodEvaluator.isAllowed(storeDb, storedContent.getGuid(), System.currentTimeMillis())) {
+                    continue;
+                }
                 MediaDataModel mdm = new MediaDataModel();
                 if (storedContent.getFileFullPath() != null && !storedContent.getFileFullPath().isEmpty()) {
                     String path = storedContent.getFileFullPath();
@@ -56,11 +73,12 @@ public class MediaDataProvider {
                 mdm.setPlayTime(storedContent.getPlayMinute(), storedContent.getPlaySecond());
                 mdm.setValidState(String.valueOf(storedContent.isContentValid()));
                 mdm.setMuted(target.isMuted());
-                contentList.add(mdm);
+                result.contentList.add(mdm);
+                result.visibleDurationSec += Math.max(1L, mdm.getPlayTimeSec());
             }
         } finally {
             storeDb.close();
         }
-        return contentList;
+        return result;
     }
 }

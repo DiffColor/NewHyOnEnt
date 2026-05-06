@@ -18,6 +18,7 @@ public class StoredContent {
     private String fileName;
     private String fileFullPath;
     private String contentType;
+    private String guid;
     private String playMinute;
     private String playSecond;
     private boolean valid;
@@ -70,6 +71,14 @@ public class StoredContent {
 
     public void setContentType(String contentType) {
         this.contentType = contentType;
+    }
+
+    public String getGuid() {
+        return guid;
+    }
+
+    public void setGuid(String guid) {
+        this.guid = guid;
     }
 
     public String getPlayMinute() {

@@ -218,6 +218,9 @@ namespace NewHyOnPlayer
                             RecordCommandDone(historyId, playerGuid, CommandHistoryStatus.Failed, "WEEKLY_PAYLOAD", "payload missing");
                             return false;
                         }
+                    case "updatecontentperiod":
+                        owner?.SyncSpecificContentPeriodsNow(ParseContentPeriodUpdateIds(payloadData), refreshPlayback: true);
+                        return true;
                     case "reboot":
                         {
                             string historyId = RecordCommandQueued(playerGuid, normalizedCommand);
@@ -336,6 +339,21 @@ namespace NewHyOnPlayer
                    && payloadData.PageList != null
                    && payloadData.Pages != null
                    && payloadData.Pages.Count > 0;
+        }
+
+        private static IReadOnlyCollection<string> ParseContentPeriodUpdateIds(SharedUpdatePayload payload)
+        {
+            var items = payload?.ContentPeriodUpdateGuids;
+            if (items == null || items.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            return items
+                .Where(x => string.IsNullOrWhiteSpace(x) == false)
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         private bool HasActiveQueue()
@@ -663,13 +681,13 @@ namespace NewHyOnPlayer
                 {
                     PageList = playlist.PageList,
                     Pages = playlist.Pages,
-                    Contract = playlist.Contract,
-                    ContentPeriods = playlist.ContentPeriods
+                    Contract = playlist.Contract
                 };
 
                 Logger.WriteLog($"스케줄 수신: 플레이리스트 다운로드 예약 -> {payload.PageList?.PLI_PageListName}", Logger.GetLogFileName());
                 updateService.EnqueueFromSchedule(playerInfo, payload);
             }
         }
+
     }
 }

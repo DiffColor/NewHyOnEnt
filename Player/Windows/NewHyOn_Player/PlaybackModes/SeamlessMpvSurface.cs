@@ -12,6 +12,8 @@ namespace NewHyOnPlayer.PlaybackModes
         private const int ControlledImageDurationSeconds = 86400;
         private readonly MPVLibControl player;
         private bool muted = true;
+        private bool hasLoadedMedia;
+        private bool hasPlaybackSession;
 
         public event Action MediaLoaded;
         public SeamlessMpvSurface()
@@ -56,6 +58,16 @@ namespace NewHyOnPlayer.PlaybackModes
             get { return player.Position; }
         }
 
+        public bool HasLoadedMedia
+        {
+            get { return hasLoadedMedia; }
+        }
+
+        public bool HasPlaybackSession
+        {
+            get { return hasPlaybackSession; }
+        }
+
         public void Configure(bool muted)
         {
             this.muted = muted;
@@ -83,6 +95,8 @@ namespace NewHyOnPlayer.PlaybackModes
 
             int safeIndex = NormalizeIndex(items.Length, startIndex);
             ApplyPlaybackOptions(items[safeIndex], items.Length);
+            hasLoadedMedia = false;
+            hasPlaybackSession = true;
             player.LoadPlaylist(items.Select(x => x.FilePath).ToArray(), autoPlay);
 
             if (safeIndex > 0)
@@ -108,6 +122,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
             int safeIndex = NormalizeIndex(items.Length, index);
             ApplyPlaybackOptions(items[safeIndex], items.Length);
+            hasPlaybackSession = true;
             return player.SetPlaylistIndex(safeIndex, autoPlay);
         }
 
@@ -122,6 +137,8 @@ namespace NewHyOnPlayer.PlaybackModes
             player.AutoPlay = autoPlay;
             player.Muted = muted;
             player.Loop = item.ShouldLoop;
+            hasLoadedMedia = false;
+            hasPlaybackSession = true;
             if (item.ContentType == NewHyOnPlayer.ContentType.Image)
             {
                 player.ImageDuration = Math.Max(1, item.DurationSeconds).ToString(CultureInfo.InvariantCulture);
@@ -155,6 +172,16 @@ namespace NewHyOnPlayer.PlaybackModes
             player.Pause();
         }
 
+        public void PauseIfActive()
+        {
+            if (!hasPlaybackSession || !hasLoadedMedia)
+            {
+                return;
+            }
+
+            player.Pause();
+        }
+
         public bool SeekToStart()
         {
             return player.TrySeek(TimeSpan.Zero);
@@ -175,6 +202,8 @@ namespace NewHyOnPlayer.PlaybackModes
             {
             }
 
+            hasLoadedMedia = false;
+            hasPlaybackSession = false;
             HideSurface();
         }
 
@@ -213,6 +242,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
         private void Player_FileLoadedEvent()
         {
+            hasLoadedMedia = true;
             MediaLoaded?.Invoke();
         }
     }

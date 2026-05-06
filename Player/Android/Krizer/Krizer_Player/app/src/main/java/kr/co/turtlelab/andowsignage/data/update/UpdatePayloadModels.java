@@ -19,6 +19,8 @@ public final class UpdatePayloadModels {
         public List<PageInfoClass> Pages;
         public ContractPlaylistPayload Contract;
         public ScheduleUpdatePayload Schedule;
+        public List<ContentPeriodPayload> ContentPeriods = new ArrayList<>();
+        public List<String> ContentPeriodUpdateGuids = new ArrayList<>();
     }
 
     public static final class ScheduleUpdatePayload {
@@ -35,6 +37,16 @@ public final class UpdatePayloadModels {
         public PageListInfoClass PageList;
         public List<PageInfoClass> Pages = new ArrayList<>();
         public ContractPlaylistPayload Contract;
+        public List<ContentPeriodPayload> ContentPeriods = new ArrayList<>();
+    }
+
+    public static final class ContentPeriodPayload {
+        public String ContentGuid = "";
+        public String FileName = "";
+        public String StartDate = "";
+        public String EndDate = "";
+        public String StartTime = "";
+        public String EndTime = "";
     }
 
     public static final class SpecialSchedulePayload {
@@ -78,8 +90,8 @@ public final class UpdatePayloadModels {
         public int PlaySecond;
         public int Volume;
         public boolean Landscape;
-        public double CanvasWidth = 1920;
-        public double CanvasHeight = 1080;
+        public double CanvasWidth;
+        public double CanvasHeight;
         public List<ContractElementPayload> Elements = new ArrayList<>();
     }
 

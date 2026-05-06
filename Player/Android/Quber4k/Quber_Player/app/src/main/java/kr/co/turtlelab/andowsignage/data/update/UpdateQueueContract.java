@@ -101,6 +101,7 @@ public final class UpdateQueueContract {
 
     public static final class ContentPayload {
         public String uid;
+        public String contentGuid;
         public String elementId;
         public String fileName;
         public String fileFullPath;

@@ -181,6 +181,10 @@ public class PlaybackSlotView extends RelativeLayout {
         return isMediaSlot() && mediaView.shouldDelayLayoutTransition();
     }
 
+    public int getConfiguredContentCount() {
+        return isMediaSlot() ? mediaView.getConfiguredContentCount() : 0;
+    }
+
     public boolean isPlaybackActiveForHeartbeat() {
         return isMediaSlot() && mediaView.isPlaybackActiveForHeartbeat();
     }

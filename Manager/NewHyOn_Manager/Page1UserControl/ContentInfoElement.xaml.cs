@@ -88,13 +88,10 @@ namespace AndoW_Manager
 
             if (sPD != null)
             {
-                string start = string.IsNullOrWhiteSpace(sPD.StartDate) ? DateTime.Today.ToString("yyyy-MM-dd") : sPD.StartDate;
-                string end = string.IsNullOrWhiteSpace(sPD.EndDate) ? "2099-12-31" : sPD.EndDate;
-
-                PeriodTBlock.Text = string.Format("({0} ~ {1})", start, end);
+                PeriodTBlock.Text = BuildPeriodDisplayText(sPD);
                 PeriodTBlock.Visibility = Visibility.Visible;
 
-                if (DateTime.TryParse(end, out var endDate) && endDate.Date < DateTime.Today)
+                if (DateTime.TryParse(sPD.EndDate, out var endDate) && endDate.Date < DateTime.Today)
                 {
                     PeriodTBlock.Foreground = ColorTools.GetSolidBrushByColorString("#FFE75A5A");
                 }
@@ -308,6 +305,35 @@ namespace AndoW_Manager
 
             return !content.CIF_ContentType.Equals(ContentType.WebSiteURL.ToString(), System.StringComparison.OrdinalIgnoreCase)
                 && !content.CIF_ContentType.Equals(ContentType.Browser.ToString(), System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string BuildPeriodDisplayText(PeriodData period)
+        {
+            if (period == null)
+            {
+                return string.Empty;
+            }
+
+            bool hasStartDate = string.IsNullOrWhiteSpace(period.StartDate) == false;
+            bool hasEndDate = string.IsNullOrWhiteSpace(period.EndDate) == false;
+            bool hasTime = string.IsNullOrWhiteSpace(period.StartTime) == false
+                && string.IsNullOrWhiteSpace(period.EndTime) == false;
+
+            if (hasTime && !hasStartDate && !hasEndDate)
+            {
+                return string.Format("(매일 {0} ~ {1})", period.StartTime, period.EndTime);
+            }
+
+            string start = hasStartDate ? period.StartDate : DateTime.Today.ToString("yyyy-MM-dd");
+            string end = hasEndDate ? period.EndDate : "2099-12-31";
+
+            if (hasTime)
+            {
+                start = string.Format("{0} {1}", start, period.StartTime);
+                end = string.Format("{0} {1}", end, period.EndTime);
+            }
+
+            return string.Format("({0} ~ {1})", start, end);
         }
     }
 }

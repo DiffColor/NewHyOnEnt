@@ -214,6 +214,10 @@ public class MediaView extends RelativeLayout {
         return mediaConfigured && cdmList != null && !cdmList.isEmpty();
     }
 
+    public int getConfiguredContentCount() {
+        return hasConfiguredContents() && cdmList != null ? cdmList.size() : 0;
+    }
+
     private void initChildViews() {
 
         LayoutParams params = new LayoutParams(

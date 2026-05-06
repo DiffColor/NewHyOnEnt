@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,7 @@ namespace NewHyOnPlayer.PlaybackModes
         private readonly SeamlessMpvSurface surface;
         private readonly DispatcherTimer pageTimer;
         private readonly DispatcherTimer contentTimer;
+        private readonly DispatcherTimer blankRecoveryTimer;
         private readonly SemaphoreSlim loadGate = new SemaphoreSlim(1, 1);
 
         private bool initialized;
@@ -36,6 +38,8 @@ namespace NewHyOnPlayer.PlaybackModes
         private long pendingLoadedSeekPositionMilliseconds = NoPendingPositionMilliseconds;
         private string currentPageListName = string.Empty;
         private DateTime currentPageStartedAtUtc = DateTime.MinValue;
+        private DateTime lastBlankRecoveryAttempt = DateTime.MinValue;
+        private bool blankRecoveryPending;
         private SeamlessSlotPlan currentSlotPlan = new SeamlessSlotPlan();
         private SeamlessContentItem[] currentItems = Array.Empty<SeamlessContentItem>();
 
@@ -51,11 +55,17 @@ namespace NewHyOnPlayer.PlaybackModes
             pageTimer.Tick += PageTimer_Tick;
             contentTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher);
             contentTimer.Tick += ContentTimer_Tick;
+            blankRecoveryTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            blankRecoveryTimer.Tick += BlankRecoveryTimer_Tick;
             surface.MediaLoaded += Surface_MediaLoaded;
         }
 
         public event Action<int> PlaylistIndexChangeRequested;
         public event Action SyncIndexRequestNeeded;
+        public event Action<bool> PresentationVisibilityChanged;
 
         public int CurrentPageElapsedSeconds
         {
@@ -120,6 +130,7 @@ namespace NewHyOnPlayer.PlaybackModes
                 Panel.SetZIndex(surface, 0);
                 surface.HideSurface();
             });
+            blankRecoveryTimer.Start();
         }
 
         public void StartInitialPlayback(string defaultPlaylist)
@@ -140,6 +151,37 @@ namespace NewHyOnPlayer.PlaybackModes
         public bool IsPresentationActive()
         {
             return presentationActive;
+        }
+
+        public bool TryGetPresentationState(out bool isVisible, out int playlistIndex, out TimeSpan position)
+        {
+            isVisible = presentationActive;
+            playlistIndex = -1;
+            position = TimeSpan.Zero;
+
+            if (!presentationActive)
+            {
+                return true;
+            }
+
+            if (currentItems == null || currentItems.Length == 0)
+            {
+                return false;
+            }
+
+            int activeIndex = GetCurrentPlaylistIndex();
+            if (activeIndex < 0)
+            {
+                return false;
+            }
+
+            playlistIndex = activeIndex;
+            if (surface.IsMediaLoaded)
+            {
+                position = NormalizeSyncPosition(activeIndex, surface.Position + PositionSyncLeadTime);
+            }
+
+            return true;
         }
 
         public List<PlaybackDebugItem> GetDebugItems()
@@ -222,6 +264,53 @@ namespace NewHyOnPlayer.PlaybackModes
             owner?.OnAirServiceInstance?.RefreshWeeklySchedule();
         }
 
+        public void HandleContentPeriodUpdated(IReadOnlyCollection<string> contentGuids)
+        {
+            bool isSyncPlaybackActive = owner?.IsSyncPlaybackActive ?? false;
+            if (isSyncPlaybackActive && !IsLeaderSyncEnabled())
+            {
+                return;
+            }
+
+            string playlistName = currentPageListName;
+            if (string.IsNullOrWhiteSpace(playlistName))
+            {
+                playlistName = owner?.g_PlayerInfoManager?.g_PlayerInfo?.PIF_CurrentPlayList;
+            }
+
+            hostCanvas.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    int playableCount = CountPlayableItems(currentItems);
+                    if (playableCount == 0)
+                    {
+                        if (HasPlayableContent(playlistName))
+                        {
+                            HideAll();
+                        }
+                        else
+                        {
+                            HideAll();
+                            owner?.SetInitialLoadingVisible(false);
+                        }
+                        return;
+                    }
+
+                    SeamlessContentItem currentItem = GetItemByIndex(currentPlaylistIndex);
+                    if (!presentationActive || currentPlaylistIndex < 0 || !IsContentPlayableNow(currentItem))
+                    {
+                        int startIndex = currentPlaylistIndex >= 0 ? currentPlaylistIndex + 1 : 0;
+                        ApplyPlaylistIndexOnly(startIndex, IsLeaderSyncEnabled());
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteErrorLog($"sync 기간 변경 재평가 실패: {ex}", Logger.GetLogFileName());
+                }
+            }));
+        }
+
         public void RequestPlaylistReload(string playlistName, string reason)
         {
             if (string.IsNullOrWhiteSpace(playlistName))
@@ -273,6 +362,10 @@ namespace NewHyOnPlayer.PlaybackModes
                 {
                     Logger.WriteErrorLog($"sync mpv 컨테이너 페이지 로드 실패: {ex}", Logger.GetLogFileName());
                 }
+                finally
+                {
+                    blankRecoveryPending = false;
+                }
             });
         }
 
@@ -287,11 +380,12 @@ namespace NewHyOnPlayer.PlaybackModes
             Interlocked.Increment(ref playbackVersion);
             StopPageTimer();
             StopContentTimer();
-            presentationActive = false;
+            SetPresentationActive(false);
+            blankRecoveryPending = false;
             currentPageStartedAtUtc = DateTime.MinValue;
             hostCanvas.Dispatcher.Invoke(() =>
             {
-                surface.Pause();
+                surface.PauseIfActive();
                 surface.HideSurface();
             });
         }
@@ -301,7 +395,8 @@ namespace NewHyOnPlayer.PlaybackModes
             Interlocked.Increment(ref playbackVersion);
             StopPageTimer();
             StopContentTimer();
-            presentationActive = false;
+            SetPresentationActive(false);
+            blankRecoveryPending = false;
             currentPageStartedAtUtc = DateTime.MinValue;
             currentPlaylistIndex = -1;
             currentSlotPlan = new SeamlessSlotPlan();
@@ -370,8 +465,51 @@ namespace NewHyOnPlayer.PlaybackModes
             StopAll();
             pageTimer.Tick -= PageTimer_Tick;
             contentTimer.Tick -= ContentTimer_Tick;
+            blankRecoveryTimer.Tick -= BlankRecoveryTimer_Tick;
+            blankRecoveryTimer.Stop();
             surface.MediaLoaded -= Surface_MediaLoaded;
             loadGate.Dispose();
+        }
+
+        private void BlankRecoveryTimer_Tick(object sender, EventArgs e)
+        {
+            if (!initialized || presentationActive)
+            {
+                return;
+            }
+
+            bool isSyncPlaybackActive = owner?.IsSyncPlaybackActive ?? false;
+            if (isSyncPlaybackActive && !IsLeaderSyncEnabled())
+            {
+                return;
+            }
+
+            if (blankRecoveryPending)
+            {
+                return;
+            }
+
+            string playlistName = currentPageListName;
+            if (string.IsNullOrWhiteSpace(playlistName))
+            {
+                playlistName = owner?.g_PlayerInfoManager?.g_PlayerInfo?.PIF_CurrentPlayList;
+            }
+
+            if (string.IsNullOrWhiteSpace(playlistName) || !HasPlayableContent(playlistName))
+            {
+                return;
+            }
+
+            DateTime now = DateTime.UtcNow;
+            if ((now - lastBlankRecoveryAttempt).TotalSeconds < 2)
+            {
+                return;
+            }
+
+            lastBlankRecoveryAttempt = now;
+            blankRecoveryPending = true;
+            UpdateCurrentPageListName(playlistName);
+            PlayNextPage();
         }
 
         private void EnsureCurrentPlaylistLoaded()
@@ -434,6 +572,22 @@ namespace NewHyOnPlayer.PlaybackModes
             return currentPage;
         }
 
+        private string GetCurrentContentFileName()
+        {
+            if (currentItems == null || currentItems.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            int index = currentPlaylistIndex;
+            if (index < 0 || index >= currentItems.Length)
+            {
+                index = 0;
+            }
+
+            return currentItems[index]?.Source?.CIF_FileName ?? string.Empty;
+        }
+
         private async Task LoadCurrentPageAsync(int version, SharedPageInfoClass page)
         {
             await loadGate.WaitAsync().ConfigureAwait(false);
@@ -458,6 +612,8 @@ namespace NewHyOnPlayer.PlaybackModes
                 {
                     startIndex = 0;
                 }
+                int firstPlayableIndex = FindNextPlayableIndex(items, startIndex);
+                bool hasPlayableItems = firstPlayableIndex >= 0;
 
                 currentSlotPlan = slotPlan ?? new SeamlessSlotPlan
                 {
@@ -473,14 +629,10 @@ namespace NewHyOnPlayer.PlaybackModes
                     owner.SetBaseSizeFromPageSize(plan.CanvasWidth, plan.CanvasHeight);
                     ApplySurfaceLayout(currentSlotPlan);
 
-                    if (items.Length == 0)
+                    if (!hasPlayableItems)
                     {
                         surface.Stop();
-                        presentationActive = false;
-                    }
-                    else
-                    {
-                        presentationActive = true;
+                        SetPresentationActive(false);
                     }
                 });
 
@@ -489,7 +641,7 @@ namespace NewHyOnPlayer.PlaybackModes
                     return;
                 }
 
-                if (items.Length > 0)
+                if (hasPlayableItems)
                 {
                     if (ShouldWaitForLeaderSyncIndex(hasPendingSyncIndex))
                     {
@@ -506,7 +658,11 @@ namespace NewHyOnPlayer.PlaybackModes
                 }
                 else
                 {
+                    StopPageTimer();
                     StopContentTimer();
+                    currentPageStartedAtUtc = DateTime.MinValue;
+                    owner.SetInitialLoadingVisible(false);
+                    return;
                 }
 
                 currentPageStartedAtUtc = DateTime.UtcNow;
@@ -541,7 +697,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
             foreach (SeamlessSlotPlan candidate in plan.Slots)
             {
-                if (candidate?.Items != null && candidate.Items.Any(x => x != null && x.IsVideo))
+                if (candidate?.Items != null && candidate.Items.Any(x => x != null && x.IsVideo && IsContentPlayableNow(x)))
                 {
                     return candidate;
                 }
@@ -549,7 +705,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
             foreach (SeamlessSlotPlan candidate in plan.Slots)
             {
-                if (candidate != null && candidate.HasPlayableItems)
+                if (candidate != null && HasPlayableItems(candidate.Items))
                 {
                     return candidate;
                 }
@@ -560,6 +716,67 @@ namespace NewHyOnPlayer.PlaybackModes
                 Width = plan.CanvasWidth,
                 Height = plan.CanvasHeight
             };
+        }
+
+        private bool HasPlayableItems(IReadOnlyList<SeamlessContentItem> items)
+        {
+            return FindNextPlayableIndex(items, 0) >= 0;
+        }
+
+        private int CountPlayableItems(IReadOnlyList<SeamlessContentItem> items)
+        {
+            if (items == null || items.Count == 0)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (IsContentPlayableNow(items[i]))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private bool IsContentPlayableNow(SeamlessContentItem item)
+        {
+            if (item?.Source == null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.Source.CIF_StrGUID))
+            {
+                return true;
+            }
+
+            return owner.IsContentPeriodAllowed(item.Source.CIF_StrGUID, DateTime.Now);
+        }
+
+        private int FindNextPlayableIndex(IReadOnlyList<SeamlessContentItem> items, int startIndex)
+        {
+            if (items == null || items.Count == 0)
+            {
+                return -1;
+            }
+
+            int count = items.Count;
+            int safeStartIndex = startIndex < 0 ? 0 : startIndex % count;
+
+            for (int offset = 0; offset < count; offset++)
+            {
+                int candidateIndex = (safeStartIndex + offset) % count;
+                if (IsContentPlayableNow(items[candidateIndex]))
+                {
+                    return candidateIndex;
+                }
+            }
+
+            return -1;
         }
 
         private SharedPageInfoClass GetPageDefinitionByIndex(int index)
@@ -577,6 +794,113 @@ namespace NewHyOnPlayer.PlaybackModes
 
             string pageName = owner.g_PageInfoManager.g_PageInfoClassList[index].PIC_PageName;
             return owner.g_PageInfoManager.GetPageDefinition(pageName);
+        }
+
+        private bool HasPlayableContent(string playlistName)
+        {
+            if (string.IsNullOrWhiteSpace(playlistName))
+            {
+                return false;
+            }
+
+            try
+            {
+                using (var plRepo = new PageListRepository())
+                using (var pageRepo = new PageRepository())
+                {
+                    var pageList = plRepo.FindOne(x => string.Equals(x.PLI_PageListName, playlistName, StringComparison.OrdinalIgnoreCase));
+                    if (pageList == null || pageList.PLI_Pages == null || pageList.PLI_Pages.Count == 0)
+                    {
+                        return false;
+                    }
+
+                    var pages = pageRepo.LoadAll()
+                        .Where(p => pageList.PLI_Pages.Any(id => string.Equals(id, p.PIC_GUID, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
+                    foreach (var page in pages)
+                    {
+                        if (PageHasPlayableContent(page))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteErrorLog(ex.ToString(), Logger.GetLogFileName());
+            }
+
+            return false;
+        }
+
+        private bool PageHasPlayableContent(SharedPageInfoClass page)
+        {
+            if (page?.PIC_Elements == null)
+            {
+                return false;
+            }
+
+            foreach (var element in page.PIC_Elements)
+            {
+                if (!TryParseDisplayType(element?.EIF_Type, out DisplayType displayType)
+                    || displayType != DisplayType.Media)
+                {
+                    continue;
+                }
+
+                if (element?.EIF_ContentsInfoClassList == null)
+                {
+                    continue;
+                }
+
+                foreach (var content in element.EIF_ContentsInfoClassList)
+                {
+                    if (content == null || string.IsNullOrWhiteSpace(content.CIF_FileName))
+                    {
+                        continue;
+                    }
+
+                    if (!owner.IsContentPeriodAllowed(content.CIF_StrGUID, DateTime.Now))
+                    {
+                        continue;
+                    }
+
+                    if (content.CIF_PlayMinute == "00" && content.CIF_PlaySec == "00")
+                    {
+                        continue;
+                    }
+
+                    string path = FNDTools.GetContentsFilePath(content.CIF_FileName);
+                    if (!File.Exists(path))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (new FileInfo(path).Length > 0)
+                        {
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryParseDisplayType(string rawType, out DisplayType displayType)
+        {
+            displayType = DisplayType.None;
+            return string.IsNullOrWhiteSpace(rawType) == false
+                && Enum.TryParse(rawType, true, out displayType)
+                && displayType != DisplayType.ScrollText
+                && displayType != DisplayType.WelcomeBoard;
         }
 
         private void StartPageTimer(int durationSeconds)
@@ -686,23 +1010,7 @@ namespace NewHyOnPlayer.PlaybackModes
 
         private int GetNextIndex(int currentIndex)
         {
-            if (currentItems == null || currentItems.Length == 0)
-            {
-                return -1;
-            }
-
-            if (currentItems.Length == 1)
-            {
-                return 0;
-            }
-
-            int nextIndex = currentIndex + 1;
-            if (nextIndex >= currentItems.Length)
-            {
-                nextIndex = 0;
-            }
-
-            return nextIndex;
+            return FindNextPlayableIndex(currentItems, currentIndex + 1);
         }
 
         public bool TryAdvanceLeaderToNextSyncIndex()
@@ -772,6 +1080,12 @@ namespace NewHyOnPlayer.PlaybackModes
                 return false;
             }
 
+            normalizedIndex = FindNextPlayableIndex(currentItems, normalizedIndex);
+            if (normalizedIndex < 0)
+            {
+                return false;
+            }
+
             TimeSpan? normalizedSyncPosition = syncPosition.HasValue
                 ? (TimeSpan?)NormalizeSyncPosition(normalizedIndex, syncPosition.Value)
                 : null;
@@ -792,6 +1106,7 @@ namespace NewHyOnPlayer.PlaybackModes
             {
                 bool preserveAspectRatio = owner.IsPreserveAspectRatioEnabled();
                 surface.Configure(currentSlotPlan.IsMuted, preserveAspectRatio);
+                surface.HideSurface();
 
                 if (currentItems.Length <= 1)
                 {
@@ -802,11 +1117,6 @@ namespace NewHyOnPlayer.PlaybackModes
                     surface.Load(item, true);
                     applied = true;
                 }
-
-                if (applied)
-                {
-                    surface.ShowSurface();
-                }
             });
 
             if (!applied)
@@ -815,6 +1125,7 @@ namespace NewHyOnPlayer.PlaybackModes
             }
 
             currentPlaylistIndex = normalizedIndex;
+            SetPresentationActive(true);
             Interlocked.Exchange(ref pendingSyncIndex, -1);
 
             if (normalizedSyncPosition.HasValue)
@@ -923,9 +1234,35 @@ namespace NewHyOnPlayer.PlaybackModes
             SyncIndexRequestNeeded?.Invoke();
         }
 
+        private void SetPresentationActive(bool isActive, bool notify = true)
+        {
+            if (presentationActive == isActive)
+            {
+                return;
+            }
+
+            presentationActive = isActive;
+            if (notify)
+            {
+                PresentationVisibilityChanged?.Invoke(isActive);
+            }
+        }
+
         private void Surface_MediaLoaded()
         {
             ApplyPendingLoadedSeekPosition();
+            if (!presentationActive)
+            {
+                return;
+            }
+
+            hostCanvas.Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
+            {
+                if (presentationActive)
+                {
+                    surface.ShowSurface();
+                }
+            }));
         }
 
         private void ApplyPendingLoadedSeekPosition()

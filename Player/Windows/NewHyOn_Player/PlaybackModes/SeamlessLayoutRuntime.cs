@@ -24,14 +24,14 @@ namespace NewHyOnPlayer.PlaybackModes
         private int lastPulsePrimaryIndex = -1;
         private int hostPresentationVisible;
 
-        public SeamlessLayoutRuntime(string layoutName)
+        public SeamlessLayoutRuntime(string layoutName, Func<SeamlessContentItem, bool> isContentPlayable)
         {
             LayoutName = layoutName;
             Host = new SeamlessLayoutHost();
 
             for (int i = 0; i < 6; i++)
             {
-                slots.Add(new SeamlessContentSlot(layoutName, i));
+                slots.Add(new SeamlessContentSlot(layoutName, i, isContentPlayable));
             }
 
             Host.AttachSurfaces(slots);
@@ -144,6 +144,16 @@ namespace NewHyOnPlayer.PlaybackModes
             StartPlaybackFromOffset(0);
         }
 
+        public void UpdateCurrentPlanDuration(int durationSeconds)
+        {
+            if (CurrentPlan == null)
+            {
+                return;
+            }
+
+            CurrentPlan.DurationSeconds = Math.Max(1, durationSeconds);
+        }
+
         public void Deactivate()
         {
             StopPlaybackTimer();
@@ -212,6 +222,44 @@ namespace NewHyOnPlayer.PlaybackModes
             }
 
             return null;
+        }
+
+        public bool HasRecoverableSlot()
+        {
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (slots[i].NeedsActivationRecovery)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public void RefreshForContentPeriodUpdate()
+        {
+            if (CurrentPlan == null)
+            {
+                return;
+            }
+
+            long durationMilliseconds = Math.Max(1, CurrentPlan.DurationSeconds) * 1000L;
+            long elapsedMilliseconds;
+            lock (playbackLock)
+            {
+                elapsedMilliseconds = playbackBaseOffsetMilliseconds + playbackStopwatch.ElapsedMilliseconds;
+                currentElapsedMilliseconds = Math.Min(elapsedMilliseconds, durationMilliseconds);
+            }
+
+            long displayElapsedMilliseconds = durationMilliseconds > 1
+                ? Math.Min(elapsedMilliseconds, durationMilliseconds - 1)
+                : 0;
+
+            for (int i = 0; i < slots.Count; i++)
+            {
+                slots[i].RefreshForContentPeriodUpdate(displayElapsedMilliseconds);
+            }
         }
 
         public List<PlaybackDebugItem> GetDebugItems()

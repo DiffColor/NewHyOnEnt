@@ -355,7 +355,7 @@ namespace AndoW_Manager
             return DataShop.Instance?.g_ContentPeriodManager?.FindByContentGuid(contentGuid);
         }
 
-        public void SetPeriodData(ContentsInfoClass content, string startDate, string endDate)
+        public void SetPeriodData(ContentsInfoClass content, string startDate, string endDate, string startTime, string endTime)
         {
             if (content == null || !IsFileBasedContent(content))
             {
@@ -368,37 +368,19 @@ namespace AndoW_Manager
                 return;
             }
 
-            bool startEmpty = string.IsNullOrWhiteSpace(startDate);
-            bool endEmpty = string.IsNullOrWhiteSpace(endDate);
-
-            if (startEmpty)
+            string validationError;
+            if (!TryNormalizePeriodDataInputs(
+                startDate,
+                endDate,
+                startTime,
+                endTime,
+                out startDate,
+                out endDate,
+                out startTime,
+                out endTime,
+                out validationError))
             {
-                startDate = DateTime.Today.ToString("yyyy-MM-dd");
-            }
-
-            if (endEmpty)
-            {
-                endDate = "2099-12-31";
-            }
-
-            DateTime start;
-            DateTime end;
-            if (DateTime.TryParse(startDate, out start))
-            {
-                startDate = start.ToString("yyyy-MM-dd");
-            }
-
-            if (DateTime.TryParse(endDate, out end))
-            {
-                endDate = end.ToString("yyyy-MM-dd");
-            }
-
-            if (startDate != null && endDate != null && DateTime.TryParse(startDate, out start) && DateTime.TryParse(endDate, out end))
-            {
-                if (end.Date < start.Date)
-                {
-                    endDate = start.ToString("yyyy-MM-dd");
-                }
+                return;
             }
 
             var data = new PeriodData
@@ -406,10 +388,76 @@ namespace AndoW_Manager
                 ContentGuid = contentGuid,
                 FileName = string.IsNullOrWhiteSpace(content.CIF_DisplayFileName) ? content.CIF_FileName : content.CIF_DisplayFileName,
                 StartDate = startDate ?? string.Empty,
-                EndDate = endDate ?? string.Empty
+                EndDate = endDate ?? string.Empty,
+                StartTime = startTime ?? string.Empty,
+                EndTime = endTime ?? string.Empty
             };
 
             DataShop.Instance?.g_ContentPeriodManager?.Save(data);
+            RefreshPeriodInfoForContent(contentGuid);
+            MainWindow.Instance?.NotifyContentPeriodChanged(new[] { contentGuid });
+        }
+
+        public bool TryNormalizePeriodDataInputs(
+            string startDate,
+            string endDate,
+            string startTime,
+            string endTime,
+            out string normalizedStartDate,
+            out string normalizedEndDate,
+            out string normalizedStartTime,
+            out string normalizedEndTime,
+            out string errorMessage)
+        {
+            normalizedStartDate = string.Empty;
+            normalizedEndDate = string.Empty;
+            normalizedStartTime = string.Empty;
+            normalizedEndTime = string.Empty;
+            errorMessage = string.Empty;
+
+            if (!TryNormalizeDateInput(startDate, out normalizedStartDate))
+            {
+                errorMessage = "표출 시작 날짜 형식이 잘못되었습니다.";
+                return false;
+            }
+
+            if (!TryNormalizeDateInput(endDate, out normalizedEndDate))
+            {
+                errorMessage = "표출 종료 날짜 형식이 잘못되었습니다.";
+                return false;
+            }
+
+            if (!TryNormalizeTimeInput(startTime, out normalizedStartTime))
+            {
+                errorMessage = "표출 시작 시간 형식이 잘못되었습니다.";
+                return false;
+            }
+
+            if (!TryNormalizeTimeInput(endTime, out normalizedEndTime))
+            {
+                errorMessage = "표출 종료 시간 형식이 잘못되었습니다.";
+                return false;
+            }
+
+            bool hasStartTime = string.IsNullOrWhiteSpace(normalizedStartTime) == false;
+            bool hasEndTime = string.IsNullOrWhiteSpace(normalizedEndTime) == false;
+            if (hasStartTime != hasEndTime)
+            {
+                errorMessage = "표출 시간을 사용하려면 시작 시간과 종료 시간을 모두 입력해주세요.";
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(normalizedStartDate)
+                && !string.IsNullOrWhiteSpace(normalizedEndDate)
+                && DateTime.TryParse(normalizedStartDate, out var start)
+                && DateTime.TryParse(normalizedEndDate, out var end)
+                && end.Date < start.Date)
+            {
+                errorMessage = "표출 종료 날짜는 시작 날짜보다 빠를 수 없습니다.";
+                return false;
+            }
+
+            return true;
         }
 
         public void DeletePeriodData(ContentsInfoClass content)
@@ -426,6 +474,8 @@ namespace AndoW_Manager
             }
 
             DataShop.Instance?.g_ContentPeriodManager?.DeleteByContentGuid(contentGuid);
+            RefreshPeriodInfoForContent(contentGuid);
+            MainWindow.Instance?.NotifyContentPeriodChanged(new[] { contentGuid });
         }
 
         public void RefreshPeriodInfoForContent(string contentGuid)
@@ -464,6 +514,46 @@ namespace AndoW_Manager
 
             return !content.CIF_ContentType.Equals(ContentType.WebSiteURL.ToString(), StringComparison.OrdinalIgnoreCase)
                 && !content.CIF_ContentType.Equals(ContentType.Browser.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryNormalizeDateInput(string raw, out string normalized)
+        {
+            normalized = string.Empty;
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return true;
+            }
+
+            if (DateTime.TryParse(raw, out var parsed))
+            {
+                normalized = parsed.ToString("yyyy-MM-dd");
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryNormalizeTimeInput(string raw, out string normalized)
+        {
+            normalized = string.Empty;
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return true;
+            }
+
+            if (TimeSpan.TryParseExact(raw.Trim(), @"hh\:mm", CultureInfo.InvariantCulture, out var parsed))
+            {
+                normalized = parsed.ToString(@"hh\:mm");
+                return true;
+            }
+
+            if (DateTime.TryParse(raw, out var dateTime))
+            {
+                normalized = dateTime.ToString("HH:mm");
+                return true;
+            }
+
+            return false;
         }
 
 

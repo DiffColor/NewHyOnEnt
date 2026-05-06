@@ -8,6 +8,7 @@ import kr.co.turtlelab.andowsignage.data.store.StoredContent;
 import kr.co.turtlelab.andowsignage.data.store.StoredElement;
 import kr.co.turtlelab.andowsignage.data.store.StoredPage;
 import kr.co.turtlelab.andowsignage.datamodels.ScrolltextDataModel;
+import kr.co.turtlelab.andowsignage.tools.ContentPeriodEvaluator;
 
 public class ScrolltextDataProvider {
 
@@ -39,6 +40,9 @@ public class ScrolltextDataProvider {
                 return contentList;
             }
             for (StoredContent storedContent : target.getContents()) {
+                if (!ContentPeriodEvaluator.isAllowed(storeDb, storedContent.getGuid(), System.currentTimeMillis())) {
+                    continue;
+                }
                 ScrolltextDataModel sdm = new ScrolltextDataModel();
                 sdm.setText(storedContent.getFileName());
                 sdm.setFont(storedContent.getContentType());
